@@ -81,13 +81,50 @@ class ParamAnalyzer:
             tree = ast.parse(content)
             self._reset_analysis()
 
+            # First pass: collect imports
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     self._handle_import(node)
                 elif isinstance(node, ast.ImportFrom):
                     self._handle_import_from(node)
-                elif isinstance(node, ast.ClassDef):
-                    self._handle_class_def(node)
+
+            # Second pass: collect class definitions in order, respecting inheritance
+            class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+
+            # Process classes in dependency order (parents before children)
+            processed_classes = set()
+            while len(processed_classes) < len(class_nodes):
+                progress_made = False
+                for node in class_nodes:
+                    if node.name in processed_classes:
+                        continue
+
+                    # Check if all parent classes are processed or are external param classes
+                    can_process = True
+                    for base in node.bases:
+                        if isinstance(base, ast.Name):
+                            parent_name = base.id
+                            # If it's a class defined in this file and not processed yet, wait
+                            if (
+                                any(cn.name == parent_name for cn in class_nodes)
+                                and parent_name not in processed_classes
+                            ):
+                                can_process = False
+                                break
+
+                    if can_process:
+                        self._handle_class_def(node)
+                        processed_classes.add(node.name)
+                        progress_made = True
+
+                # Prevent infinite loop if there are circular dependencies
+                if not progress_made:
+                    # Process remaining classes anyway
+                    for node in class_nodes:
+                        if node.name not in processed_classes:
+                            self._handle_class_def(node)
+                            processed_classes.add(node.name)
+                    break
 
             # Perform type inference after parsing
             self._check_parameter_types(tree, content.split("\n"))
@@ -130,7 +167,7 @@ class ParamAnalyzer:
 
     def _handle_class_def(self, node: ast.ClassDef):
         """Handle class definitions that might inherit from param.Parameterized."""
-        # Check if class inherits from param.Parameterized
+        # Check if class inherits from param.Parameterized (directly or indirectly)
         is_param_class = False
         for base in node.bases:
             if self._is_param_base(base):
@@ -142,10 +179,26 @@ class ParamAnalyzer:
             parameters, parameter_types, parameter_bounds, parameter_docs = (
                 self._extract_parameters(node)
             )
-            self.param_parameters[node.name] = parameters
-            self.param_parameter_types[node.name] = parameter_types
-            self.param_parameter_bounds[node.name] = parameter_bounds
-            self.param_parameter_docs[node.name] = parameter_docs
+
+            # For inherited classes, we need to collect parameters from parent classes too
+            # Get parent class parameters and merge them
+            (
+                parent_parameters,
+                parent_parameter_types,
+                parent_parameter_bounds,
+                parent_parameter_docs,
+            ) = self._collect_inherited_parameters(node)
+
+            # Merge parent parameters with current class parameters
+            all_parameters = parent_parameters + parameters
+            all_parameter_types = {**parent_parameter_types, **parameter_types}
+            all_parameter_bounds = {**parent_parameter_bounds, **parameter_bounds}
+            all_parameter_docs = {**parent_parameter_docs, **parameter_docs}
+
+            self.param_parameters[node.name] = all_parameters
+            self.param_parameter_types[node.name] = all_parameter_types
+            self.param_parameter_bounds[node.name] = all_parameter_bounds
+            self.param_parameter_docs[node.name] = all_parameter_docs
 
     def _format_base(self, base: ast.expr) -> str:
         """Format base class for debugging."""
@@ -158,7 +211,11 @@ class ParamAnalyzer:
     def _is_param_base(self, base: ast.expr) -> bool:
         """Check if a base class is param.Parameterized or similar."""
         if isinstance(base, ast.Name):
-            return base.id in ["Parameterized"] and "param" in self.imports.values()
+            # Check if it's a direct param.Parameterized import
+            if base.id in ["Parameterized"] and "param" in self.imports.values():
+                return True
+            # Check if it's a known param class (from inheritance)
+            return base.id in self.param_classes
         elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
             module = base.value.id
             return (module == "param" and base.attr == "Parameterized") or (
@@ -167,6 +224,43 @@ class ParamAnalyzer:
                 and base.attr == "Parameterized"
             )
         return False
+
+    def _collect_inherited_parameters(
+        self, node: ast.ClassDef
+    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
+        """Collect parameters from parent classes in inheritance hierarchy."""
+        inherited_parameters = []
+        inherited_parameter_types = {}
+        inherited_parameter_bounds = {}
+        inherited_parameter_docs = {}
+
+        for base in node.bases:
+            if isinstance(base, ast.Name):
+                parent_class_name = base.id
+                if parent_class_name in self.param_classes:
+                    # Get parameters from the parent class
+                    parent_params = self.param_parameters.get(parent_class_name, [])
+                    parent_types = self.param_parameter_types.get(parent_class_name, {})
+                    parent_bounds = self.param_parameter_bounds.get(parent_class_name, {})
+                    parent_docs = self.param_parameter_docs.get(parent_class_name, {})
+
+                    # Add parent parameters (avoid duplicates)
+                    for param in parent_params:
+                        if param not in inherited_parameters:
+                            inherited_parameters.append(param)
+                        if param in parent_types:
+                            inherited_parameter_types[param] = parent_types[param]
+                        if param in parent_bounds:
+                            inherited_parameter_bounds[param] = parent_bounds[param]
+                        if param in parent_docs:
+                            inherited_parameter_docs[param] = parent_docs[param]
+
+        return (
+            inherited_parameters,
+            inherited_parameter_types,
+            inherited_parameter_bounds,
+            inherited_parameter_docs,
+        )
 
     def _extract_parameters(
         self, node: ast.ClassDef
