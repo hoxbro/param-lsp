@@ -428,6 +428,191 @@ class ParamLanguageServer(LanguageServer):
 
         return "\n\n".join(hover_parts)
 
+    def _get_param_depends_completions(
+        self, uri: str, lines: list[str], position: Position
+    ) -> list[CompletionItem]:
+        """Get parameter completions for param.depends decorator."""
+        if uri not in self.document_cache:
+            return []
+
+        # Check if we're in a param.depends decorator context
+        if not self._is_in_param_depends_decorator(lines, position):
+            return []
+
+        # Find the class that contains this method
+        containing_class = self._find_containing_class(lines, position.line)
+        if not containing_class:
+            return []
+
+        analysis = self.document_cache[uri]["analysis"]
+        param_parameters = analysis.get("param_parameters", {})
+        param_parameter_types = analysis.get("param_parameter_types", {})
+        param_parameter_docs = analysis.get("param_parameter_docs", {})
+
+        completions = []
+
+        # Get parameters from the containing class
+        parameters = param_parameters.get(containing_class, [])
+        parameter_types = param_parameter_types.get(containing_class, {})
+        parameter_docs = param_parameter_docs.get(containing_class, {})
+
+        # Find already used parameters to avoid duplicates
+        used_params = self._extract_used_depends_parameters_multiline(lines, position)
+
+        for param_name in parameters:
+            # Skip parameters that are already used
+            if param_name in used_params:
+                continue
+
+            # Build documentation for the parameter
+            doc_parts = []
+
+            # Add parameter type info
+            param_type = parameter_types.get(param_name)
+            if param_type:
+                python_type = self._get_python_type_name(param_type)
+                doc_parts.append(f"Type: {param_type} ({python_type})")
+
+            # Add parameter-specific documentation
+            param_doc = parameter_docs.get(param_name)
+            if param_doc:
+                doc_parts.append(f"Description: {param_doc}")
+
+            documentation = (
+                "\n".join(doc_parts) if doc_parts else f"Parameter of {containing_class}"
+            )
+
+            # Create completion item with quoted string for param.depends
+            completions.append(
+                CompletionItem(
+                    label=f'"{param_name}"',
+                    kind=CompletionItemKind.Property,
+                    detail=f"Parameter of {containing_class}",
+                    documentation=documentation,
+                    insert_text=f'"{param_name}"',
+                    filter_text=param_name,  # Help with filtering
+                    sort_text=f"{param_name:0>3}",  # Ensure stable sort order
+                )
+            )
+
+        return completions
+
+    def _is_in_param_depends_decorator(self, lines: list[str], position: Position) -> bool:
+        """Check if the current position is inside a param.depends decorator."""
+        # Look for @param.depends( pattern in current line or previous lines
+        # Handle multi-line decorators
+        for line_idx in range(max(0, position.line - 5), position.line + 1):
+            if line_idx >= len(lines):
+                continue
+            line = lines[line_idx]
+
+            # Check for @param.depends( pattern
+            if re.search(r"@param\.depends\s*\(", line):
+                # Check if we're still inside the parentheses
+                if line_idx == position.line:
+                    # Same line - check if cursor is after the opening parenthesis
+                    match = re.search(r"@param\.depends\s*\(", line)
+                    if match and position.character >= match.end():
+                        # Check if parentheses are closed before cursor
+                        text_before_cursor = line[: position.character]
+                        open_parens = text_before_cursor.count("(")
+                        close_parens = text_before_cursor.count(")")
+                        if open_parens > close_parens:
+                            return True
+                else:
+                    # Different line - check if parentheses are balanced from decorator to current position
+                    decorator_line = line
+                    total_open = decorator_line.count("(")
+                    total_close = decorator_line.count(")")
+
+                    # Check lines between decorator and current position
+                    for check_line_idx in range(line_idx + 1, position.line + 1):
+                        if check_line_idx >= len(lines):
+                            break
+                        check_line = lines[check_line_idx]
+                        if check_line_idx == position.line:
+                            # Only count up to cursor position on current line
+                            check_line = check_line[: position.character]
+                        total_open += check_line.count("(")
+                        total_close += check_line.count(")")
+
+                    if total_open > total_close:
+                        return True
+
+        return False
+
+    def _find_containing_class(self, lines: list[str], current_line: int) -> str | None:
+        """Find the class that contains the current line."""
+        # Look backwards for class definition
+        for line_idx in range(current_line, -1, -1):
+            if line_idx >= len(lines):
+                continue
+            line = lines[line_idx].strip()
+
+            # Look for class definition
+            match = re.match(r"^class\s+(\w+)", line)
+            if match:
+                class_name = match.group(1)
+                return class_name
+
+        return None
+
+    def _extract_used_depends_parameters(self, line: str, character: int) -> set[str]:
+        """Extract parameter names already used in the param.depends decorator."""
+        used_params = set()
+
+        # Get the text before cursor on the current line
+        before_cursor = line[:character]
+
+        # Look for quoted strings that represent parameter names
+        # Pattern matches both single and double quoted strings
+        pattern = r'["\']([^"\']+)["\']'
+        matches = re.findall(pattern, before_cursor)
+
+        for match in matches:
+            used_params.add(match)
+
+        return used_params
+
+    def _extract_used_depends_parameters_multiline(
+        self, lines: list[str], position: Position
+    ) -> set[str]:
+        """Extract parameter names already used in the param.depends decorator across multiple lines."""
+        used_params = set()
+
+        # Find the start of the param.depends decorator
+        start_line = None
+        for line_idx in range(max(0, position.line - 5), position.line + 1):
+            if line_idx >= len(lines):
+                continue
+            line = lines[line_idx]
+            if re.search(r"@param\.depends\s*\(", line):
+                start_line = line_idx
+                break
+
+        if start_line is None:
+            return used_params
+
+        # Collect all text from decorator start to current position
+        decorator_text = ""
+        for line_idx in range(start_line, position.line + 1):
+            if line_idx >= len(lines):
+                break
+            line = lines[line_idx]
+            if line_idx == position.line:
+                # Only include text up to cursor position on current line
+                line = line[: position.character]
+            decorator_text += line + " "
+
+        # Look for quoted strings that represent parameter names
+        pattern = r'["\']([^"\']+)["\']'
+        matches = re.findall(pattern, decorator_text)
+
+        for match in matches:
+            used_params.add(match)
+
+        return used_params
+
 
 server = ParamLanguageServer("param-lsp", __version__)
 
@@ -528,6 +713,11 @@ def completion(params: CompletionParams) -> CompletionList:
         return CompletionList(is_incomplete=False, items=[])
 
     current_line = lines[position.line]
+
+    # Check if we're in a param.depends decorator context
+    depends_completions = server._get_param_depends_completions(uri, lines, position)
+    if depends_completions:
+        return CompletionList(is_incomplete=False, items=depends_completions)
 
     # Check if we're in a constructor call context (e.g., P(...) )
     constructor_completions = server._get_constructor_parameter_completions(
