@@ -31,6 +31,7 @@ from lsprotocol.types import (
 )
 from pygls.server import LanguageServer
 
+from . import __version__
 from .analyzer import ParamAnalyzer
 
 logging.basicConfig(level=logging.INFO)
@@ -355,7 +356,7 @@ class ParamLanguageServer(LanguageServer):
         return None
 
 
-server = ParamLanguageServer("param-lsp", "v0.1.0")
+server = ParamLanguageServer("param-lsp", __version__)
 
 
 @server.feature("initialize")
