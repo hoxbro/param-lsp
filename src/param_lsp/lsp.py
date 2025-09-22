@@ -50,6 +50,7 @@ class ParamAnalyzer:
         self.param_classes: set[str] = set()
         self.param_parameters: dict[str, list[str]] = {}
         self.param_parameter_types: dict[str, dict[str, str]] = {}  # class_name -> {param_name: param_type}
+        self.param_parameter_bounds: dict[str, dict[str, tuple]] = {}  # class_name -> {param_name: (min, max)}
         self.imports: dict[str, str] = {}
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
@@ -91,6 +92,7 @@ class ParamAnalyzer:
                 "param_classes": self.param_classes,
                 "param_parameters": self.param_parameters,
                 "param_parameter_types": self.param_parameter_types,
+                "param_parameter_bounds": self.param_parameter_bounds,
                 "imports": self.imports,
                 "type_errors": self.type_errors,
             }
@@ -103,6 +105,7 @@ class ParamAnalyzer:
         self.param_classes.clear()
         self.param_parameters.clear()
         self.param_parameter_types.clear()
+        self.param_parameter_bounds.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -130,9 +133,10 @@ class ParamAnalyzer:
 
         if is_param_class:
             self.param_classes.add(node.name)
-            parameters, parameter_types = self._extract_parameters(node)
+            parameters, parameter_types, parameter_bounds = self._extract_parameters(node)
             self.param_parameters[node.name] = parameters
             self.param_parameter_types[node.name] = parameter_types
+            self.param_parameter_bounds[node.name] = parameter_bounds
 
     def _is_param_base(self, base: ast.expr) -> bool:
         """Check if a base class is param.Parameterized or similar."""
@@ -147,10 +151,11 @@ class ParamAnalyzer:
             )
         return False
 
-    def _extract_parameters(self, node: ast.ClassDef) -> tuple[list[str], dict[str, str]]:
+    def _extract_parameters(self, node: ast.ClassDef) -> tuple[list[str], dict[str, str], dict[str, tuple]]:
         """Extract parameter definitions from a Param class."""
         parameters = []
         parameter_types = {}
+        parameter_bounds = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
@@ -163,7 +168,47 @@ class ParamAnalyzer:
                         if param_class_info:
                             parameter_types[param_name] = param_class_info["type"]
 
-        return parameters, parameter_types
+                        # Get bounds if present
+                        if isinstance(item.value, ast.Call):
+                            bounds = self._extract_bounds_from_call(item.value)
+                            if bounds:
+                                parameter_bounds[param_name] = bounds
+
+        return parameters, parameter_types, parameter_bounds
+
+    def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
+        """Extract bounds from a parameter call."""
+        bounds_info = None
+        inclusive_bounds = (True, True)  # Default to inclusive
+
+        for keyword in call_node.keywords:
+            if keyword.arg == "bounds":
+                if isinstance(keyword.value, ast.Tuple) and len(keyword.value.elts) == 2:
+                    min_val = self._extract_numeric_value(keyword.value.elts[0])
+                    max_val = self._extract_numeric_value(keyword.value.elts[1])
+                    if min_val is not None and max_val is not None:
+                        bounds_info = (min_val, max_val)
+            elif keyword.arg == "inclusive_bounds":
+                if isinstance(keyword.value, ast.Tuple) and len(keyword.value.elts) == 2:
+                    # Extract boolean values for inclusive bounds
+                    left_inclusive = self._extract_boolean_value(keyword.value.elts[0])
+                    right_inclusive = self._extract_boolean_value(keyword.value.elts[1])
+                    if left_inclusive is not None and right_inclusive is not None:
+                        inclusive_bounds = (left_inclusive, right_inclusive)
+
+        if bounds_info:
+            # Return (min, max, left_inclusive, right_inclusive)
+            return (*bounds_info, *inclusive_bounds)
+        return None
+
+    def _extract_boolean_value(self, node: ast.expr) -> bool | None:
+        """Extract boolean value from AST node."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, bool):
+            return node.value
+        elif isinstance(node, ast.NameConstant):  # Python < 3.8 compatibility
+            if isinstance(node.value, bool):
+                return node.value
+        return None
 
     def _is_parameter_assignment(self, value: ast.expr) -> bool:
         """Check if an assignment looks like a parameter definition."""
@@ -319,6 +364,67 @@ class ParamAnalyzer:
                     }
                 )
 
+        # Check bounds for numeric parameters
+        self._check_runtime_bounds(node, instance_class, param_name, param_type, assigned_value)
+
+    def _check_runtime_bounds(self, node: ast.Assign, instance_class: str, param_name: str, param_type: str, assigned_value: ast.expr):
+        """Check if assigned value is within parameter bounds."""
+        # Only check bounds for numeric types
+        if param_type not in ["Number", "Integer"]:
+            return
+
+        # Get bounds for this parameter
+        bounds = self._get_parameter_bounds(instance_class, param_name)
+        if not bounds:
+            return
+
+        # Extract numeric value from assigned value
+        assigned_numeric = self._extract_numeric_value(assigned_value)
+        if assigned_numeric is None:
+            return
+
+        # Handle both old format (min, max) and new format (min, max, left_inclusive, right_inclusive)
+        if len(bounds) == 2:
+            min_val, max_val = bounds
+            left_inclusive, right_inclusive = True, True  # Default to inclusive
+        elif len(bounds) == 4:
+            min_val, max_val, left_inclusive, right_inclusive = bounds
+        else:
+            return
+
+        # Check if value is within bounds based on inclusivity
+        violates_bounds = False
+        bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
+
+        if left_inclusive:
+            violates_lower = assigned_numeric < min_val
+        else:
+            violates_lower = assigned_numeric <= min_val
+
+        if right_inclusive:
+            violates_upper = assigned_numeric > max_val
+        else:
+            violates_upper = assigned_numeric >= max_val
+
+        if violates_lower or violates_upper:
+            self.type_errors.append(
+                {
+                    "line": node.lineno - 1,
+                    "col": node.col_offset,
+                    "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                    "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                    "message": f"Value {assigned_numeric} for parameter '{param_name}' is outside bounds {bound_description}",
+                    "severity": "error",
+                    "code": "bounds-violation",
+                }
+            )
+
+    def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
+        """Get parameter bounds from a class definition."""
+        if class_name in self.param_parameter_bounds:
+            return self.param_parameter_bounds[class_name].get(param_name)
+        return None
+
     def _get_instance_class(self, call_node: ast.Call) -> str | None:
         """Get the class name from an instance creation call."""
         if isinstance(call_node.func, ast.Name):
@@ -404,13 +510,21 @@ class ParamAnalyzer:
         # Check bounds for Number/Integer parameters
         if resolved_param_type in ["Number", "Integer"]:
             bounds = None
-            inclusive_bounds = None
+            inclusive_bounds = (True, True)  # Default to inclusive
+            default_value = None
 
             for keyword in node.value.keywords:
                 if keyword.arg == "bounds":
                     bounds = keyword.value
                 elif keyword.arg == "inclusive_bounds":
-                    inclusive_bounds = keyword.value
+                    inclusive_bounds_node = keyword.value
+                    if isinstance(inclusive_bounds_node, ast.Tuple) and len(inclusive_bounds_node.elts) == 2:
+                        left_inclusive = self._extract_boolean_value(inclusive_bounds_node.elts[0])
+                        right_inclusive = self._extract_boolean_value(inclusive_bounds_node.elts[1])
+                        if left_inclusive is not None and right_inclusive is not None:
+                            inclusive_bounds = (left_inclusive, right_inclusive)
+                elif keyword.arg == "default":
+                    default_value = keyword.value
 
             if bounds and isinstance(bounds, ast.Tuple) and len(bounds.elts) == 2:
                 # Check if bounds are valid (min < max)
@@ -434,6 +548,35 @@ class ParamAnalyzer:
                                 "code": "invalid-bounds",
                             }
                         )
+
+                    # Check if default value violates bounds
+                    if default_value is not None and min_val is not None and max_val is not None:
+                        default_numeric = self._extract_numeric_value(default_value)
+                        if default_numeric is not None:
+                            left_inclusive, right_inclusive = inclusive_bounds
+
+                            # Check bounds violation
+                            violates_lower = (default_numeric < min_val) if left_inclusive else (default_numeric <= min_val)
+                            violates_upper = (default_numeric > max_val) if right_inclusive else (default_numeric >= max_val)
+
+                            if violates_lower or violates_upper:
+                                bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
+                                self.type_errors.append(
+                                    {
+                                        "line": node.lineno - 1,
+                                        "col": node.col_offset,
+                                        "end_line": node.end_lineno - 1
+                                        if node.end_lineno
+                                        else node.lineno - 1,
+                                        "end_col": node.end_col_offset
+                                        if node.end_col_offset
+                                        else node.col_offset,
+                                        "message": f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}",
+                                        "severity": "error",
+                                        "code": "default-bounds-violation",
+                                    }
+                                )
+
                 except (ValueError, TypeError):
                     pass
 
