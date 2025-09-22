@@ -7,8 +7,10 @@ hover information, and diagnostics.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import inspect
 import logging
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -46,7 +48,7 @@ logger = logging.getLogger(__name__)
 class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
-    def __init__(self):
+    def __init__(self, workspace_root: str | None = None):
         self.param_classes: set[str] = set()
         self.param_parameters: dict[str, list[str]] = {}
         # class_name -> {param_name: param_type}
@@ -75,11 +77,17 @@ class ParamAnalyzer:
             "Color": str,
         }
 
-    def analyze_file(self, content: str) -> dict[str, Any]:
+        # Workspace-wide analysis
+        self.workspace_root = Path(workspace_root) if workspace_root else None
+        self.module_cache: dict[str, dict[str, Any]] = {}  # module_name -> analysis_result
+        self.file_cache: dict[str, dict[str, Any]] = {}  # file_path -> analysis_result
+
+    def analyze_file(self, content: str, file_path: str | None = None) -> dict[str, Any]:
         """Analyze a Python file for Param usage."""
         try:
             tree = ast.parse(content)
             self._reset_analysis()
+            self._current_file_path = file_path
 
             # First pass: collect imports
             for node in ast.walk(tree):
@@ -187,7 +195,7 @@ class ParamAnalyzer:
                 parent_parameter_types,
                 parent_parameter_bounds,
                 parent_parameter_docs,
-            ) = self._collect_inherited_parameters(node)
+            ) = self._collect_inherited_parameters(node, getattr(self, "_current_file_path", None))
 
             # Merge parent parameters with current class parameters
             all_parameters = parent_parameters + parameters
@@ -215,7 +223,14 @@ class ParamAnalyzer:
             if base.id in ["Parameterized"] and "param" in self.imports.values():
                 return True
             # Check if it's a known param class (from inheritance)
-            return base.id in self.param_classes
+            if base.id in self.param_classes:
+                return True
+            # Check if it's an imported param class
+            imported_class_info = self._get_imported_param_class_info(
+                base.id, base.id, getattr(self, "_current_file_path", None)
+            )
+            if imported_class_info:
+                return True
         elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
             module = base.value.id
             return (module == "param" and base.attr == "Parameterized") or (
@@ -226,7 +241,7 @@ class ParamAnalyzer:
         return False
 
     def _collect_inherited_parameters(
-        self, node: ast.ClassDef
+        self, node: ast.ClassDef, current_file_path: str | None = None
     ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
         """Collect parameters from parent classes in inheritance hierarchy."""
         inherited_parameters = []
@@ -237,6 +252,8 @@ class ParamAnalyzer:
         for base in node.bases:
             if isinstance(base, ast.Name):
                 parent_class_name = base.id
+
+                # First check if it's a local class in the same file
                 if parent_class_name in self.param_classes:
                     # Get parameters from the parent class
                     parent_params = self.param_parameters.get(parent_class_name, [])
@@ -254,6 +271,30 @@ class ParamAnalyzer:
                             inherited_parameter_bounds[param] = parent_bounds[param]
                         if param in parent_docs:
                             inherited_parameter_docs[param] = parent_docs[param]
+
+                # If not found locally, check if it's an imported class
+                else:
+                    # Check if this class was imported
+                    imported_class_info = self._get_imported_param_class_info(
+                        parent_class_name, parent_class_name, current_file_path
+                    )
+
+                    if imported_class_info:
+                        parent_params = imported_class_info.get("parameters", [])
+                        parent_types = imported_class_info.get("parameter_types", {})
+                        parent_bounds = imported_class_info.get("parameter_bounds", {})
+                        parent_docs = imported_class_info.get("parameter_docs", {})
+
+                        # Add parent parameters (avoid duplicates)
+                        for param in parent_params:
+                            if param not in inherited_parameters:
+                                inherited_parameters.append(param)
+                            if param in parent_types:
+                                inherited_parameter_types[param] = parent_types[param]
+                            if param in parent_bounds:
+                                inherited_parameter_bounds[param] = parent_bounds[param]
+                            if param in parent_docs:
+                                inherited_parameter_docs[param] = parent_docs[param]
 
         return (
             inherited_parameters,
@@ -811,6 +852,146 @@ class ParamAnalyzer:
                             }
                         )
 
+    def _resolve_module_path(
+        self, module_name: str, current_file_path: str | None = None
+    ) -> str | None:
+        """Resolve a module name to a file path."""
+        if not self.workspace_root:
+            return None
+
+        # Handle relative imports
+        if module_name.startswith("."):
+            if not current_file_path:
+                return None
+            current_dir = Path(current_file_path).parent
+            # Convert relative module name to absolute path
+            parts = module_name.lstrip(".").split(".")
+            target_path = current_dir
+            for part in parts:
+                if part:
+                    target_path = target_path / part
+
+            # Try .py file
+            py_file = target_path.with_suffix(".py")
+            if py_file.exists():
+                return str(py_file)
+
+            # Try package __init__.py
+            init_file = target_path / "__init__.py"
+            if init_file.exists():
+                return str(init_file)
+
+            return None
+
+        # Handle absolute imports
+        parts = module_name.split(".")
+
+        # Try in workspace root
+        target_path = self.workspace_root
+        for part in parts:
+            target_path = target_path / part
+
+        # Try .py file
+        py_file = target_path.with_suffix(".py")
+        if py_file.exists():
+            return str(py_file)
+
+        # Try package __init__.py
+        init_file = target_path / "__init__.py"
+        if init_file.exists():
+            return str(init_file)
+
+        # Try searching in Python path (for installed packages)
+        try:
+            spec = importlib.util.find_spec(module_name)
+            if spec and spec.origin and spec.origin.endswith(".py"):
+                return spec.origin
+        except (ImportError, ValueError, ModuleNotFoundError):
+            pass
+
+        return None
+
+    def _analyze_imported_module(
+        self, module_name: str, current_file_path: str | None = None
+    ) -> dict[str, Any]:
+        """Analyze an imported module and cache the results."""
+        # Check cache first
+        if module_name in self.module_cache:
+            return self.module_cache[module_name]
+
+        # Resolve module path
+        module_path = self._resolve_module_path(module_name, current_file_path)
+        if not module_path:
+            return {}
+
+        # Check file cache
+        if module_path in self.file_cache:
+            result = self.file_cache[module_path]
+            self.module_cache[module_name] = result
+            return result
+
+        # Read and analyze the module
+        try:
+            with open(module_path, encoding="utf-8") as f:
+                content = f.read()
+
+            # Create a new analyzer instance for the imported module to avoid conflicts
+            module_analyzer = ParamAnalyzer(
+                str(self.workspace_root) if self.workspace_root else None
+            )
+            result = module_analyzer.analyze_file(content)
+
+            # Cache the result
+            self.file_cache[module_path] = result
+            self.module_cache[module_name] = result
+
+            return result
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning(f"Failed to analyze module {module_name} at {module_path}: {e}")
+            return {}
+
+    def _get_imported_param_class_info(
+        self, class_name: str, import_name: str, current_file_path: str | None = None
+    ) -> dict[str, Any] | None:
+        """Get parameter information for a class imported from another module."""
+        # Get the full module name from imports
+        full_import_name = self.imports.get(import_name)
+        if not full_import_name:
+            return None
+
+        # Parse the import to get module name and class name
+        if "." in full_import_name:
+            # Handle "from module import Class" -> "module.Class"
+            module_name, imported_class_name = full_import_name.rsplit(".", 1)
+        else:
+            # Handle "import module" -> "module"
+            module_name = full_import_name
+            imported_class_name = class_name
+
+        # Analyze the imported module
+        module_analysis = self._analyze_imported_module(module_name, current_file_path)
+        if not module_analysis:
+            return None
+
+        # Check if the class exists in the imported module
+        param_classes = module_analysis.get("param_classes", set())
+        if imported_class_name not in param_classes:
+            return None
+
+        # Return parameter information for the imported class
+        return {
+            "parameters": module_analysis.get("param_parameters", {}).get(imported_class_name, []),
+            "parameter_types": module_analysis.get("param_parameter_types", {}).get(
+                imported_class_name, {}
+            ),
+            "parameter_bounds": module_analysis.get("param_parameter_bounds", {}).get(
+                imported_class_name, {}
+            ),
+            "parameter_docs": module_analysis.get("param_parameter_docs", {}).get(
+                imported_class_name, {}
+            ),
+        }
+
     def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
         """Extract numeric value from AST node."""
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
@@ -827,6 +1008,7 @@ class ParamLanguageServer(LanguageServer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.workspace_root: str | None = None
         self.analyzer = ParamAnalyzer()
         self.document_cache: dict[str, dict[str, Any]] = {}
         self.param_types = self._get_param_types()
@@ -878,7 +1060,13 @@ class ParamLanguageServer(LanguageServer):
 
     def _analyze_document(self, uri: str, content: str):
         """Analyze a document and cache the results."""
-        analysis = self.analyzer.analyze_file(content)
+        file_path = self._uri_to_path(uri)
+
+        # Update analyzer with workspace root if available
+        if self.workspace_root and not self.analyzer.workspace_root:
+            self.analyzer = ParamAnalyzer(self.workspace_root)
+
+        analysis = self.analyzer.analyze_file(content, file_path)
         self.document_cache[uri] = {"content": content, "analysis": analysis}
 
         # Debug logging
@@ -1036,6 +1224,17 @@ server = ParamLanguageServer("param-lsp", "v0.1.0")
 def initialize(params: InitializeParams) -> InitializeResult:
     """Initialize the language server."""
     logger.info("Initializing Param LSP server")
+
+    # Capture workspace root for cross-file analysis
+    if params.workspace_folders and len(params.workspace_folders) > 0:
+        workspace_uri = params.workspace_folders[0].uri
+        server.workspace_root = server._uri_to_path(workspace_uri)
+    elif params.root_uri:
+        server.workspace_root = server._uri_to_path(params.root_uri)
+    elif params.root_path:
+        server.workspace_root = params.root_path
+
+    logger.info(f"Workspace root: {server.workspace_root}")
 
     return InitializeResult(
         capabilities=ServerCapabilities(
