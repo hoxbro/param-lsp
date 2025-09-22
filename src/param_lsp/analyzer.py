@@ -15,6 +15,8 @@ from typing import Any
 
 import param
 
+from .cache import external_library_cache
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1458,6 +1460,15 @@ class ParamAnalyzer:
     def _introspect_external_class_runtime(self, full_class_path: str) -> dict[str, Any] | None:
         """Introspect an external class using runtime imports for allowed libraries."""
 
+        # Get the root library name for cache lookup
+        root_library = full_class_path.split(".")[0]
+
+        # Check cache first
+        cached_result = external_library_cache.get(root_library, full_class_path)
+        if cached_result is not None:
+            logger.debug(f"Using cached result for {full_class_path}")
+            return cached_result
+
         try:
             # Parse the full class path (e.g., "panel.widgets.IntSlider")
             module_path, class_name = full_class_path.rsplit(".", 1)
@@ -1525,7 +1536,7 @@ class ParamAnalyzer:
                         if hasattr(param_obj, "default"):
                             parameter_defaults[param_name] = str(param_obj.default)
 
-            return {
+            result = {
                 "parameters": parameters,
                 "parameter_types": parameter_types,
                 "parameter_bounds": parameter_bounds,
@@ -1533,6 +1544,12 @@ class ParamAnalyzer:
                 "parameter_allow_none": parameter_allow_none,
                 "parameter_defaults": parameter_defaults,
             }
+
+            # Cache the result for future use
+            external_library_cache.set(root_library, full_class_path, result)
+            logger.debug(f"Cached introspection result for {full_class_path}")
+
+            return result
 
         except Exception as e:
             logger.debug(f"Failed to introspect external class {full_class_path}: {e}")

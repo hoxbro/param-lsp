@@ -8,6 +8,12 @@ from param_lsp.analyzer import ParamAnalyzer
 from param_lsp.server import ParamLanguageServer
 
 
+@pytest.fixture(autouse=True)
+def disable_cache_for_tests(monkeypatch):
+    """Disable cache for all tests by default."""
+    monkeypatch.setenv("PARAM_LSP_DISABLE_CACHE", "1")
+
+
 @pytest.fixture
 def analyzer():
     """Create a fresh ParamAnalyzer instance for testing."""
