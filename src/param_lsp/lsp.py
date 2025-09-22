@@ -21,6 +21,7 @@ from lsprotocol.types import (
     CompletionOptions,
     CompletionParams,
     Diagnostic,
+    DiagnosticOptions,
     DiagnosticSeverity,
     DidChangeTextDocumentParams,
     DidOpenTextDocumentParams,
@@ -544,7 +545,7 @@ class ParamAnalyzer:
             return self.param_parameter_types[class_name].get(param_name)
         return None
 
-    def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str] | None:
+    def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str | None] | None:
         """Resolve the actual parameter class from the function call."""
         if isinstance(func_node, ast.Name):
             # Direct reference like Integer()
@@ -947,7 +948,9 @@ def initialize(params: InitializeParams) -> InitializeResult:
             text_document_sync=TextDocumentSyncKind.Incremental,
             completion_provider=CompletionOptions(trigger_characters=[".", "=", "("]),
             hover_provider=True,
-            diagnostic_provider=True,
+            diagnostic_provider=DiagnosticOptions(
+                inter_file_dependencies=False, workspace_diagnostics=False
+            ),
         )
     )
 
@@ -970,13 +973,14 @@ def did_change(params: DidChangeTextDocumentParams):
     if uri in server.document_cache:
         content = server.document_cache[uri]["content"]
         for change in params.content_changes:
-            if hasattr(change, "range") and change.range:
+            if getattr(change, "range", None):
                 # Handle incremental changes
                 lines = content.split("\n")
-                start_line = change.range.start.line
-                start_char = change.range.start.character
-                end_line = change.range.end.line
-                end_char = change.range.end.character
+                range_obj = change.range  # pyright: ignore[reportAttributeAccessIssue]
+                start_line = range_obj.start.line
+                start_char = range_obj.start.character
+                end_line = range_obj.end.line
+                end_char = range_obj.end.character
 
                 # Apply the change
                 if start_line == end_line:
