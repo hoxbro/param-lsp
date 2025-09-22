@@ -220,7 +220,11 @@ class ParamAnalyzer:
         """Check if a base class is param.Parameterized or similar."""
         if isinstance(base, ast.Name):
             # Check if it's a direct param.Parameterized import
-            if base.id in ["Parameterized"] and "param" in self.imports.values():
+            if (
+                base.id in ["Parameterized"]
+                and base.id in self.imports
+                and "param.Parameterized" in self.imports[base.id]
+            ):
                 return True
             # Check if it's a known param class (from inheritance)
             if base.id in self.param_classes:
@@ -347,7 +351,9 @@ class ParamAnalyzer:
                 if isinstance(keyword.value, ast.Tuple) and len(keyword.value.elts) == 2:
                     min_val = self._extract_numeric_value(keyword.value.elts[0])
                     max_val = self._extract_numeric_value(keyword.value.elts[1])
-                    if min_val is not None and max_val is not None:
+                    # Accept bounds even if one side is None (unbounded)
+                    # But require at least one bound to be numeric
+                    if min_val is not None or max_val is not None:
                         bounds_info = (min_val, max_val)
             elif (
                 keyword.arg == "inclusive_bounds"
@@ -454,6 +460,149 @@ class ParamAnalyzer:
                 for target in node.targets:
                     if isinstance(target, ast.Attribute):
                         self._check_runtime_parameter_assignment(node, target, lines)
+
+            # Check constructor calls like MyClass(x="A")
+            elif isinstance(node, ast.Call):
+                self._check_constructor_parameter_types(node, lines)
+
+    def _check_constructor_parameter_types(self, node: ast.Call, lines: list[str]):
+        """Check for type errors in constructor parameter calls like MyClass(x="A")."""
+        # Get the class name from the call
+        class_name = self._get_instance_class(node)
+        if not class_name or class_name not in self.param_classes:
+            return
+
+        # Check each keyword argument passed to the constructor
+        for keyword in node.keywords:
+            if keyword.arg is None:  # Skip **kwargs
+                continue
+
+            param_name = keyword.arg
+            param_value = keyword.value
+
+            # Get the expected parameter type
+            param_type = self._get_parameter_type_from_class(class_name, param_name)
+            if not param_type:
+                continue  # Skip if parameter not found (could be inherited or not a param)
+
+            # Check if assigned value matches expected type
+            if param_type in self.param_type_map:
+                expected_types = self.param_type_map[param_type]
+                if not isinstance(expected_types, tuple):
+                    expected_types = (expected_types,)
+
+                inferred_type = self._infer_value_type(param_value)
+
+                # Special handling for Boolean parameters - they should only accept actual bool values
+                if param_type == "Boolean" and inferred_type and inferred_type is not bool:
+                    if not (
+                        isinstance(param_value, ast.Constant)
+                        and isinstance(param_value.value, bool)
+                    ):
+                        self.type_errors.append(
+                            {
+                                "line": node.lineno - 1,  # Convert to 0-based
+                                "col": node.col_offset,
+                                "end_line": node.end_lineno - 1
+                                if node.end_lineno
+                                else node.lineno - 1,
+                                "end_col": node.end_col_offset
+                                if node.end_col_offset
+                                else node.col_offset,
+                                "message": f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)",
+                                "severity": "error",
+                                "code": "constructor-boolean-type-mismatch",
+                            }
+                        )
+                elif inferred_type and not any(
+                    (isinstance(inferred_type, type) and issubclass(inferred_type, t))
+                    or inferred_type == t
+                    for t in expected_types
+                ):
+                    self.type_errors.append(
+                        {
+                            "line": node.lineno - 1,  # Convert to 0-based
+                            "col": node.col_offset,
+                            "end_line": node.end_lineno - 1
+                            if node.end_lineno
+                            else node.lineno - 1,
+                            "end_col": node.end_col_offset
+                            if node.end_col_offset
+                            else node.col_offset,
+                            "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {param_type} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})",
+                            "severity": "error",
+                            "code": "constructor-type-mismatch",
+                        }
+                    )
+
+            # Check bounds for numeric parameters in constructor calls
+            self._check_constructor_bounds(node, class_name, param_name, param_type, param_value)
+
+    def _check_constructor_bounds(
+        self,
+        node: ast.Call,
+        class_name: str,
+        param_name: str,
+        param_type: str,
+        param_value: ast.expr,
+    ):
+        """Check if constructor parameter value is within parameter bounds."""
+        # Only check bounds for numeric types
+        if param_type not in ["Number", "Integer"]:
+            return
+
+        # Get bounds for this parameter
+        bounds = self._get_parameter_bounds(class_name, param_name)
+        if not bounds:
+            return
+
+        # Extract numeric value from parameter value
+        assigned_numeric = self._extract_numeric_value(param_value)
+        if assigned_numeric is None:
+            return
+
+        # Handle both old format (min, max) and new format (min, max, left_inclusive, right_inclusive)
+        if len(bounds) == 2:
+            min_val, max_val = bounds
+            left_inclusive, right_inclusive = True, True  # Default to inclusive
+        elif len(bounds) == 4:
+            min_val, max_val, left_inclusive, right_inclusive = bounds
+        else:
+            return
+
+        # Check if value is within bounds based on inclusivity
+        # Handle None bounds (unbounded)
+        violates_lower = False
+        violates_upper = False
+
+        if min_val is not None:
+            if left_inclusive:
+                violates_lower = assigned_numeric < min_val
+            else:
+                violates_lower = assigned_numeric <= min_val
+
+        if max_val is not None:
+            if right_inclusive:
+                violates_upper = assigned_numeric > max_val
+            else:
+                violates_upper = assigned_numeric >= max_val
+
+        if violates_lower or violates_upper:
+            # Format bounds description with proper None handling
+            min_str = str(min_val) if min_val is not None else "-∞"
+            max_str = str(max_val) if max_val is not None else "∞"
+            bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
+            self.type_errors.append(
+                {
+                    "line": node.lineno - 1,
+                    "col": node.col_offset,
+                    "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                    "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                    "message": f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}",
+                    "severity": "error",
+                    "code": "constructor-bounds-violation",
+                }
+            )
 
     def _check_parameter_default_type(self, node: ast.Assign, param_name: str, lines: list[str]):
         """Check if parameter default value matches declared type."""
@@ -635,17 +784,26 @@ class ParamAnalyzer:
             return
 
         # Check if value is within bounds based on inclusivity
-        bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
+        # Handle None bounds (unbounded)
+        violates_lower = False
+        violates_upper = False
 
-        if left_inclusive:
-            violates_lower = assigned_numeric < min_val
-        else:
-            violates_lower = assigned_numeric <= min_val
+        if min_val is not None:
+            if left_inclusive:
+                violates_lower = assigned_numeric < min_val
+            else:
+                violates_lower = assigned_numeric <= min_val
 
-        if right_inclusive:
-            violates_upper = assigned_numeric > max_val
-        else:
-            violates_upper = assigned_numeric >= max_val
+        if max_val is not None:
+            if right_inclusive:
+                violates_upper = assigned_numeric > max_val
+            else:
+                violates_upper = assigned_numeric >= max_val
+
+        # Format bounds description with proper None handling
+        min_str = str(min_val) if min_val is not None else "-∞"
+        max_str = str(max_val) if max_val is not None else "∞"
+        bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
 
         if violates_lower or violates_upper:
             self.type_errors.append(
@@ -994,8 +1152,11 @@ class ParamAnalyzer:
 
     def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
         """Extract numeric value from AST node."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-            return node.value
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float)):
+                return node.value
+            elif node.value is None:
+                return None  # Explicitly handle None
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
             # Handle negative numbers
             val = self._extract_numeric_value(node.operand)
