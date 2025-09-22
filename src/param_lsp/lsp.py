@@ -51,6 +51,7 @@ class ParamAnalyzer:
         self.param_parameters: dict[str, list[str]] = {}
         self.param_parameter_types: dict[str, dict[str, str]] = {}  # class_name -> {param_name: param_type}
         self.param_parameter_bounds: dict[str, dict[str, tuple]] = {}  # class_name -> {param_name: (min, max)}
+        self.param_parameter_docs: dict[str, dict[str, str]] = {}  # class_name -> {param_name: doc_string}
         self.imports: dict[str, str] = {}
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
@@ -93,6 +94,7 @@ class ParamAnalyzer:
                 "param_parameters": self.param_parameters,
                 "param_parameter_types": self.param_parameter_types,
                 "param_parameter_bounds": self.param_parameter_bounds,
+                "param_parameter_docs": self.param_parameter_docs,
                 "imports": self.imports,
                 "type_errors": self.type_errors,
             }
@@ -106,6 +108,7 @@ class ParamAnalyzer:
         self.param_parameters.clear()
         self.param_parameter_types.clear()
         self.param_parameter_bounds.clear()
+        self.param_parameter_docs.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -133,10 +136,11 @@ class ParamAnalyzer:
 
         if is_param_class:
             self.param_classes.add(node.name)
-            parameters, parameter_types, parameter_bounds = self._extract_parameters(node)
+            parameters, parameter_types, parameter_bounds, parameter_docs = self._extract_parameters(node)
             self.param_parameters[node.name] = parameters
             self.param_parameter_types[node.name] = parameter_types
             self.param_parameter_bounds[node.name] = parameter_bounds
+            self.param_parameter_docs[node.name] = parameter_docs
 
     def _is_param_base(self, base: ast.expr) -> bool:
         """Check if a base class is param.Parameterized or similar."""
@@ -151,11 +155,12 @@ class ParamAnalyzer:
             )
         return False
 
-    def _extract_parameters(self, node: ast.ClassDef) -> tuple[list[str], dict[str, str], dict[str, tuple]]:
+    def _extract_parameters(self, node: ast.ClassDef) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
         """Extract parameter definitions from a Param class."""
         parameters = []
         parameter_types = {}
         parameter_bounds = {}
+        parameter_docs = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
@@ -174,7 +179,12 @@ class ParamAnalyzer:
                             if bounds:
                                 parameter_bounds[param_name] = bounds
 
-        return parameters, parameter_types, parameter_bounds
+                            # Get doc string if present
+                            doc_string = self._extract_doc_from_call(item.value)
+                            if doc_string:
+                                parameter_docs[param_name] = doc_string
+
+        return parameters, parameter_types, parameter_bounds, parameter_docs
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
         """Extract bounds from a parameter call."""
@@ -201,13 +211,23 @@ class ParamAnalyzer:
             return (*bounds_info, *inclusive_bounds)
         return None
 
+    def _extract_doc_from_call(self, call_node: ast.Call) -> str | None:
+        """Extract doc string from a parameter call."""
+        for keyword in call_node.keywords:
+            if keyword.arg == "doc":
+                return self._extract_string_value(keyword.value)
+        return None
+
+    def _extract_string_value(self, node: ast.expr) -> str | None:
+        """Extract string value from AST node."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
     def _extract_boolean_value(self, node: ast.expr) -> bool | None:
         """Extract boolean value from AST node."""
         if isinstance(node, ast.Constant) and isinstance(node.value, bool):
             return node.value
-        elif isinstance(node, ast.NameConstant):  # Python < 3.8 compatibility
-            if isinstance(node.value, bool):
-                return node.value
         return None
 
     def _is_parameter_assignment(self, value: ast.expr) -> bool:
@@ -474,12 +494,6 @@ class ParamAnalyzer:
         """Infer Python type from AST node."""
         if isinstance(node, ast.Constant):
             return type(node.value)
-        elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
-            return str
-        elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
-            return type(node.n)
-        elif isinstance(node, ast.NameConstant):  # Python < 3.8 compatibility
-            return type(node.value)
         elif isinstance(node, ast.List):
             return list
         elif isinstance(node, ast.Tuple):
@@ -611,8 +625,6 @@ class ParamAnalyzer:
         """Extract numeric value from AST node."""
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return node.value
-        elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
-            return node.n
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
             # Handle negative numbers
             val = self._extract_numeric_value(node.operand)
@@ -711,39 +723,57 @@ class ParamLanguageServer(LanguageServer):
     def _get_completions_for_param_class(self, line: str, character: int) -> list[CompletionItem]:
         """Get completions for param class attributes and methods."""
 
-        # Add parameter types
-        completions = [
-            CompletionItem(
-                label=param_type,
-                kind=CompletionItemKind.Class,
-                detail=f"param.{param_type}",
-                documentation=f"Param parameter type: {param_type}",
-            )
-            for param_type in self.param_types
-        ]
+        # Add parameter types with enhanced documentation
+        completions = []
+        for param_type in self.param_types:
+            documentation = f"Param parameter type: {param_type}"
 
-        # Add common parameter arguments
+            # Try to get actual documentation from param module
+            if param:
+                try:
+                    param_class = getattr(param, param_type, None)
+                    if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
+                        # Extract first line of docstring for concise documentation
+                        doc_lines = param_class.__doc__.strip().split('\n')
+                        if doc_lines:
+                            documentation = doc_lines[0].strip()
+                except (AttributeError, TypeError):
+                    pass
+
+            completions.append(
+                CompletionItem(
+                    label=param_type,
+                    kind=CompletionItemKind.Class,
+                    detail=f"param.{param_type}",
+                    documentation=documentation,
+                )
+            )
+
+        # Add common parameter arguments with detailed documentation
         param_args = [
-            "default",
-            "doc",
-            "label",
-            "precedence",
-            "instantiate",
-            "constant",
-            "readonly",
-            "allow_None",
-            "per_instance",
+            ("default", "Default value for the parameter"),
+            ("doc", "Documentation string describing the parameter"),
+            ("label", "Human-readable name for the parameter"),
+            ("precedence", "Numeric precedence for parameter ordering"),
+            ("instantiate", "Whether to instantiate the default value per instance"),
+            ("constant", "Whether the parameter value cannot be changed after construction"),
+            ("readonly", "Whether the parameter value can be modified after construction"),
+            ("allow_None", "Whether None is allowed as a valid value"),
+            ("per_instance", "Whether the parameter is stored per instance"),
+            ("bounds", "Tuple of (min, max) values for numeric parameters"),
+            ("inclusive_bounds", "Tuple of (left_inclusive, right_inclusive) booleans"),
+            ("softbounds", "Tuple of (soft_min, soft_max) for suggested ranges"),
         ]
 
         completions.extend(
             [
                 CompletionItem(
-                    label=arg,
+                    label=arg_name,
                     kind=CompletionItemKind.Property,
                     detail="Parameter argument",
-                    documentation=f"Common parameter argument: {arg}",
+                    documentation=arg_doc,
                 )
-                for arg in param_args
+                for arg_name, arg_doc in param_args
             ]
         )
 
@@ -763,9 +793,38 @@ class ParamLanguageServer(LanguageServer):
                 return f"Param parameter type: {word}"
 
             # Check if it's a parameter in a class
-            for class_name, parameters in analysis.get("param_parameters", {}).items():
+            param_parameters = analysis.get("param_parameters", {})
+            param_parameter_types = analysis.get("param_parameter_types", {})
+            param_parameter_docs = analysis.get("param_parameter_docs", {})
+            param_parameter_bounds = analysis.get("param_parameter_bounds", {})
+
+            for class_name, parameters in param_parameters.items():
                 if word in parameters:
-                    return f"Parameter '{word}' in class '{class_name}'"
+                    hover_parts = [f"**Parameter '{word}' in class '{class_name}'**"]
+
+                    # Add parameter type information
+                    param_type = param_parameter_types.get(class_name, {}).get(word)
+                    if param_type:
+                        hover_parts.append(f"Type: `{param_type}`")
+
+                    # Add bounds information
+                    bounds = param_parameter_bounds.get(class_name, {}).get(word)
+                    if bounds:
+                        if len(bounds) == 2:
+                            min_val, max_val = bounds
+                            hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
+                        elif len(bounds) == 4:
+                            min_val, max_val, left_inclusive, right_inclusive = bounds
+                            left_bracket = '[' if left_inclusive else '('
+                            right_bracket = ']' if right_inclusive else ')'
+                            hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+
+                    # Add documentation
+                    doc = param_parameter_docs.get(class_name, {}).get(word)
+                    if doc:
+                        hover_parts.append(f"\n{doc}")
+
+                    return "\n\n".join(hover_parts)
 
         return None
 
