@@ -10,6 +10,7 @@ import ast
 import importlib.util
 import inspect
 import logging
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -59,6 +60,8 @@ class ParamAnalyzer:
         self.param_parameter_docs: dict[str, dict[str, str]] = {}
         # class_name -> {param_name: allow_None}
         self.param_parameter_allow_none: dict[str, dict[str, bool]] = {}
+        # class_name -> {param_name: default_value}
+        self.param_parameter_defaults: dict[str, dict[str, str]] = {}
         self.imports: dict[str, str] = {}
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
@@ -90,68 +93,91 @@ class ParamAnalyzer:
             tree = ast.parse(content)
             self._reset_analysis()
             self._current_file_path = file_path
+        except SyntaxError:
+            # Try to handle incomplete code (e.g., unclosed parentheses during typing)
+            # Find and remove lines that cause syntax errors
+            lines = content.split("\n")
 
-            # First pass: collect imports
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    self._handle_import(node)
-                elif isinstance(node, ast.ImportFrom):
-                    self._handle_import_from(node)
+            # Try removing lines with incomplete syntax from the end
+            for i in range(1, len(lines) + 1):
+                # Try parsing without the last i lines
+                truncated_content = "\n".join(lines[:-i] if i < len(lines) else [])
 
-            # Second pass: collect class definitions in order, respecting inheritance
-            class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+                if not truncated_content.strip():
+                    continue  # Skip empty content
 
-            # Process classes in dependency order (parents before children)
-            processed_classes = set()
-            while len(processed_classes) < len(class_nodes):
-                progress_made = False
+                try:
+                    tree = ast.parse(truncated_content)
+                    self._reset_analysis()
+                    self._current_file_path = file_path
+                    logger.info(f"Successfully parsed after removing {i} lines with syntax errors")
+                    break
+                except SyntaxError:
+                    continue
+            else:
+                # If we couldn't parse even with all lines removed, give up
+                logger.error("Could not parse file due to syntax errors")
+                return {}
+
+        # First pass: collect imports
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                self._handle_import(node)
+            elif isinstance(node, ast.ImportFrom):
+                self._handle_import_from(node)
+
+        # Second pass: collect class definitions in order, respecting inheritance
+        class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+
+        # Process classes in dependency order (parents before children)
+        processed_classes = set()
+        while len(processed_classes) < len(class_nodes):
+            progress_made = False
+            for node in class_nodes:
+                if node.name in processed_classes:
+                    continue
+
+                # Check if all parent classes are processed or are external param classes
+                can_process = True
+                for base in node.bases:
+                    if isinstance(base, ast.Name):
+                        parent_name = base.id
+                        # If it's a class defined in this file and not processed yet, wait
+                        if (
+                            any(cn.name == parent_name for cn in class_nodes)
+                            and parent_name not in processed_classes
+                        ):
+                            can_process = False
+                            break
+
+                if can_process:
+                    self._handle_class_def(node)
+                    processed_classes.add(node.name)
+                    progress_made = True
+
+            # Prevent infinite loop if there are circular dependencies
+            if not progress_made:
+                # Process remaining classes anyway
                 for node in class_nodes:
-                    if node.name in processed_classes:
-                        continue
-
-                    # Check if all parent classes are processed or are external param classes
-                    can_process = True
-                    for base in node.bases:
-                        if isinstance(base, ast.Name):
-                            parent_name = base.id
-                            # If it's a class defined in this file and not processed yet, wait
-                            if (
-                                any(cn.name == parent_name for cn in class_nodes)
-                                and parent_name not in processed_classes
-                            ):
-                                can_process = False
-                                break
-
-                    if can_process:
+                    if node.name not in processed_classes:
                         self._handle_class_def(node)
                         processed_classes.add(node.name)
-                        progress_made = True
+                break
 
-                # Prevent infinite loop if there are circular dependencies
-                if not progress_made:
-                    # Process remaining classes anyway
-                    for node in class_nodes:
-                        if node.name not in processed_classes:
-                            self._handle_class_def(node)
-                            processed_classes.add(node.name)
-                    break
+        # Perform type inference after parsing
+        self._check_parameter_types(tree, content.split("\n"))
 
-            # Perform type inference after parsing
-            self._check_parameter_types(tree, content.split("\n"))
-
-            return {
-                "param_classes": self.param_classes,
-                "param_parameters": self.param_parameters,
-                "param_parameter_types": self.param_parameter_types,
-                "param_parameter_bounds": self.param_parameter_bounds,
-                "param_parameter_docs": self.param_parameter_docs,
-                "param_parameter_allow_none": self.param_parameter_allow_none,
-                "imports": self.imports,
-                "type_errors": self.type_errors,
-            }
-        except SyntaxError as e:
-            logger.error(f"Syntax error in file: {e}")
-            return {}
+        return {
+            "param_classes": self.param_classes,
+            "param_parameters": self.param_parameters,
+            "param_parameter_types": self.param_parameter_types,
+            "param_parameter_bounds": self.param_parameter_bounds,
+            "param_parameter_docs": self.param_parameter_docs,
+            "param_parameter_allow_none": self.param_parameter_allow_none,
+            "param_parameter_defaults": self.param_parameter_defaults,
+            "imports": self.imports,
+            "type_errors": self.type_errors,
+        }
 
     def _reset_analysis(self):
         """Reset analysis state."""
@@ -161,6 +187,7 @@ class ParamAnalyzer:
         self.param_parameter_bounds.clear()
         self.param_parameter_docs.clear()
         self.param_parameter_allow_none.clear()
+        self.param_parameter_defaults.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -188,9 +215,14 @@ class ParamAnalyzer:
 
         if is_param_class:
             self.param_classes.add(node.name)
-            parameters, parameter_types, parameter_bounds, parameter_docs, parameter_allow_none = (
-                self._extract_parameters(node)
-            )
+            (
+                parameters,
+                parameter_types,
+                parameter_bounds,
+                parameter_docs,
+                parameter_allow_none,
+                parameter_defaults,
+            ) = self._extract_parameters(node)
 
             # For inherited classes, we need to collect parameters from parent classes too
             # Get parent class parameters and merge them
@@ -200,20 +232,39 @@ class ParamAnalyzer:
                 parent_parameter_bounds,
                 parent_parameter_docs,
                 parent_parameter_allow_none,
+                parent_parameter_defaults,
             ) = self._collect_inherited_parameters(node, getattr(self, "_current_file_path", None))
 
             # Merge parent parameters with current class parameters
-            all_parameters = parent_parameters + parameters
+            # Child class parameters override parent parameters with the same name
             all_parameter_types = {**parent_parameter_types, **parameter_types}
             all_parameter_bounds = {**parent_parameter_bounds, **parameter_bounds}
             all_parameter_docs = {**parent_parameter_docs, **parameter_docs}
             all_parameter_allow_none = {**parent_parameter_allow_none, **parameter_allow_none}
+            all_parameter_defaults = {**parent_parameter_defaults, **parameter_defaults}
+
+            # Create unique parameter list, with child parameters overriding parent ones
+            all_parameters = []
+            current_param_names = set(parameters)
+
+            # Add current class parameters first (these take precedence)
+            all_parameters.extend(parameters)
+
+            # Add parent parameters only if they're not overridden by current class
+            all_parameters.extend(
+                [
+                    parent_param
+                    for parent_param in parent_parameters
+                    if parent_param not in current_param_names
+                ]
+            )
 
             self.param_parameters[node.name] = all_parameters
             self.param_parameter_types[node.name] = all_parameter_types
             self.param_parameter_bounds[node.name] = all_parameter_bounds
             self.param_parameter_docs[node.name] = all_parameter_docs
             self.param_parameter_allow_none[node.name] = all_parameter_allow_none
+            self.param_parameter_defaults[node.name] = all_parameter_defaults
 
     def _format_base(self, base: ast.expr) -> str:
         """Format base class for debugging."""
@@ -253,13 +304,21 @@ class ParamAnalyzer:
 
     def _collect_inherited_parameters(
         self, node: ast.ClassDef, current_file_path: str | None = None
-    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str], dict[str, bool]]:
+    ) -> tuple[
+        list[str],
+        dict[str, str],
+        dict[str, tuple],
+        dict[str, str],
+        dict[str, bool],
+        dict[str, str],
+    ]:
         """Collect parameters from parent classes in inheritance hierarchy."""
         inherited_parameters = []
         inherited_parameter_types = {}
         inherited_parameter_bounds = {}
         inherited_parameter_docs = {}
         inherited_parameter_allow_none = {}
+        inherited_parameter_defaults = {}
 
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -273,6 +332,7 @@ class ParamAnalyzer:
                     parent_bounds = self.param_parameter_bounds.get(parent_class_name, {})
                     parent_docs = self.param_parameter_docs.get(parent_class_name, {})
                     parent_allow_none = self.param_parameter_allow_none.get(parent_class_name, {})
+                    parent_defaults = self.param_parameter_defaults.get(parent_class_name, {})
 
                     # Add parent parameters (avoid duplicates)
                     for param in parent_params:
@@ -286,6 +346,8 @@ class ParamAnalyzer:
                             inherited_parameter_docs[param] = parent_docs[param]
                         if param in parent_allow_none:
                             inherited_parameter_allow_none[param] = parent_allow_none[param]
+                        if param in parent_defaults:
+                            inherited_parameter_defaults[param] = parent_defaults[param]
 
                 # If not found locally, check if it's an imported class
                 else:
@@ -300,6 +362,7 @@ class ParamAnalyzer:
                         parent_bounds = imported_class_info.get("parameter_bounds", {})
                         parent_docs = imported_class_info.get("parameter_docs", {})
                         parent_allow_none = imported_class_info.get("parameter_allow_none", {})
+                        parent_defaults = imported_class_info.get("parameter_defaults", {})
 
                         # Add parent parameters (avoid duplicates)
                         for param in parent_params:
@@ -313,6 +376,8 @@ class ParamAnalyzer:
                                 inherited_parameter_docs[param] = parent_docs[param]
                             if param in parent_allow_none:
                                 inherited_parameter_allow_none[param] = parent_allow_none[param]
+                            if param in parent_defaults:
+                                inherited_parameter_defaults[param] = parent_defaults[param]
 
         return (
             inherited_parameters,
@@ -320,17 +385,26 @@ class ParamAnalyzer:
             inherited_parameter_bounds,
             inherited_parameter_docs,
             inherited_parameter_allow_none,
+            inherited_parameter_defaults,
         )
 
     def _extract_parameters(
         self, node: ast.ClassDef
-    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str], dict[str, bool]]:
+    ) -> tuple[
+        list[str],
+        dict[str, str],
+        dict[str, tuple],
+        dict[str, str],
+        dict[str, bool],
+        dict[str, str],
+    ]:
         """Extract parameter definitions from a Param class."""
         parameters = []
         parameter_types = {}
         parameter_bounds = {}
         parameter_docs = {}
         parameter_allow_none = {}
+        parameter_defaults = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
@@ -359,13 +433,26 @@ class ParamAnalyzer:
                             allow_none = self._extract_allow_none_from_call(item.value)
                             default_value = self._extract_default_from_call(item.value)
 
+                            # Store default value as a string representation
+                            if default_value is not None:
+                                parameter_defaults[param_name] = self._format_default_value(
+                                    default_value
+                                )
+
                             # Param automatically sets allow_None=True when default=None
                             if default_value is not None and self._is_none_value(default_value):
                                 parameter_allow_none[param_name] = True
                             elif allow_none is not None:
                                 parameter_allow_none[param_name] = allow_none
 
-        return parameters, parameter_types, parameter_bounds, parameter_docs, parameter_allow_none
+        return (
+            parameters,
+            parameter_types,
+            parameter_bounds,
+            parameter_docs,
+            parameter_allow_none,
+            parameter_defaults,
+        )
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
         """Extract bounds from a parameter call."""
@@ -433,6 +520,43 @@ class ParamAnalyzer:
         if isinstance(node, ast.Constant) and isinstance(node.value, bool):
             return node.value
         return None
+
+    def _format_default_value(self, node: ast.expr) -> str:
+        """Format an AST node as a string representation for display."""
+        if isinstance(node, ast.Constant):
+            if node.value is None:
+                return "None"
+            elif isinstance(node.value, str):
+                return repr(node.value)  # Use repr to include quotes
+            else:
+                return str(node.value)
+        elif isinstance(node, ast.List):
+            elements = [self._format_default_value(elem) for elem in node.elts]
+            return f"[{', '.join(elements)}]"
+        elif isinstance(node, ast.Tuple):
+            elements = [self._format_default_value(elem) for elem in node.elts]
+            if len(elements) == 1:
+                return f"({elements[0]},)"  # Single-element tuple
+            return f"({', '.join(elements)})"
+        elif isinstance(node, ast.Dict):
+            pairs = []
+            for key, value in zip(node.keys, node.values, strict=False):
+                key_str = self._format_default_value(key) if key else "None"
+                value_str = self._format_default_value(value)
+                pairs.append(f"{key_str}: {value_str}")
+            return f"{{{', '.join(pairs)}}}"
+        elif isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            if isinstance(node.value, ast.Name):
+                return f"{node.value.id}.{node.attr}"
+            else:
+                return f"{self._format_default_value(node.value)}.{node.attr}"
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return f"-{self._format_default_value(node.operand)}"
+        else:
+            # Fallback for complex expressions
+            return "<complex>"
 
     def _is_parameter_assignment(self, value: ast.expr) -> bool:
         """Check if an assignment looks like a parameter definition."""
@@ -1227,6 +1351,9 @@ class ParamAnalyzer:
             "parameter_allow_none": module_analysis.get("param_parameter_allow_none", {}).get(
                 imported_class_name, {}
             ),
+            "parameter_defaults": module_analysis.get("param_parameter_defaults", {}).get(
+                imported_class_name, {}
+            ),
         }
 
     def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
@@ -1404,6 +1531,123 @@ class ParamLanguageServer(LanguageServer):
 
         return completions
 
+    def _get_constructor_parameter_completions(
+        self, uri: str, line: str, character: int
+    ) -> list[CompletionItem]:
+        """Get parameter completions for param class constructors like P(...)."""
+        completions = []
+
+        if uri not in self.document_cache:
+            return completions
+
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = analysis.get("param_classes", set())
+        param_parameters = analysis.get("param_parameters", {})
+        param_parameter_types = analysis.get("param_parameter_types", {})
+        param_parameter_docs = analysis.get("param_parameter_docs", {})
+        param_parameter_bounds = analysis.get("param_parameter_bounds", {})
+        param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
+        param_parameter_defaults = analysis.get("param_parameter_defaults", {})
+
+        # Find which param class constructor is being called
+        # Look backwards in the line to find ClassName(
+        before_cursor = line[:character]
+
+        # Pattern: find word followed by opening parenthesis, allowing for parameters already typed
+        # This pattern matches ClassName( with optional whitespace and existing parameters
+        pattern = r"(\w+)\s*\([^)]*$"
+        match = re.search(pattern, before_cursor)
+
+        # Also check if we're inside parentheses after a class name
+        # This helps catch cases where user has started typing parameter letters
+        if not match:
+            # Look for pattern like: ClassName(some_text
+            pattern_inside = r"(\w+)\s*\([^)]*\w*$"
+            match = re.search(pattern_inside, before_cursor)
+
+        if match:
+            class_name = match.group(1)
+
+            # Check if this is a known param class
+            if class_name in param_classes:
+                parameters = param_parameters.get(class_name, [])
+                parameter_types = param_parameter_types.get(class_name, {})
+                parameter_docs = param_parameter_docs.get(class_name, {})
+                parameter_bounds = param_parameter_bounds.get(class_name, {})
+                parameter_allow_none = param_parameter_allow_none.get(class_name, {})
+                parameter_defaults = param_parameter_defaults.get(class_name, {})
+
+                # Find already used parameters to avoid duplicates
+                used_params = set()
+                param_pattern = r"(\w+)\s*="
+                used_matches = re.findall(param_pattern, before_cursor)
+                used_params.update(used_matches)
+
+                for param_name in parameters:
+                    # Skip parameters that are already used
+                    if param_name in used_params:
+                        continue
+                    # Build documentation for the parameter
+                    doc_parts = []
+
+                    # Add parameter type info
+                    param_type = parameter_types.get(param_name)
+                    if param_type:
+                        python_type = self._get_python_type_name(param_type)
+                        doc_parts.append(f"Type: {param_type} ({python_type})")
+
+                    # Add bounds info
+                    bounds = parameter_bounds.get(param_name)
+                    if bounds:
+                        if len(bounds) == 2:
+                            min_val, max_val = bounds
+                            doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
+                        elif len(bounds) == 4:
+                            min_val, max_val, left_inclusive, right_inclusive = bounds
+                            left_bracket = "[" if left_inclusive else "("
+                            right_bracket = "]" if right_inclusive else ")"
+                            doc_parts.append(
+                                f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}"
+                            )
+
+                    # Add allow_None info
+                    allow_none = parameter_allow_none.get(param_name, False)
+                    if allow_none:
+                        doc_parts.append("Allows None")
+
+                    # Add parameter-specific documentation
+                    param_doc = parameter_docs.get(param_name)
+                    if param_doc:
+                        doc_parts.append(f"Description: {param_doc}")
+
+                    documentation = (
+                        "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
+                    )
+
+                    # Create insert text with default value if available
+                    default_value = parameter_defaults.get(param_name)
+                    if default_value is not None:
+                        insert_text = f"{param_name}={default_value}"
+                        label = f"{param_name}={default_value}"
+                    else:
+                        insert_text = f"{param_name}="
+                        label = param_name
+
+                    completions.append(
+                        CompletionItem(
+                            label=label,
+                            kind=CompletionItemKind.Property,
+                            detail=f"Parameter of {class_name}",
+                            documentation=documentation,
+                            insert_text=insert_text,
+                            filter_text=param_name,  # Help with filtering
+                            sort_text=f"{param_name:0>3}",  # Ensure stable sort order
+                            preselect=False,  # Don't auto-select, show all options
+                        )
+                    )
+
+        return completions
+
     def _get_python_type_name(self, param_type: str) -> str:
         """Map param type to Python type name for hover display using existing param_type_map."""
         if param_type in self.analyzer.param_type_map:
@@ -1574,7 +1818,16 @@ def completion(params: CompletionParams) -> CompletionList:
 
     current_line = lines[position.line]
 
-    # Get completions based on context
+    # Check if we're in a constructor call context (e.g., P(...) )
+    constructor_completions = server._get_constructor_parameter_completions(
+        uri, current_line, position.character
+    )
+    if constructor_completions:
+        # Mark as complete and ensure all items are visible
+        completion_list = CompletionList(is_incomplete=False, items=constructor_completions)
+        return completion_list
+
+    # Get completions based on general context
     completions = server._get_completions_for_param_class(current_line, position.character)
 
     return CompletionList(is_incomplete=False, items=completions)
