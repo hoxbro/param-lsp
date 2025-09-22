@@ -49,6 +49,7 @@ class ParamAnalyzer:
     def __init__(self):
         self.param_classes: set[str] = set()
         self.param_parameters: dict[str, list[str]] = {}
+        self.param_parameter_types: dict[str, dict[str, str]] = {}  # class_name -> {param_name: param_type}
         self.imports: dict[str, str] = {}
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
@@ -89,6 +90,7 @@ class ParamAnalyzer:
             return {
                 "param_classes": self.param_classes,
                 "param_parameters": self.param_parameters,
+                "param_parameter_types": self.param_parameter_types,
                 "imports": self.imports,
                 "type_errors": self.type_errors,
             }
@@ -100,6 +102,7 @@ class ParamAnalyzer:
         """Reset analysis state."""
         self.param_classes.clear()
         self.param_parameters.clear()
+        self.param_parameter_types.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -127,8 +130,9 @@ class ParamAnalyzer:
 
         if is_param_class:
             self.param_classes.add(node.name)
-            parameters = self._extract_parameters(node)
+            parameters, parameter_types = self._extract_parameters(node)
             self.param_parameters[node.name] = parameters
+            self.param_parameter_types[node.name] = parameter_types
 
     def _is_param_base(self, base: ast.expr) -> bool:
         """Check if a base class is param.Parameterized or similar."""
@@ -143,15 +147,23 @@ class ParamAnalyzer:
             )
         return False
 
-    def _extract_parameters(self, node: ast.ClassDef) -> list[str]:
+    def _extract_parameters(self, node: ast.ClassDef) -> tuple[list[str], dict[str, str]]:
         """Extract parameter definitions from a Param class."""
         parameters = []
+        parameter_types = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
                     if isinstance(target, ast.Name) and self._is_parameter_assignment(item.value):
-                        parameters.append(target.id)  # noqa: PERF401
-        return parameters
+                        param_name = target.id
+                        parameters.append(param_name)
+
+                        # Get parameter type
+                        param_class_info = self._resolve_parameter_class(item.value.func)
+                        if param_class_info:
+                            parameter_types[param_name] = param_class_info["type"]
+
+        return parameters, parameter_types
 
     def _is_parameter_assignment(self, value: ast.expr) -> bool:
         """Check if an assignment looks like a parameter definition."""
@@ -218,6 +230,12 @@ class ParamAnalyzer:
                             ):
                                 self._check_parameter_default_type(item, target.id, lines)
 
+            # Check runtime parameter assignments like obj.param = value
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute):
+                        self._check_runtime_parameter_assignment(node, target, lines)
+
     def _check_parameter_default_type(self, node: ast.Assign, param_name: str, lines: list[str]):
         """Check if parameter default value matches declared type."""
         if not isinstance(node.value, ast.Call):
@@ -260,6 +278,60 @@ class ParamAnalyzer:
 
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, param_type, lines)
+
+    def _check_runtime_parameter_assignment(self, node: ast.Assign, target: ast.Attribute, lines: list[str]):
+        """Check runtime parameter assignments like obj.param = value."""
+        if not isinstance(target.value, ast.Call):
+            # Skip if not an instance creation like MyClass().x = value
+            return
+
+        # Check if it's calling a known param class
+        instance_class = self._get_instance_class(target.value)
+        if not instance_class or instance_class not in self.param_classes:
+            return
+
+        param_name = target.attr
+        assigned_value = node.value
+
+        # Get the parameter type from the class definition
+        param_type = self._get_parameter_type_from_class(instance_class, param_name)
+        if not param_type:
+            return
+
+        # Check if assigned value matches expected type
+        if param_type in self.param_type_map:
+            expected_types = self.param_type_map[param_type]
+            if not isinstance(expected_types, tuple):
+                expected_types = (expected_types,)
+
+            inferred_type = self._infer_value_type(assigned_value)
+
+            if inferred_type and not any(issubclass(inferred_type, t) for t in expected_types):
+                self.type_errors.append(
+                    {
+                        "line": node.lineno - 1,  # Convert to 0-based
+                        "col": node.col_offset,
+                        "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                        "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                        "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {param_type} (expects {self._format_expected_types(expected_types)})",
+                        "severity": "error",
+                        "code": "runtime-type-mismatch",
+                    }
+                )
+
+    def _get_instance_class(self, call_node: ast.Call) -> str | None:
+        """Get the class name from an instance creation call."""
+        if isinstance(call_node.func, ast.Name):
+            return call_node.func.id
+        elif isinstance(call_node.func, ast.Attribute):
+            return call_node.func.attr
+        return None
+
+    def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
+        """Get the parameter type from a class definition."""
+        if class_name in self.param_parameter_types:
+            return self.param_parameter_types[class_name].get(param_name)
+        return None
 
     def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str] | None:
         """Resolve the actual parameter class from the function call."""
