@@ -1,7 +1,8 @@
 # General
 
 - The correct environment is always activated with UV
-- If you create a new file, make use `git add --intent-to-add`
+- If you create a new file use `git add --intent-to-add` for it
+- Use relative import for `param_lsp` and absolute imports for tests
 
 # New Feature
 
