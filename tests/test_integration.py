@@ -1,7 +1,6 @@
 """Integration tests for the complete param-lsp functionality."""
 
-import pytest
-from param_lsp.lsp import ParamAnalyzer
+from __future__ import annotations
 
 
 class TestIntegration:
@@ -9,7 +8,7 @@ class TestIntegration:
 
     def test_complete_analysis_workflow(self, analyzer):
         """Test complete analysis workflow with all features."""
-        code = '''
+        code = """
 from __future__ import annotations
 import param
 
@@ -56,7 +55,7 @@ example.name = 456              # Type error
 example.enabled = "yes"         # Boolean type error
 example.count = 0               # Bounds violation
 example.ratio = 0               # Exclusive bounds violation
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -65,7 +64,16 @@ example.ratio = 0               # Exclusive bounds violation
 
         # Verify parameter extraction
         params = result["param_parameters"]["CompleteExample"]
-        expected_params = ["name", "count", "enabled", "ratio", "bad_string", "bad_bool", "bad_bounds", "invalid_bounds"]
+        expected_params = [
+            "name",
+            "count",
+            "enabled",
+            "ratio",
+            "bad_string",
+            "bad_bool",
+            "bad_bounds",
+            "invalid_bounds",
+        ]
         assert all(param in params for param in expected_params)
 
         # Verify type extraction
@@ -98,7 +106,9 @@ example.ratio = 0               # Exclusive bounds violation
         assert len(type_errors) >= 1  # bad_string
         assert len(boolean_errors) >= 2  # bad_bool + runtime boolean errors
         assert len(bounds_errors) >= 3  # bad_bounds, invalid_bounds, runtime bounds
-        assert len(runtime_errors) >= 2  # Runtime assignment errors (type + boolean, bounds use different code)
+        assert (
+            len(runtime_errors) >= 2
+        )  # Runtime assignment errors (type + boolean, bounds use different code)
 
         # Total errors should include all categories
         total_errors = len(result["type_errors"])
@@ -176,7 +186,7 @@ processor.use_gpu = 1              # Boolean type error
             "learning_rate": "Number",
             "use_gpu": "Boolean",
             "features": "List",
-            "metadata": "Dict"
+            "metadata": "Dict",
         }
 
         for param_name, expected_type in expected_types.items():
@@ -201,7 +211,7 @@ processor.use_gpu = 1              # Boolean type error
 
     def test_edge_cases_and_corner_cases(self, analyzer):
         """Test edge cases and corner cases."""
-        code = '''
+        code = """
 import param
 
 class EdgeCases(param.Parameterized):
@@ -233,7 +243,7 @@ edge = EdgeCases()
 edge.class_ = "new_value"        # Valid
 edge.extreme_bounds = 1e9        # Valid (within bounds)
 edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -258,7 +268,7 @@ edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
     def test_error_recovery_and_robustness(self, analyzer):
         """Test that the analyzer recovers gracefully from syntax errors and edge cases."""
         # Test with some invalid syntax mixed with valid param code
-        code = '''
+        code = """
 import param
 
 class ValidClass(param.Parameterized):
@@ -266,7 +276,7 @@ class ValidClass(param.Parameterized):
 
 # Some invalid Python syntax that should be handled gracefully
 # This would cause a syntax error but analyzer should still extract what it can
-'''
+"""
 
         # This should not crash the analyzer
         result = analyzer.analyze_file(code)

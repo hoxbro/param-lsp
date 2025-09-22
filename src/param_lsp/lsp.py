@@ -31,7 +31,6 @@ from lsprotocol.types import (
     MarkupContent,
     MarkupKind,
     Position,
-    PublishDiagnosticsParams,
     Range,
     ServerCapabilities,
     TextDocumentSyncKind,
@@ -49,9 +48,12 @@ class ParamAnalyzer:
     def __init__(self):
         self.param_classes: set[str] = set()
         self.param_parameters: dict[str, list[str]] = {}
-        self.param_parameter_types: dict[str, dict[str, str]] = {}  # class_name -> {param_name: param_type}
-        self.param_parameter_bounds: dict[str, dict[str, tuple]] = {}  # class_name -> {param_name: (min, max)}
-        self.param_parameter_docs: dict[str, dict[str, str]] = {}  # class_name -> {param_name: doc_string}
+        # class_name -> {param_name: param_type}
+        self.param_parameter_types: dict[str, dict[str, str]] = {}
+        # class_name -> {param_name: (min, max)}
+        self.param_parameter_bounds: dict[str, dict[str, tuple]] = {}
+        # class_name -> {param_name: doc_string}
+        self.param_parameter_docs: dict[str, dict[str, str]] = {}
         self.imports: dict[str, str] = {}
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
@@ -136,7 +138,9 @@ class ParamAnalyzer:
 
         if is_param_class:
             self.param_classes.add(node.name)
-            parameters, parameter_types, parameter_bounds, parameter_docs = self._extract_parameters(node)
+            parameters, parameter_types, parameter_bounds, parameter_docs = (
+                self._extract_parameters(node)
+            )
             self.param_parameters[node.name] = parameters
             self.param_parameter_types[node.name] = parameter_types
             self.param_parameter_bounds[node.name] = parameter_bounds
@@ -146,9 +150,8 @@ class ParamAnalyzer:
         """Format base class for debugging."""
         if isinstance(base, ast.Name):
             return base.id
-        elif isinstance(base, ast.Attribute):
-            if isinstance(base.value, ast.Name):
-                return f"{base.value.id}.{base.attr}"
+        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            return f"{base.value.id}.{base.attr}"
         return str(type(base))
 
     def _is_param_base(self, base: ast.expr) -> bool:
@@ -164,7 +167,9 @@ class ParamAnalyzer:
             )
         return False
 
-    def _extract_parameters(self, node: ast.ClassDef) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
+    def _extract_parameters(
+        self, node: ast.ClassDef
+    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
         """Extract parameter definitions from a Param class."""
         parameters = []
         parameter_types = {}
@@ -178,9 +183,10 @@ class ParamAnalyzer:
                         parameters.append(param_name)
 
                         # Get parameter type
-                        param_class_info = self._resolve_parameter_class(item.value.func)
-                        if param_class_info:
-                            parameter_types[param_name] = param_class_info["type"]
+                        if isinstance(item.value, ast.Call):
+                            param_class_info = self._resolve_parameter_class(item.value.func)
+                            if param_class_info:
+                                parameter_types[param_name] = param_class_info["type"]
 
                         # Get bounds if present
                         if isinstance(item.value, ast.Call):
@@ -190,7 +196,7 @@ class ParamAnalyzer:
 
                             # Get doc string if present
                             doc_string = self._extract_doc_from_call(item.value)
-                            if doc_string:
+                            if doc_string is not None:
                                 parameter_docs[param_name] = doc_string
 
         return parameters, parameter_types, parameter_bounds, parameter_docs
@@ -207,13 +213,16 @@ class ParamAnalyzer:
                     max_val = self._extract_numeric_value(keyword.value.elts[1])
                     if min_val is not None and max_val is not None:
                         bounds_info = (min_val, max_val)
-            elif keyword.arg == "inclusive_bounds":
-                if isinstance(keyword.value, ast.Tuple) and len(keyword.value.elts) == 2:
-                    # Extract boolean values for inclusive bounds
-                    left_inclusive = self._extract_boolean_value(keyword.value.elts[0])
-                    right_inclusive = self._extract_boolean_value(keyword.value.elts[1])
-                    if left_inclusive is not None and right_inclusive is not None:
-                        inclusive_bounds = (left_inclusive, right_inclusive)
+            elif (
+                keyword.arg == "inclusive_bounds"
+                and isinstance(keyword.value, ast.Tuple)
+                and len(keyword.value.elts) == 2
+            ):
+                # Extract boolean values for inclusive bounds
+                left_inclusive = self._extract_boolean_value(keyword.value.elts[0])
+                right_inclusive = self._extract_boolean_value(keyword.value.elts[1])
+                if left_inclusive is not None and right_inclusive is not None:
+                    inclusive_bounds = (left_inclusive, right_inclusive)
 
         if bounds_info:
             # Return (min, max, left_inclusive, right_inclusive)
@@ -321,7 +330,7 @@ class ParamAnalyzer:
             return
 
         param_type = param_class_info["type"]
-        param_module = param_class_info.get("module")
+        param_class_info.get("module")
 
         # Get default value from keyword arguments
         default_value = None
@@ -338,22 +347,30 @@ class ParamAnalyzer:
             inferred_type = self._infer_value_type(default_value)
 
             # Special handling for Boolean parameters - they should only accept actual bool values
-            if param_type == "Boolean" and inferred_type and inferred_type != bool:
+            if param_type == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
-                if not (isinstance(default_value, ast.Constant) and isinstance(default_value.value, bool)):
+                if not (
+                    isinstance(default_value, ast.Constant)
+                    and isinstance(default_value.value, bool)
+                ):
                     self.type_errors.append(
                         {
                             "line": node.lineno - 1,  # Convert to 0-based
                             "col": node.col_offset,
-                            "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                            "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                            "message": f"Parameter '{param_name}' of type Boolean expects True/False but got {inferred_type.__name__}",
+                            "end_line": node.end_lineno - 1
+                            if node.end_lineno
+                            else node.lineno - 1,
+                            "end_col": node.end_col_offset
+                            if node.end_col_offset
+                            else node.col_offset,
+                            "message": f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}",
                             "severity": "error",
                             "code": "boolean-type-mismatch",
                         }
                     )
             elif inferred_type and not any(
-                (isinstance(inferred_type, type) and issubclass(inferred_type, t)) or inferred_type == t
+                (isinstance(inferred_type, type) and issubclass(inferred_type, t))
+                or inferred_type == t
                 for t in expected_types
             ):
                 self.type_errors.append(
@@ -371,7 +388,9 @@ class ParamAnalyzer:
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
 
-    def _check_runtime_parameter_assignment(self, node: ast.Assign, target: ast.Attribute, lines: list[str]):
+    def _check_runtime_parameter_assignment(
+        self, node: ast.Assign, target: ast.Attribute, lines: list[str]
+    ):
         """Check runtime parameter assignments like obj.param = value."""
         instance_class = None
         param_name = target.attr
@@ -406,22 +425,30 @@ class ParamAnalyzer:
             inferred_type = self._infer_value_type(assigned_value)
 
             # Special handling for Boolean parameters - they should only accept actual bool values
-            if param_type == "Boolean" and inferred_type and inferred_type != bool:
+            if param_type == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
-                if not (isinstance(assigned_value, ast.Constant) and isinstance(assigned_value.value, bool)):
+                if not (
+                    isinstance(assigned_value, ast.Constant)
+                    and isinstance(assigned_value.value, bool)
+                ):
                     self.type_errors.append(
                         {
                             "line": node.lineno - 1,  # Convert to 0-based
                             "col": node.col_offset,
-                            "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                            "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                            "end_line": node.end_lineno - 1
+                            if node.end_lineno
+                            else node.lineno - 1,
+                            "end_col": node.end_col_offset
+                            if node.end_col_offset
+                            else node.col_offset,
                             "message": f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)",
                             "severity": "error",
                             "code": "runtime-boolean-type-mismatch",
                         }
                     )
             elif inferred_type and not any(
-                (isinstance(inferred_type, type) and issubclass(inferred_type, t)) or inferred_type == t
+                (isinstance(inferred_type, type) and issubclass(inferred_type, t))
+                or inferred_type == t
                 for t in expected_types
             ):
                 self.type_errors.append(
@@ -439,7 +466,14 @@ class ParamAnalyzer:
         # Check bounds for numeric parameters
         self._check_runtime_bounds(node, instance_class, param_name, param_type, assigned_value)
 
-    def _check_runtime_bounds(self, node: ast.Assign, instance_class: str, param_name: str, param_type: str, assigned_value: ast.expr):
+    def _check_runtime_bounds(
+        self,
+        node: ast.Assign,
+        instance_class: str,
+        param_name: str,
+        param_type: str,
+        assigned_value: ast.expr,
+    ):
         """Check if assigned value is within parameter bounds."""
         # Only check bounds for numeric types
         if param_type not in ["Number", "Integer"]:
@@ -465,7 +499,6 @@ class ParamAnalyzer:
             return
 
         # Check if value is within bounds based on inclusivity
-        violates_bounds = False
         bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
 
         if left_inclusive:
@@ -559,9 +592,7 @@ class ParamAnalyzer:
             return None
         return None
 
-    def _check_parameter_constraints(
-        self, node: ast.Assign, param_name: str, lines: list[str]
-    ):
+    def _check_parameter_constraints(self, node: ast.Assign, param_name: str, lines: list[str]):
         """Check for parameter-specific constraints."""
         if not isinstance(node.value, ast.Call):
             return
@@ -584,9 +615,14 @@ class ParamAnalyzer:
                     bounds = keyword.value
                 elif keyword.arg == "inclusive_bounds":
                     inclusive_bounds_node = keyword.value
-                    if isinstance(inclusive_bounds_node, ast.Tuple) and len(inclusive_bounds_node.elts) == 2:
+                    if (
+                        isinstance(inclusive_bounds_node, ast.Tuple)
+                        and len(inclusive_bounds_node.elts) == 2
+                    ):
                         left_inclusive = self._extract_boolean_value(inclusive_bounds_node.elts[0])
-                        right_inclusive = self._extract_boolean_value(inclusive_bounds_node.elts[1])
+                        right_inclusive = self._extract_boolean_value(
+                            inclusive_bounds_node.elts[1]
+                        )
                         if left_inclusive is not None and right_inclusive is not None:
                             inclusive_bounds = (left_inclusive, right_inclusive)
                 elif keyword.arg == "default":
@@ -622,8 +658,16 @@ class ParamAnalyzer:
                             left_inclusive, right_inclusive = inclusive_bounds
 
                             # Check bounds violation
-                            violates_lower = (default_numeric < min_val) if left_inclusive else (default_numeric <= min_val)
-                            violates_upper = (default_numeric > max_val) if right_inclusive else (default_numeric >= max_val)
+                            violates_lower = (
+                                (default_numeric < min_val)
+                                if left_inclusive
+                                else (default_numeric <= min_val)
+                            )
+                            violates_upper = (
+                                (default_numeric > max_val)
+                                if right_inclusive
+                                else (default_numeric >= max_val)
+                            )
 
                             if violates_lower or violates_upper:
                                 bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
@@ -649,29 +693,28 @@ class ParamAnalyzer:
         # Check for empty lists/tuples with List/Tuple parameters
         elif resolved_param_type in ["List", "Tuple"]:
             for keyword in node.value.keywords:
-                if keyword.arg == "default":
-                    if (
-                        isinstance(keyword.value, (ast.List, ast.Tuple))
-                        and len(keyword.value.elts) == 0
-                    ):
-                        # This is usually fine, but flag if bounds are specified
-                        bounds_specified = any(kw.arg == "bounds" for kw in node.value.keywords)
-                        if bounds_specified:
-                            self.type_errors.append(
-                                {
-                                    "line": node.lineno - 1,
-                                    "col": node.col_offset,
-                                    "end_line": node.end_lineno - 1
-                                    if node.end_lineno
-                                    else node.lineno - 1,
-                                    "end_col": node.end_col_offset
-                                    if node.end_col_offset
-                                    else node.col_offset,
-                                    "message": f"Parameter '{param_name}' has empty default but bounds specified",
-                                    "severity": "warning",
-                                    "code": "empty-default-with-bounds",
-                                }
-                            )
+                if keyword.arg == "default" and (
+                    isinstance(keyword.value, (ast.List, ast.Tuple))
+                    and len(keyword.value.elts) == 0
+                ):
+                    # This is usually fine, but flag if bounds are specified
+                    bounds_specified = any(kw.arg == "bounds" for kw in node.value.keywords)
+                    if bounds_specified:
+                        self.type_errors.append(
+                            {
+                                "line": node.lineno - 1,
+                                "col": node.col_offset,
+                                "end_line": node.end_lineno - 1
+                                if node.end_lineno
+                                else node.lineno - 1,
+                                "end_col": node.end_col_offset
+                                if node.end_col_offset
+                                else node.col_offset,
+                                "message": f"Parameter '{param_name}' has empty default but bounds specified",
+                                "severity": "warning",
+                                "code": "empty-default-with-bounds",
+                            }
+                        )
 
     def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
         """Extract numeric value from AST node."""
@@ -743,6 +786,13 @@ class ParamLanguageServer(LanguageServer):
         analysis = self.analyzer.analyze_file(content)
         self.document_cache[uri] = {"content": content, "analysis": analysis}
 
+        # Debug logging
+        logger.info(f"Analysis results for {uri}:")
+        logger.info(f"  Param classes: {analysis.get('param_classes', set())}")
+        logger.info(f"  Parameters: {analysis.get('param_parameters', {})}")
+        logger.info(f"  Parameter types: {analysis.get('param_parameter_types', {})}")
+        logger.info(f"  Type errors: {analysis.get('type_errors', [])}")
+
         # Publish diagnostics for type errors
         self._publish_diagnostics(uri, analysis.get("type_errors", []))
 
@@ -786,7 +836,7 @@ class ParamLanguageServer(LanguageServer):
                     param_class = getattr(param, param_type, None)
                     if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
                         # Extract first line of docstring for concise documentation
-                        doc_lines = param_class.__doc__.strip().split('\n')
+                        doc_lines = param_class.__doc__.strip().split("\n")
                         if doc_lines:
                             documentation = doc_lines[0].strip()
                 except (AttributeError, TypeError):
@@ -867,9 +917,11 @@ class ParamLanguageServer(LanguageServer):
                             hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
                         elif len(bounds) == 4:
                             min_val, max_val, left_inclusive, right_inclusive = bounds
-                            left_bracket = '[' if left_inclusive else '('
-                            right_bracket = ']' if right_inclusive else ')'
-                            hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+                            left_bracket = "[" if left_inclusive else "("
+                            right_bracket = "]" if right_inclusive else ")"
+                            hover_parts.append(
+                                f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`"
+                            )
 
                     # Add documentation
                     doc = param_parameter_docs.get(class_name, {}).get(word)

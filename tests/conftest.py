@@ -1,11 +1,8 @@
 """Test configuration and fixtures for param-lsp tests."""
 
-import pytest
-import sys
-import os
+from __future__ import annotations
 
-# Add src to path so we can import param_lsp
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+import pytest
 
 from param_lsp.lsp import ParamAnalyzer, ParamLanguageServer
 
@@ -25,7 +22,7 @@ def lsp_server():
 @pytest.fixture
 def sample_param_code():
     """Sample param code for testing."""
-    return '''
+    return """
 import param
 
 class TestClass(param.Parameterized):
@@ -33,13 +30,13 @@ class TestClass(param.Parameterized):
     int_param = param.Integer(default=5, bounds=(0, 10), doc="An integer parameter")
     bool_param = param.Boolean(default=True, doc="A boolean parameter")
     number_param = param.Number(default=1.5, bounds=(0.0, 5.0), inclusive_bounds=(False, True))
-'''
+"""
 
 
 @pytest.fixture
 def sample_runtime_assignment_code():
     """Sample code with runtime assignments for testing."""
-    return '''
+    return """
 import param
 
 class TestClass(param.Parameterized):
@@ -51,13 +48,13 @@ instance = TestClass()
 instance.string_param = 123  # Type error
 instance.int_param = -5      # Bounds error
 instance.bool_param = "yes"  # Boolean type error
-'''
+"""
 
 
 @pytest.fixture
 def sample_invalid_param_code():
     """Sample param code with various errors for testing."""
-    return '''
+    return """
 import param
 
 class TestClass(param.Parameterized):
@@ -72,4 +69,4 @@ class TestClass(param.Parameterized):
 
     # Invalid bounds
     invalid_bounds = param.Integer(bounds=(10, 5))  # min > max
-'''
+"""

@@ -1,7 +1,6 @@
 """Tests for hover information functionality."""
 
-import pytest
-from param_lsp.lsp import ParamLanguageServer
+from __future__ import annotations
 
 
 class TestHoverInformation:
@@ -9,13 +8,13 @@ class TestHoverInformation:
 
     def test_parameter_hover_basic_info(self, lsp_server):
         """Test basic parameter hover information."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     string_param = param.String(default="hello", doc="A string parameter")
     int_param = param.Integer(default=5)
-'''
+"""
 
         # Simulate document analysis
         uri = "file:///test.py"
@@ -38,7 +37,7 @@ class TestClass(param.Parameterized):
 
     def test_parameter_hover_with_bounds(self, lsp_server):
         """Test parameter hover information with bounds."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -54,7 +53,7 @@ class TestClass(param.Parameterized):
         inclusive_bounds=(False, True),
         doc="A number with exclusive left bound"
     )
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -77,7 +76,7 @@ class TestClass(param.Parameterized):
 
     def test_parameter_hover_comprehensive(self, lsp_server):
         """Test comprehensive parameter hover information."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -87,7 +86,7 @@ class TestClass(param.Parameterized):
         inclusive_bounds=(True, False),
         doc="A comprehensive parameter with all the information"
     )
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -108,12 +107,12 @@ class TestClass(param.Parameterized):
 
     def test_parameter_type_hover(self, lsp_server):
         """Test hover information for parameter types."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     test_param = param.String(default="test")
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -127,14 +126,14 @@ class TestClass(param.Parameterized):
 
     def test_hover_for_non_parameter(self, lsp_server):
         """Test hover for non-parameter words returns None."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     test_param = param.String(default="test")
 
 regular_variable = "not a parameter"
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -146,7 +145,7 @@ regular_variable = "not a parameter"
 
     def test_hover_multiple_classes(self, lsp_server):
         """Test hover information with multiple param classes."""
-        code = '''
+        code = """
 import param
 
 class ClassA(param.Parameterized):
@@ -155,7 +154,7 @@ class ClassA(param.Parameterized):
 class ClassB(param.Parameterized):
     param_b = param.Integer(default=1, doc="Parameter from class B")
     param_a = param.Boolean(default=True, doc="Different param_a in class B")
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -170,14 +169,14 @@ class ClassB(param.Parameterized):
 
     def test_hover_with_different_import_styles(self, lsp_server):
         """Test hover information with different import styles."""
-        code = '''
+        code = """
 import param as p
 from param import String
 
 class TestClass(p.Parameterized):
     param1 = p.String(default="test1", doc="Using param alias")
     param2 = String(default="test2", doc="Using direct import")
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -200,7 +199,7 @@ class TestClass(p.Parameterized):
 
     def test_hover_bounds_notation(self, lsp_server):
         """Test correct bounds notation in hover information."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -221,7 +220,7 @@ class TestClass(param.Parameterized):
         bounds=(0, 10),
         inclusive_bounds=(False, True)
     )
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -240,13 +239,13 @@ class TestClass(param.Parameterized):
 
     def test_hover_with_no_documentation(self, lsp_server):
         """Test hover information for parameters without documentation."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     undocumented = param.String(default="test")
     with_bounds = param.Integer(default=5, bounds=(0, 10))
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)
@@ -269,12 +268,12 @@ class TestClass(param.Parameterized):
 
     def test_hover_markdown_formatting(self, lsp_server):
         """Test that hover information uses proper markdown formatting."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     test_param = param.String(default="test", doc="Test documentation")
-'''
+"""
 
         uri = "file:///test.py"
         lsp_server._analyze_document(uri, code)

@@ -1,7 +1,6 @@
 """Tests for parameter documentation extraction functionality."""
 
-import pytest
-from param_lsp.lsp import ParamAnalyzer
+from __future__ import annotations
 
 
 class TestDocExtraction:
@@ -9,7 +8,7 @@ class TestDocExtraction:
 
     def test_doc_parameter_extraction(self, analyzer):
         """Test that doc parameters are correctly extracted."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -24,7 +23,7 @@ class TestClass(param.Parameterized):
         default=True,
         doc="This is a boolean parameter with a longer documentation string"
     )
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -37,7 +36,10 @@ class TestClass(param.Parameterized):
         assert "undocumented_param" not in docs  # No doc parameter
 
         assert "multiline_doc" in docs
-        assert docs["multiline_doc"] == "This is a boolean parameter with a longer documentation string"
+        assert (
+            docs["multiline_doc"]
+            == "This is a boolean parameter with a longer documentation string"
+        )
 
     def test_doc_with_different_quote_types(self, analyzer):
         """Test doc parameter extraction with different quote types."""
@@ -60,7 +62,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_special_characters(self, analyzer):
         """Test doc parameter extraction with special characters."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -73,7 +75,7 @@ class TestClass(param.Parameterized):
         default="test",
         doc="Documentation with unicode: café, naïve, résumé"
     )
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -87,7 +89,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_parameter_order_independence(self, analyzer):
         """Test that doc parameter works regardless of parameter order."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -107,7 +109,7 @@ class TestClass(param.Parameterized):
         bounds=(False, True),
         doc="Documentation comes last"
     )
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -119,7 +121,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_bounds_and_other_parameters(self, analyzer):
         """Test doc extraction alongside other parameter attributes."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -131,14 +133,17 @@ class TestClass(param.Parameterized):
         label="Comprehensive Parameter",
         precedence=1
     )
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
         # Check that doc is extracted
         docs = result["param_parameter_docs"]["TestClass"]
         assert "comprehensive_param" in docs
-        assert docs["comprehensive_param"] == "A comprehensive parameter with bounds and documentation"
+        assert (
+            docs["comprehensive_param"]
+            == "A comprehensive parameter with bounds and documentation"
+        )
 
         # Check that other attributes are also extracted
         bounds = result["param_parameter_bounds"]["TestClass"]
@@ -149,13 +154,13 @@ class TestClass(param.Parameterized):
 
     def test_empty_doc_parameter(self, analyzer):
         """Test handling of empty doc parameters."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     empty_doc = param.String(default="test", doc="")
     none_doc = param.String(default="test", doc=None)  # This would be a runtime error, but test parsing
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -170,7 +175,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_different_import_styles(self, analyzer):
         """Test doc extraction with different import styles."""
-        code = '''
+        code = """
 import param as p
 from param import String, Integer
 
@@ -178,7 +183,7 @@ class TestClass(p.Parameterized):
     param_alias = p.String(default="test", doc="Using param alias")
     direct_import = String(default="test", doc="Using direct import")
     no_doc = Integer(default=5)
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -194,7 +199,7 @@ class TestClass(p.Parameterized):
 
     def test_multiple_classes_doc_extraction(self, analyzer):
         """Test doc extraction across multiple param classes."""
-        code = '''
+        code = """
 import param
 
 class ClassA(param.Parameterized):
@@ -205,7 +210,7 @@ class ClassB(param.Parameterized):
 
 class ClassC(param.Parameterized):
     param_c = param.Boolean(default=True)  # No doc
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -222,7 +227,7 @@ class ClassC(param.Parameterized):
 
     def test_doc_parameter_with_complex_expressions(self, analyzer):
         """Test that only simple string literals are extracted for doc."""
-        code = '''
+        code = """
 import param
 
 DOC_CONSTANT = "Constant documentation"
@@ -234,7 +239,7 @@ class TestClass(param.Parameterized):
     variable_doc = param.String(default="test", doc=DOC_CONSTANT)
     expression_doc = param.String(default="test", doc="Part 1" + " Part 2")
     method_doc = param.String(default="test", doc=str("method call"))
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -251,13 +256,13 @@ class TestClass(param.Parameterized):
 
     def test_doc_storage_structure(self, analyzer):
         """Test the structure of doc storage in analysis results."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     param1 = param.String(default="test", doc="Doc 1")
     param2 = param.Integer(default=5, doc="Doc 2")
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -272,5 +277,6 @@ class TestClass(param.Parameterized):
 
         class_docs = docs["TestClass"]
         assert len(class_docs) == 2
-        assert all(isinstance(key, str) and isinstance(value, str)
-                  for key, value in class_docs.items())
+        assert all(
+            isinstance(key, str) and isinstance(value, str) for key, value in class_docs.items()
+        )

@@ -1,7 +1,6 @@
 """Tests for parameter type checking functionality."""
 
-import pytest
-from param_lsp.lsp import ParamAnalyzer
+from __future__ import annotations
 
 
 class TestParameterTypeChecking:
@@ -9,7 +8,7 @@ class TestParameterTypeChecking:
 
     def test_valid_parameter_types(self, analyzer):
         """Test that valid parameter types don't generate errors."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -20,7 +19,7 @@ class TestClass(param.Parameterized):
     list_param = param.List(default=[])
     tuple_param = param.Tuple(default=())
     dict_param = param.Dict(default={})
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -29,12 +28,12 @@ class TestClass(param.Parameterized):
 
     def test_string_type_mismatch(self, analyzer):
         """Test String parameter with non-string default."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     string_param = param.String(default=123)
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -47,12 +46,12 @@ class TestClass(param.Parameterized):
 
     def test_integer_type_mismatch(self, analyzer):
         """Test Integer parameter with non-integer default."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     int_param = param.Integer(default="not_int")
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -65,14 +64,14 @@ class TestClass(param.Parameterized):
 
     def test_boolean_type_strict_checking(self, analyzer):
         """Test Boolean parameter strict type checking (should only accept True/False)."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     bool_with_int = param.Boolean(default=1)
     bool_with_zero = param.Boolean(default=0)
     bool_with_string = param.Boolean(default="yes")
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -81,17 +80,17 @@ class TestClass(param.Parameterized):
 
         for error in result["type_errors"]:
             assert error["code"] == "boolean-type-mismatch"
-            assert "Boolean expects True/False" in error["message"]
+            assert "Boolean expects bool" in error["message"]
 
     def test_boolean_valid_values(self, analyzer):
         """Test Boolean parameter with valid True/False values."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     bool_true = param.Boolean(default=True)
     bool_false = param.Boolean(default=False)
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -99,13 +98,13 @@ class TestClass(param.Parameterized):
 
     def test_number_type_accepts_int_and_float(self, analyzer):
         """Test Number parameter accepts both int and float."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
     number_int = param.Number(default=5)
     number_float = param.Number(default=5.5)
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -113,7 +112,7 @@ class TestClass(param.Parameterized):
 
     def test_list_tuple_dict_types(self, analyzer):
         """Test List, Tuple, and Dict parameter types."""
-        code = '''
+        code = """
 import param
 
 class TestClass(param.Parameterized):
@@ -125,7 +124,7 @@ class TestClass(param.Parameterized):
     list_wrong = param.List(default="not_list")
     tuple_wrong = param.Tuple(default=123)
     dict_wrong = param.Dict(default=[])
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -135,7 +134,7 @@ class TestClass(param.Parameterized):
 
     def test_parameter_with_different_import_styles(self, analyzer):
         """Test parameter detection with different import styles."""
-        code = '''
+        code = """
 import param as p
 from param import Integer, String
 
@@ -143,7 +142,7 @@ class TestClass(p.Parameterized):
     param1 = p.String(default=123)      # Error
     param2 = String(default="valid")    # Valid
     param3 = Integer(default="invalid") # Error
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
@@ -153,7 +152,7 @@ class TestClass(p.Parameterized):
 
     def test_non_param_classes_ignored(self, analyzer):
         """Test that non-param classes are ignored."""
-        code = '''
+        code = """
 import param
 
 class RegularClass:
@@ -161,7 +160,7 @@ class RegularClass:
 
 class ParamClass(param.Parameterized):
     param_attr = param.String(default="valid")
-'''
+"""
 
         result = analyzer.analyze_file(code)
 
