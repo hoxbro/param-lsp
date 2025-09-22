@@ -1164,6 +1164,19 @@ class ParamLanguageServer(LanguageServer):
 
         return completions
 
+    def _get_python_type_name(self, param_type: str) -> str:
+        """Map param type to Python type name for hover display using existing param_type_map."""
+        if param_type in self.analyzer.param_type_map:
+            python_types = self.analyzer.param_type_map[param_type]
+            if isinstance(python_types, tuple):
+                # Multiple types like (int, float) -> "int or float"
+                type_names = [t.__name__ for t in python_types]
+                return " or ".join(type_names)
+            else:
+                # Single type like int -> "int"
+                return python_types.__name__
+        return param_type.lower()
+
     def _get_hover_info(self, uri: str, line: str, word: str) -> str | None:
         """Get hover information for a word."""
         if uri in self.document_cache:
@@ -1185,12 +1198,16 @@ class ParamLanguageServer(LanguageServer):
 
             for class_name, parameters in param_parameters.items():
                 if word in parameters:
-                    hover_parts = [f"**Parameter '{word}' in class '{class_name}'**"]
-
-                    # Add parameter type information
+                    # Get parameter type information
                     param_type = param_parameter_types.get(class_name, {}).get(word)
+
                     if param_type:
-                        hover_parts.append(f"Type: `{param_type}`")
+                        hover_parts = [f"**{param_type} Parameter '{word}'**"]
+                        # Map param types to Python types
+                        python_type = self._get_python_type_name(param_type)
+                        hover_parts.append(f"Allowed types: {python_type}")
+                    else:
+                        hover_parts = [f"**Parameter '{word}' in class '{class_name}'**"]
 
                     # Add bounds information
                     bounds = param_parameter_bounds.get(class_name, {}).get(word)

@@ -24,16 +24,16 @@ class TestClass(param.Parameterized):
         hover_info = lsp_server._get_hover_info(uri, "string_param", "string_param")
 
         assert hover_info is not None
-        assert "Parameter 'string_param' in class 'TestClass'" in hover_info
-        assert "Type: `String`" in hover_info
+        assert "String Parameter 'string_param'" in hover_info
+        assert "Allowed types: str" in hover_info
         assert "A string parameter" in hover_info
 
         # Test hover for undocumented parameter
         hover_info = lsp_server._get_hover_info(uri, "int_param", "int_param")
 
         assert hover_info is not None
-        assert "Parameter 'int_param' in class 'TestClass'" in hover_info
-        assert "Type: `Integer`" in hover_info
+        assert "Integer Parameter 'int_param'" in hover_info
+        assert "Allowed types: int" in hover_info
 
     def test_parameter_hover_with_bounds(self, lsp_server):
         """Test parameter hover information with bounds."""
@@ -62,7 +62,7 @@ class TestClass(param.Parameterized):
         hover_info = lsp_server._get_hover_info(uri, "bounded_int", "bounded_int")
 
         assert hover_info is not None
-        assert "Type: `Integer`" in hover_info
+        assert "Allowed types: int" in hover_info
         assert "Bounds: `[0, 10]`" in hover_info
         assert "An integer with bounds" in hover_info
 
@@ -70,7 +70,7 @@ class TestClass(param.Parameterized):
         hover_info = lsp_server._get_hover_info(uri, "exclusive_bounds", "exclusive_bounds")
 
         assert hover_info is not None
-        assert "Type: `Number`" in hover_info
+        assert "Allowed types: int or float" in hover_info
         assert "Bounds: `(0, 5]`" in hover_info
         assert "A number with exclusive left bound" in hover_info
 
@@ -96,8 +96,8 @@ class TestClass(param.Parameterized):
         assert hover_info is not None
 
         # Check all components are present
-        assert "**Parameter 'comprehensive_param' in class 'TestClass'**" in hover_info
-        assert "Type: `Number`" in hover_info
+        assert "**Number Parameter 'comprehensive_param'**" in hover_info
+        assert "Allowed types: int or float" in hover_info
         assert "Bounds: `[1.0, 10.0)`" in hover_info  # Left inclusive, right exclusive
         assert "A comprehensive parameter with all the information" in hover_info
 
@@ -186,7 +186,7 @@ class TestClass(p.Parameterized):
 
         assert hover_info is not None
         assert "param1" in hover_info
-        assert "Type: `String`" in hover_info
+        assert "Allowed types: str" in hover_info
         assert "Using param alias" in hover_info
 
         # Test hover for parameter using direct import
@@ -194,7 +194,7 @@ class TestClass(p.Parameterized):
 
         assert hover_info is not None
         assert "param2" in hover_info
-        assert "Type: `String`" in hover_info
+        assert "Allowed types: str" in hover_info
         assert "Using direct import" in hover_info
 
     def test_hover_bounds_notation(self, lsp_server):
@@ -254,8 +254,8 @@ class TestClass(param.Parameterized):
         hover_info = lsp_server._get_hover_info(uri, "undocumented", "undocumented")
 
         assert hover_info is not None
-        assert "Parameter 'undocumented' in class 'TestClass'" in hover_info
-        assert "Type: `String`" in hover_info
+        assert "String Parameter 'undocumented'" in hover_info
+        assert "Allowed types: str" in hover_info
         # Should not have documentation section
         assert hover_info.count("\n\n") <= 2  # Just header and type info
 
@@ -263,7 +263,7 @@ class TestClass(param.Parameterized):
         hover_info = lsp_server._get_hover_info(uri, "with_bounds", "with_bounds")
 
         assert hover_info is not None
-        assert "Type: `Integer`" in hover_info
+        assert "Allowed types: int" in hover_info
         assert "Bounds: `[0, 10]`" in hover_info
 
     def test_hover_markdown_formatting(self, lsp_server):
@@ -283,8 +283,8 @@ class TestClass(param.Parameterized):
         assert hover_info is not None
 
         # Check markdown formatting
-        assert hover_info.startswith("**Parameter")  # Bold header
-        assert "`String`" in hover_info  # Code formatting for type
+        assert hover_info.startswith("**String Parameter")  # Bold header
+        assert "Allowed types: str" in hover_info  # Type information
 
         # Check structure with double newlines
         sections = hover_info.split("\n\n")
