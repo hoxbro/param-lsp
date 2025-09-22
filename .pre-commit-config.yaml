@@ -1,0 +1,46 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: mixed-line-ending
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: check-executables-have-shebangs
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.1
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: 1.31.4
+    hooks:
+      - id: basedpyright
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        additional_dependencies:
+          - tomli
+  - repo: https://github.com/hoxbro/prettier-pre-commit
+    rev: v3.6.2
+    hooks:
+      - id: prettier
+        types_or:
+          - markdown
+          - yaml
+  - repo: https://github.com/hoxbro/taplo-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: taplo
+        args:
+          [
+            --option,
+            align_comments=false,
+            --option,
+            column_width=100,
+            --option,
+            "indent_string=    ",
+          ]
