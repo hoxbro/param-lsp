@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 import re
+import textwrap
 from typing import Any
 from urllib.parse import urlparse
 
@@ -73,7 +74,11 @@ class ParamLanguageServer(LanguageServer):
             self.analyzer = ParamAnalyzer(self.workspace_root)
 
         analysis = self.analyzer.analyze_file(content, file_path)
-        self.document_cache[uri] = {"content": content, "analysis": analysis}
+        self.document_cache[uri] = {
+            "content": content,
+            "analysis": analysis,
+            "analyzer": self.analyzer,
+        }
 
         # Debug logging
         logger.info(f"Analysis results for {uri}:")
@@ -313,7 +318,7 @@ class ParamLanguageServer(LanguageServer):
                         return param_class.__doc__
                 return f"Param parameter type: {word}"
 
-            # Check if it's a parameter in a class
+            # Check if it's a parameter in a local class
             param_parameters = analysis.get("param_parameters", {})
             param_parameter_types = analysis.get("param_parameter_types", {})
             param_parameter_docs = analysis.get("param_parameter_docs", {})
@@ -321,39 +326,107 @@ class ParamLanguageServer(LanguageServer):
 
             for class_name, parameters in param_parameters.items():
                 if word in parameters:
-                    # Get parameter type information
-                    param_type = param_parameter_types.get(class_name, {}).get(word)
+                    hover_info = self._build_parameter_hover_info(
+                        word,
+                        class_name,
+                        param_parameter_types,
+                        param_parameter_docs,
+                        param_parameter_bounds,
+                    )
+                    if hover_info:
+                        return hover_info
 
-                    if param_type:
-                        hover_parts = [f"**{param_type} Parameter '{word}'**"]
-                        # Map param types to Python types
-                        python_type = self._get_python_type_name(param_type)
-                        hover_parts.append(f"Allowed types: {python_type}")
-                    else:
-                        hover_parts = [f"**Parameter '{word}' in class '{class_name}'**"]
-
-                    # Add bounds information
-                    bounds = param_parameter_bounds.get(class_name, {}).get(word)
-                    if bounds:
-                        if len(bounds) == 2:
-                            min_val, max_val = bounds
-                            hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
-                        elif len(bounds) == 4:
-                            min_val, max_val, left_inclusive, right_inclusive = bounds
-                            left_bracket = "[" if left_inclusive else "("
-                            right_bracket = "]" if right_inclusive else ")"
-                            hover_parts.append(
-                                f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`"
-                            )
-
-                    # Add documentation
-                    doc = param_parameter_docs.get(class_name, {}).get(word)
-                    if doc:
-                        hover_parts.append(f"\n{doc}")
-
-                    return "\n\n".join(hover_parts)
+            # Check if it's a parameter in an external class
+            analyzer = self.document_cache[uri]["analyzer"]
+            for class_name, class_info in analyzer.external_param_classes.items():
+                if class_info and word in class_info.get("parameters", []):
+                    hover_info = self._build_external_parameter_hover_info(
+                        word, class_name, class_info
+                    )
+                    if hover_info:
+                        return hover_info
 
         return None
+
+    def _build_parameter_hover_info(
+        self,
+        param_name: str,
+        class_name: str,
+        param_parameter_types: dict,
+        param_parameter_docs: dict,
+        param_parameter_bounds: dict,
+    ) -> str | None:
+        """Build hover information for a local parameter."""
+        param_type = param_parameter_types.get(class_name, {}).get(param_name)
+
+        if param_type:
+            hover_parts = [f"**{param_type} Parameter '{param_name}'**"]
+            # Map param types to Python types
+            python_type = self._get_python_type_name(param_type)
+            hover_parts.append(f"Allowed types: {python_type}")
+        else:
+            hover_parts = [f"**Parameter '{param_name}' in class '{class_name}'**"]
+
+        # Add bounds information
+        bounds = param_parameter_bounds.get(class_name, {}).get(param_name)
+        if bounds:
+            if len(bounds) == 2:
+                min_val, max_val = bounds
+                hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
+            elif len(bounds) == 4:
+                min_val, max_val, left_inclusive, right_inclusive = bounds
+                left_bracket = "[" if left_inclusive else "("
+                right_bracket = "]" if right_inclusive else ")"
+                hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+
+        # Add documentation at the bottom with proper formatting
+        doc = param_parameter_docs.get(class_name, {}).get(param_name)
+        if doc:
+            # Clean and dedent the documentation
+            clean_doc = textwrap.dedent(doc).strip()
+            hover_parts.append(f"---\n{clean_doc}")
+
+        return "\n\n".join(hover_parts)
+
+    def _build_external_parameter_hover_info(
+        self, param_name: str, class_name: str, class_info: dict
+    ) -> str | None:
+        """Build hover information for an external parameter."""
+        param_type = class_info.get("parameter_types", {}).get(param_name)
+
+        if param_type:
+            hover_parts = [f"**{param_type} Parameter '{param_name}' (from {class_name})**"]
+            # Map param types to Python types
+            python_type = self._get_python_type_name(param_type)
+            hover_parts.append(f"Allowed types: {python_type}")
+        else:
+            hover_parts = [f"**Parameter '{param_name}' in external class '{class_name}'**"]
+
+        # Add bounds information
+        bounds = class_info.get("parameter_bounds", {}).get(param_name)
+        if bounds:
+            if len(bounds) == 2:
+                min_val, max_val = bounds
+                hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
+            elif len(bounds) == 4:
+                min_val, max_val, left_inclusive, right_inclusive = bounds
+                left_bracket = "[" if left_inclusive else "("
+                right_bracket = "]" if right_inclusive else ")"
+                hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+
+        # Add allow_None information
+        allow_none = class_info.get("parameter_allow_none", {}).get(param_name)
+        if allow_none is not None:
+            hover_parts.append(f"Allow None: `{allow_none}`")
+
+        # Add documentation at the bottom with proper formatting
+        doc = class_info.get("parameter_docs", {}).get(param_name)
+        if doc:
+            # Clean and dedent the documentation
+            clean_doc = textwrap.dedent(doc).strip()
+            hover_parts.append(f"---\n{clean_doc}")
+
+        return "\n\n".join(hover_parts)
 
 
 server = ParamLanguageServer("param-lsp", __version__)

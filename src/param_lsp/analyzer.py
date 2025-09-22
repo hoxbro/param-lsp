@@ -7,13 +7,23 @@ hover information, and diagnostics.
 from __future__ import annotations
 
 import ast
+import importlib
 import importlib.util
 import logging
 from pathlib import Path
 from typing import Any
 
+import param
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Global configuration for allowed external libraries for runtime introspection
+ALLOWED_EXTERNAL_LIBRARIES = {
+    "panel",
+    "holoviews",
+    "param",
+}
 
 
 class ParamAnalyzer:
@@ -56,6 +66,11 @@ class ParamAnalyzer:
         self.workspace_root = Path(workspace_root) if workspace_root else None
         self.module_cache: dict[str, dict[str, Any]] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, dict[str, Any]] = {}  # file_path -> analysis_result
+
+        # Cache for external Parameterized classes (AST-based detection)
+        self.external_param_classes: dict[
+            str, dict[str, Any] | None
+        ] = {}  # full_class_path -> class_info
 
     def analyze_file(self, content: str, file_path: str | None = None) -> dict[str, Any]:
         """Analyze a Python file for Param usage."""
@@ -133,6 +148,9 @@ class ParamAnalyzer:
                         self._handle_class_def(node)
                         processed_classes.add(node.name)
                 break
+
+        # Pre-pass: discover all external Parameterized classes using AST
+        self._discover_external_param_classes_ast(tree)
 
         # Perform type inference after parsing
         self._check_parameter_types(tree, content.split("\n"))
@@ -607,7 +625,15 @@ class ParamAnalyzer:
         """Check for type errors in constructor parameter calls like MyClass(x="A")."""
         # Get the class name from the call
         class_name = self._get_instance_class(node)
-        if not class_name or class_name not in self.param_classes:
+        if not class_name:
+            return
+
+        # Check if this is a valid param class (local or external)
+        is_valid_param_class = class_name in self.param_classes or (
+            class_name in self.external_param_classes and self.external_param_classes[class_name]
+        )
+
+        if not is_valid_param_class:
             return
 
         # Check each keyword argument passed to the constructor
@@ -844,13 +870,29 @@ class ParamAnalyzer:
         elif isinstance(target.value, ast.Name):
             # Case: instance_var.x = value
             # We need to infer the class from context or assume it could be any param class
-            # For now, check if the parameter name exists in any param class
+            # First check local param classes
             for class_name in self.param_classes:
                 if param_name in self.param_parameters.get(class_name, []):
                     instance_class = class_name
                     break
 
-        if not instance_class or instance_class not in self.param_classes:
+            # If not found in local classes, check external param classes
+            if not instance_class:
+                for class_name, class_info in self.external_param_classes.items():
+                    if class_info and param_name in class_info.get("parameters", []):
+                        instance_class = class_name
+                        break
+
+        if not instance_class:
+            return
+
+        # Check if this is a valid param class (local or external)
+        is_valid_param_class = instance_class in self.param_classes or (
+            instance_class in self.external_param_classes
+            and self.external_param_classes[instance_class]
+        )
+
+        if not is_valid_param_class:
             return
 
         # Get the parameter type from the class definition
@@ -984,8 +1026,15 @@ class ParamAnalyzer:
 
     def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
         """Get parameter bounds from a class definition."""
+        # Check local classes first
         if class_name in self.param_parameter_bounds:
             return self.param_parameter_bounds[class_name].get(param_name)
+
+        # Check external classes
+        external_class_info = self.external_param_classes.get(class_name)
+        if external_class_info:
+            return external_class_info["parameter_bounds"].get(param_name)
+
         return None
 
     def _get_instance_class(self, call_node: ast.Call) -> str | None:
@@ -993,19 +1042,69 @@ class ParamAnalyzer:
         if isinstance(call_node.func, ast.Name):
             return call_node.func.id
         elif isinstance(call_node.func, ast.Attribute):
+            # Try to resolve the full class path for external classes
+            full_class_path = self._resolve_full_class_path(call_node.func)
+            if full_class_path:
+                # Check if this is an external Parameterized class
+                class_info = self._analyze_external_class_ast(full_class_path)
+                if class_info:
+                    # Return the full path as the class identifier for external classes
+                    return full_class_path
+            # Fallback to just the attribute name for local classes
             return call_node.func.attr
+        return None
+
+    def _resolve_full_class_path(self, attr_node: ast.Attribute) -> str | None:
+        """Resolve the full class path from an attribute node like pn.widgets.IntSlider."""
+        path_parts = []
+
+        # Walk up the attribute chain
+        current = attr_node
+        while isinstance(current, ast.Attribute):
+            path_parts.append(current.attr)
+            current = current.value
+
+        if isinstance(current, ast.Name):
+            path_parts.append(current.id)
+            path_parts.reverse()
+
+            # Resolve the root module through imports
+            root_alias = path_parts[0]
+            if root_alias in self.imports:
+                full_module_name = self.imports[root_alias]
+                # Replace the alias with the full module name
+                path_parts[0] = full_module_name
+                return ".".join(path_parts)
+            else:
+                # Use the alias directly if no import mapping found
+                return ".".join(path_parts)
+
         return None
 
     def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
         """Get the parameter type from a class definition."""
+        # Check local classes first
         if class_name in self.param_parameter_types:
             return self.param_parameter_types[class_name].get(param_name)
+
+        # Check external classes
+        external_class_info = self.external_param_classes.get(class_name)
+        if external_class_info:
+            return external_class_info["parameter_types"].get(param_name)
+
         return None
 
     def _get_parameter_allow_none(self, class_name: str, param_name: str) -> bool:
         """Get the allow_None setting for a parameter from a class definition."""
+        # Check local classes first
         if class_name in self.param_parameter_allow_none:
             return self.param_parameter_allow_none[class_name].get(param_name, False)
+
+        # Check external classes
+        external_class_info = self.external_param_classes.get(class_name)
+        if external_class_info:
+            return external_class_info["parameter_allow_none"].get(param_name, False)
+
         return False
 
     def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str | None] | None:
@@ -1338,3 +1437,153 @@ class ParamAnalyzer:
             val = self._extract_numeric_value(node.operand)
             return -val if val is not None else None
         return None
+
+    def _analyze_external_class_ast(self, full_class_path: str) -> dict[str, Any] | None:
+        """Analyze external classes using runtime introspection for allowed libraries."""
+        if full_class_path in self.external_param_classes:
+            return self.external_param_classes[full_class_path]
+
+        # Check if this library is allowed for runtime introspection
+        root_module = full_class_path.split(".")[0]
+        if root_module in ALLOWED_EXTERNAL_LIBRARIES:
+            class_info = self._introspect_external_class_runtime(full_class_path)
+            self.external_param_classes[full_class_path] = class_info
+        else:
+            # For non-allowed libraries, mark as unknown
+            self.external_param_classes[full_class_path] = None
+            class_info = None
+
+        return class_info
+
+    def _introspect_external_class_runtime(self, full_class_path: str) -> dict[str, Any] | None:
+        """Introspect an external class using runtime imports for allowed libraries."""
+
+        try:
+            # Parse the full class path (e.g., "panel.widgets.IntSlider")
+            module_path, class_name = full_class_path.rsplit(".", 1)
+
+            # Import the module and get the class
+            try:
+                module = importlib.import_module(module_path)
+                if not hasattr(module, class_name):
+                    return None
+
+                cls = getattr(module, class_name)
+            except ImportError as e:
+                logger.debug(f"Could not import {module_path}: {e}")
+                return None
+
+            # Check if it inherits from param.Parameterized
+            try:
+                if not issubclass(cls, param.Parameterized):
+                    return None
+            except TypeError:
+                # cls is not a class
+                return None
+
+            # Extract parameter information using param's introspection
+            parameters = []
+            parameter_types = {}
+            parameter_bounds = {}
+            parameter_docs = {}
+            parameter_allow_none = {}
+            parameter_defaults = {}
+
+            if hasattr(cls, "param"):
+                for param_name in cls.param.values():
+                    if param_name == "name":  # Skip the 'name' parameter
+                        continue
+
+                    parameters.append(param_name)
+
+                    # Get parameter object for detailed info
+                    param_obj = getattr(cls.param, param_name, None)
+                    if param_obj:
+                        # Get parameter type
+                        param_type_name = type(param_obj).__name__
+                        parameter_types[param_name] = param_type_name
+
+                        # Get bounds if present
+                        if hasattr(param_obj, "bounds") and param_obj.bounds is not None:
+                            bounds = param_obj.bounds
+                            # Handle inclusive bounds
+                            if hasattr(param_obj, "inclusive_bounds"):
+                                inclusive_bounds = param_obj.inclusive_bounds
+                                parameter_bounds[param_name] = (*bounds, *inclusive_bounds)
+                            else:
+                                parameter_bounds[param_name] = bounds
+
+                        # Get doc string
+                        if hasattr(param_obj, "doc") and param_obj.doc:
+                            parameter_docs[param_name] = param_obj.doc
+
+                        # Get allow_None
+                        if hasattr(param_obj, "allow_None"):
+                            parameter_allow_none[param_name] = param_obj.allow_None
+
+                        # Get default value
+                        if hasattr(param_obj, "default"):
+                            parameter_defaults[param_name] = str(param_obj.default)
+
+            return {
+                "parameters": parameters,
+                "parameter_types": parameter_types,
+                "parameter_bounds": parameter_bounds,
+                "parameter_docs": parameter_docs,
+                "parameter_allow_none": parameter_allow_none,
+                "parameter_defaults": parameter_defaults,
+            }
+
+        except Exception as e:
+            logger.debug(f"Failed to introspect external class {full_class_path}: {e}")
+            return None
+
+    def _extract_imports_from_ast(self, tree: ast.AST) -> dict[str, str]:
+        """Extract import mappings from an AST."""
+        imports = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports[alias.asname or alias.name] = alias.name
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                for alias in node.names:
+                    imported_name = alias.asname or alias.name
+                    full_name = f"{node.module}.{alias.name}"
+                    imports[imported_name] = full_name
+        return imports
+
+    def _inherits_from_parameterized_ast(
+        self, class_node: ast.ClassDef, imports: dict[str, str]
+    ) -> bool:
+        """Check if a class inherits from param.Parameterized using AST analysis."""
+        for base in class_node.bases:
+            if isinstance(base, ast.Name):
+                # Direct inheritance from Parameterized
+                if base.id == "Parameterized":
+                    imported_class = imports.get(base.id, "")
+                    if "param.Parameterized" in imported_class:
+                        return True
+            elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+                # Module.Parameterized style inheritance
+                module = base.value.id
+                if base.attr == "Parameterized":
+                    imported_module = imports.get(module, "")
+                    if "param" in imported_module:
+                        return True
+        return False
+
+    def _find_class_in_ast(self, tree: ast.AST, class_name: str) -> ast.ClassDef | None:
+        """Find a class definition in an AST."""
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                return node
+        return None
+
+    def _discover_external_param_classes_ast(self, tree: ast.AST):
+        """Pre-pass to discover all external Parameterized classes using AST analysis."""
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                # Look for calls like pn.widgets.IntSlider()
+                full_class_path = self._resolve_full_class_path(node.func)
+                if full_class_path:
+                    self._analyze_external_class_ast(full_class_path)
