@@ -20,8 +20,8 @@ from lsprotocol.types import (
     CompletionList,
     CompletionOptions,
     CompletionParams,
-    # Diagnostic,
-    # DiagnosticSeverity,
+    Diagnostic,
+    DiagnosticSeverity,
     DidChangeTextDocumentParams,
     DidOpenTextDocumentParams,
     Hover,
@@ -31,9 +31,9 @@ from lsprotocol.types import (
     MarkupContent,
     MarkupKind,
     Position,
+    PublishDiagnosticsParams,
     Range,
     ServerCapabilities,
-    # TextDocumentPositionParams,
     TextDocumentSyncKind,
 )
 from pygls.server import LanguageServer
@@ -50,6 +50,24 @@ class ParamAnalyzer:
         self.param_classes: set[str] = set()
         self.param_parameters: dict[str, list[str]] = {}
         self.imports: dict[str, str] = {}
+        self.type_errors: list[dict[str, Any]] = []
+        self.param_type_map = {
+            "Number": (int, float),
+            "Integer": int,
+            "String": str,
+            "Boolean": bool,
+            "List": list,
+            "Tuple": tuple,
+            "Dict": dict,
+            "Array": (list, tuple),
+            "Range": (int, float),
+            "Date": str,
+            "CalendarDate": str,
+            "Filename": str,
+            "Foldername": str,
+            "Path": str,
+            "Color": str,
+        }
 
     def analyze_file(self, content: str) -> dict[str, Any]:
         """Analyze a Python file for Param usage."""
@@ -65,10 +83,14 @@ class ParamAnalyzer:
                 elif isinstance(node, ast.ClassDef):
                     self._handle_class_def(node)
 
+            # Perform type inference after parsing
+            self._check_parameter_types(tree, content.split("\n"))
+
             return {
                 "param_classes": self.param_classes,
                 "param_parameters": self.param_parameters,
                 "imports": self.imports,
+                "type_errors": self.type_errors,
             }
         except SyntaxError as e:
             logger.error(f"Syntax error in file: {e}")
@@ -79,6 +101,7 @@ class ParamAnalyzer:
         self.param_classes.clear()
         self.param_parameters.clear()
         self.imports.clear()
+        self.type_errors.clear()
 
     def _handle_import(self, node: ast.Import):
         """Handle 'import' statements."""
@@ -133,7 +156,11 @@ class ParamAnalyzer:
     def _is_parameter_assignment(self, value: ast.expr) -> bool:
         """Check if an assignment looks like a parameter definition."""
         if isinstance(value, ast.Call):
-            if isinstance(value.func, ast.Name):
+            param_class_info = self._resolve_parameter_class(value.func)
+            if param_class_info:
+                param_type = param_class_info["type"]
+                param_module = param_class_info.get("module")
+
                 # Common param types
                 param_types = {
                     "Parameter",
@@ -162,14 +189,220 @@ class ParamAnalyzer:
                     "ListSelector",
                     "ObjectSelector",
                 }
-                return value.func.id in param_types
-            elif isinstance(value.func, ast.Attribute):
-                if isinstance(value.func.value, ast.Name):
-                    module = value.func.value.id
-                    return module == "param" or (
-                        module in self.imports and "param" in self.imports[module]
-                    )
+
+                # If we have module info, verify it's from param
+                if param_module and "param" in param_module:
+                    return param_type in param_types
+                # If no module but type matches and we have param imports, likely a param type
+                elif (
+                    param_module is None
+                    and param_type in param_types
+                    and any("param" in imp for imp in self.imports.values())
+                ):
+                    return True
+                # Direct param.X() call
+                elif param_module == "param":
+                    return param_type in param_types
+
         return False
+
+    def _check_parameter_types(self, tree: ast.AST, lines: list[str]):
+        """Check for type errors in parameter assignments."""
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name in self.param_classes:
+                for item in node.body:
+                    if isinstance(item, ast.Assign):
+                        for target in item.targets:
+                            if isinstance(target, ast.Name) and self._is_parameter_assignment(
+                                item.value
+                            ):
+                                self._check_parameter_default_type(item, target.id, lines)
+
+    def _check_parameter_default_type(self, node: ast.Assign, param_name: str, lines: list[str]):
+        """Check if parameter default value matches declared type."""
+        if not isinstance(node.value, ast.Call):
+            return
+
+        # Resolve the actual parameter class type
+        param_class_info = self._resolve_parameter_class(node.value.func)
+        if not param_class_info:
+            return
+
+        param_type = param_class_info["type"]
+        param_module = param_class_info.get("module")
+
+        # Get default value from keyword arguments
+        default_value = None
+        for keyword in node.value.keywords:
+            if keyword.arg == "default":
+                default_value = keyword.value
+                break
+
+        if param_type and default_value and param_type in self.param_type_map:
+            expected_types = self.param_type_map[param_type]
+            if not isinstance(expected_types, tuple):
+                expected_types = (expected_types,)
+
+            inferred_type = self._infer_value_type(default_value)
+
+            if inferred_type and not any(issubclass(inferred_type, t) for t in expected_types):
+                self.type_errors.append(
+                    {
+                        "line": node.lineno - 1,  # Convert to 0-based
+                        "col": node.col_offset,
+                        "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                        "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                        "message": f"Parameter '{param_name}' of type {param_type} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}",
+                        "severity": "error",
+                        "code": "type-mismatch",
+                    }
+                )
+
+        # Check for additional parameter constraints
+        self._check_parameter_constraints(node, param_name, param_type, lines)
+
+    def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str] | None:
+        """Resolve the actual parameter class from the function call."""
+        if isinstance(func_node, ast.Name):
+            # Direct reference like Integer()
+            class_name = func_node.id
+            return {"type": class_name, "module": None}
+
+        elif isinstance(func_node, ast.Attribute):
+            # Attribute reference like param.Integer() or p.Integer()
+            if isinstance(func_node.value, ast.Name):
+                module_alias = func_node.value.id
+                class_name = func_node.attr
+
+                # Check if this is a known param module
+                if module_alias in self.imports:
+                    full_module_name = self.imports[module_alias]
+                    if "param" in full_module_name:
+                        return {"type": class_name, "module": full_module_name}
+                elif module_alias == "param":
+                    return {"type": class_name, "module": "param"}
+
+        return None
+
+    def _format_expected_types(self, expected_types: tuple) -> str:
+        """Format expected types for error messages."""
+        if len(expected_types) == 1:
+            return expected_types[0].__name__
+        else:
+            type_names = [t.__name__ for t in expected_types]
+            return " or ".join(type_names)
+
+    def _infer_value_type(self, node: ast.expr) -> type | None:
+        """Infer Python type from AST node."""
+        if isinstance(node, ast.Constant):
+            return type(node.value)
+        elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
+            return str
+        elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+            return type(node.n)
+        elif isinstance(node, ast.NameConstant):  # Python < 3.8 compatibility
+            return type(node.value)
+        elif isinstance(node, ast.List):
+            return list
+        elif isinstance(node, ast.Tuple):
+            return tuple
+        elif isinstance(node, ast.Dict):
+            return dict
+        elif isinstance(node, ast.Set):
+            return set
+        elif isinstance(node, ast.Name):
+            # Could be a variable - would need more sophisticated analysis
+            return None
+        return None
+
+    def _check_parameter_constraints(
+        self, node: ast.Assign, param_name: str, param_type: str, lines: list[str]
+    ):
+        """Check for parameter-specific constraints."""
+        if not isinstance(node.value, ast.Call):
+            return
+
+        # Resolve the actual parameter class type for constraint checking
+        param_class_info = self._resolve_parameter_class(node.value.func)
+        if not param_class_info:
+            return
+
+        resolved_param_type = param_class_info["type"]
+
+        # Check bounds for Number/Integer parameters
+        if resolved_param_type in ["Number", "Integer"]:
+            bounds = None
+            inclusive_bounds = None
+
+            for keyword in node.value.keywords:
+                if keyword.arg == "bounds":
+                    bounds = keyword.value
+                elif keyword.arg == "inclusive_bounds":
+                    inclusive_bounds = keyword.value
+
+            if bounds and isinstance(bounds, ast.Tuple) and len(bounds.elts) == 2:
+                # Check if bounds are valid (min < max)
+                try:
+                    min_val = self._extract_numeric_value(bounds.elts[0])
+                    max_val = self._extract_numeric_value(bounds.elts[1])
+
+                    if min_val is not None and max_val is not None and min_val >= max_val:
+                        self.type_errors.append(
+                            {
+                                "line": node.lineno - 1,
+                                "col": node.col_offset,
+                                "end_line": node.end_lineno - 1
+                                if node.end_lineno
+                                else node.lineno - 1,
+                                "end_col": node.end_col_offset
+                                if node.end_col_offset
+                                else node.col_offset,
+                                "message": f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})",
+                                "severity": "error",
+                                "code": "invalid-bounds",
+                            }
+                        )
+                except (ValueError, TypeError):
+                    pass
+
+        # Check for empty lists/tuples with List/Tuple parameters
+        elif resolved_param_type in ["List", "Tuple"]:
+            for keyword in node.value.keywords:
+                if keyword.arg == "default":
+                    if (
+                        isinstance(keyword.value, (ast.List, ast.Tuple))
+                        and len(keyword.value.elts) == 0
+                    ):
+                        # This is usually fine, but flag if bounds are specified
+                        bounds_specified = any(kw.arg == "bounds" for kw in node.value.keywords)
+                        if bounds_specified:
+                            self.type_errors.append(
+                                {
+                                    "line": node.lineno - 1,
+                                    "col": node.col_offset,
+                                    "end_line": node.end_lineno - 1
+                                    if node.end_lineno
+                                    else node.lineno - 1,
+                                    "end_col": node.end_col_offset
+                                    if node.end_col_offset
+                                    else node.col_offset,
+                                    "message": f"Parameter '{param_name}' has empty default but bounds specified",
+                                    "severity": "warning",
+                                    "code": "empty-default-with-bounds",
+                                }
+                            )
+
+    def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
+        """Extract numeric value from AST node."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        elif isinstance(node, ast.Num):  # Python < 3.8 compatibility
+            return node.n
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            # Handle negative numbers
+            val = self._extract_numeric_value(node.operand)
+            return -val if val is not None else None
+        return None
 
 
 class ParamLanguageServer(LanguageServer):
@@ -230,6 +463,35 @@ class ParamLanguageServer(LanguageServer):
         """Analyze a document and cache the results."""
         analysis = self.analyzer.analyze_file(content)
         self.document_cache[uri] = {"content": content, "analysis": analysis}
+
+        # Publish diagnostics for type errors
+        self._publish_diagnostics(uri, analysis.get("type_errors", []))
+
+    def _publish_diagnostics(self, uri: str, type_errors: list[dict[str, Any]]):
+        """Publish diagnostics for type errors."""
+        diagnostics = []
+
+        for error in type_errors:
+            severity = (
+                DiagnosticSeverity.Error
+                if error.get("severity") == "error"
+                else DiagnosticSeverity.Warning
+            )
+
+            diagnostic = Diagnostic(
+                range=Range(
+                    start=Position(line=error["line"], character=error["col"]),
+                    end=Position(line=error["end_line"], character=error["end_col"]),
+                ),
+                message=error["message"],
+                severity=severity,
+                code=error.get("code"),
+                source="param-lsp",
+            )
+            diagnostics.append(diagnostic)
+
+        # Publish diagnostics
+        self.publish_diagnostics(uri, diagnostics)
 
     def _get_completions_for_param_class(self, line: str, character: int) -> list[CompletionItem]:
         """Get completions for param class attributes and methods."""
@@ -307,6 +569,7 @@ def initialize(params: InitializeParams) -> InitializeResult:
             text_document_sync=TextDocumentSyncKind.Incremental,
             completion_provider=CompletionOptions(trigger_characters=[".", "=", "("]),
             hover_provider=True,
+            diagnostic_provider=True,
         )
     )
 
