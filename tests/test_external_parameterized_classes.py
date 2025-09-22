@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 
 class TestExternalParameterizedClasses:
     """Test external Parameterized classes like Panel widgets and HoloViews elements."""
+
+    def setup_class(self):
+        pytest.importorskip("holoviews")
+        pytest.importorskip("panel")
 
     def test_panel_widget_runtime_assignment(self, analyzer):
         """Test runtime assignment type checking for Panel widgets."""

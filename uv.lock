@@ -761,8 +761,8 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "holoviews" },
-    { name = "panel" },
+    { name = "holoviews", marker = "python_full_version != '3.14.*'" },
+    { name = "panel", marker = "python_full_version != '3.14.*'" },
     { name = "pytest" },
     { name = "setuptools-scm" },
 ]
@@ -777,8 +777,8 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "holoviews" },
-    { name = "panel" },
+    { name = "holoviews", marker = "python_full_version != '3.14.*'" },
+    { name = "panel", marker = "python_full_version != '3.14.*'" },
     { name = "pytest" },
     { name = "setuptools-scm" },
 ]

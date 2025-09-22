@@ -31,7 +31,12 @@ Source = "https://github.com/hoxbro/param-lsp"
 param-lsp = "param_lsp.__main__:main"
 
 [dependency-groups]
-dev = ["pytest", "setuptools_scm", "holoviews", "panel"]
+dev = [
+    "pytest",
+    "setuptools_scm",
+    "holoviews; python_version != '3.14'",
+    "panel; python_version != '3.14'",
+]
 
 [tool.hatch.version]
 source = "vcs"

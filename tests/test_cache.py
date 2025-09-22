@@ -229,9 +229,11 @@ class TestExternalLibraryCache:
 class TestCacheIntegration:
     """Test cache integration with the analyzer."""
 
+    def setup_class(self):
+        pytest.importorskip("panel")
+
     def test_analyzer_uses_cache(self, analyzer, enable_cache_for_test):
         """Test that the analyzer uses the cache for external classes."""
-
         # Mock the cache to return predefined data
         test_data = {
             "parameters": ["value"],
