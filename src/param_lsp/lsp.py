@@ -142,10 +142,19 @@ class ParamAnalyzer:
             self.param_parameter_bounds[node.name] = parameter_bounds
             self.param_parameter_docs[node.name] = parameter_docs
 
+    def _format_base(self, base: ast.expr) -> str:
+        """Format base class for debugging."""
+        if isinstance(base, ast.Name):
+            return base.id
+        elif isinstance(base, ast.Attribute):
+            if isinstance(base.value, ast.Name):
+                return f"{base.value.id}.{base.attr}"
+        return str(type(base))
+
     def _is_param_base(self, base: ast.expr) -> bool:
         """Check if a base class is param.Parameterized or similar."""
         if isinstance(base, ast.Name):
-            return base.id in ["Parameterized"] and "param" in self.imports
+            return base.id in ["Parameterized"] and "param" in self.imports.values()
         elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
             module = base.value.id
             return (module == "param" and base.attr == "Parameterized") or (
@@ -328,7 +337,25 @@ class ParamAnalyzer:
 
             inferred_type = self._infer_value_type(default_value)
 
-            if inferred_type and not any(issubclass(inferred_type, t) for t in expected_types):
+            # Special handling for Boolean parameters - they should only accept actual bool values
+            if param_type == "Boolean" and inferred_type and inferred_type != bool:
+                # For Boolean parameters, only accept actual boolean values
+                if not (isinstance(default_value, ast.Constant) and isinstance(default_value.value, bool)):
+                    self.type_errors.append(
+                        {
+                            "line": node.lineno - 1,  # Convert to 0-based
+                            "col": node.col_offset,
+                            "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                            "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                            "message": f"Parameter '{param_name}' of type Boolean expects True/False but got {inferred_type.__name__}",
+                            "severity": "error",
+                            "code": "boolean-type-mismatch",
+                        }
+                    )
+            elif inferred_type and not any(
+                (isinstance(inferred_type, type) and issubclass(inferred_type, t)) or inferred_type == t
+                for t in expected_types
+            ):
                 self.type_errors.append(
                     {
                         "line": node.lineno - 1,  # Convert to 0-based
@@ -342,21 +369,28 @@ class ParamAnalyzer:
                 )
 
         # Check for additional parameter constraints
-        self._check_parameter_constraints(node, param_name, param_type, lines)
+        self._check_parameter_constraints(node, param_name, lines)
 
     def _check_runtime_parameter_assignment(self, node: ast.Assign, target: ast.Attribute, lines: list[str]):
         """Check runtime parameter assignments like obj.param = value."""
-        if not isinstance(target.value, ast.Call):
-            # Skip if not an instance creation like MyClass().x = value
-            return
-
-        # Check if it's calling a known param class
-        instance_class = self._get_instance_class(target.value)
-        if not instance_class or instance_class not in self.param_classes:
-            return
-
+        instance_class = None
         param_name = target.attr
         assigned_value = node.value
+
+        if isinstance(target.value, ast.Call):
+            # Case: MyClass().x = value
+            instance_class = self._get_instance_class(target.value)
+        elif isinstance(target.value, ast.Name):
+            # Case: instance_var.x = value
+            # We need to infer the class from context or assume it could be any param class
+            # For now, check if the parameter name exists in any param class
+            for class_name in self.param_classes:
+                if param_name in self.param_parameters.get(class_name, []):
+                    instance_class = class_name
+                    break
+
+        if not instance_class or instance_class not in self.param_classes:
+            return
 
         # Get the parameter type from the class definition
         param_type = self._get_parameter_type_from_class(instance_class, param_name)
@@ -371,7 +405,25 @@ class ParamAnalyzer:
 
             inferred_type = self._infer_value_type(assigned_value)
 
-            if inferred_type and not any(issubclass(inferred_type, t) for t in expected_types):
+            # Special handling for Boolean parameters - they should only accept actual bool values
+            if param_type == "Boolean" and inferred_type and inferred_type != bool:
+                # For Boolean parameters, only accept actual boolean values
+                if not (isinstance(assigned_value, ast.Constant) and isinstance(assigned_value.value, bool)):
+                    self.type_errors.append(
+                        {
+                            "line": node.lineno - 1,  # Convert to 0-based
+                            "col": node.col_offset,
+                            "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                            "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                            "message": f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)",
+                            "severity": "error",
+                            "code": "runtime-boolean-type-mismatch",
+                        }
+                    )
+            elif inferred_type and not any(
+                (isinstance(inferred_type, type) and issubclass(inferred_type, t)) or inferred_type == t
+                for t in expected_types
+            ):
                 self.type_errors.append(
                     {
                         "line": node.lineno - 1,  # Convert to 0-based
@@ -508,7 +560,7 @@ class ParamAnalyzer:
         return None
 
     def _check_parameter_constraints(
-        self, node: ast.Assign, param_name: str, param_type: str, lines: list[str]
+        self, node: ast.Assign, param_name: str, lines: list[str]
     ):
         """Check for parameter-specific constraints."""
         if not isinstance(node.value, ast.Call):
