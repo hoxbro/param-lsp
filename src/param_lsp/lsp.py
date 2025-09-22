@@ -57,6 +57,8 @@ class ParamAnalyzer:
         self.param_parameter_bounds: dict[str, dict[str, tuple]] = {}
         # class_name -> {param_name: doc_string}
         self.param_parameter_docs: dict[str, dict[str, str]] = {}
+        # class_name -> {param_name: allow_None}
+        self.param_parameter_allow_none: dict[str, dict[str, bool]] = {}
         self.imports: dict[str, str] = {}
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
@@ -143,6 +145,7 @@ class ParamAnalyzer:
                 "param_parameter_types": self.param_parameter_types,
                 "param_parameter_bounds": self.param_parameter_bounds,
                 "param_parameter_docs": self.param_parameter_docs,
+                "param_parameter_allow_none": self.param_parameter_allow_none,
                 "imports": self.imports,
                 "type_errors": self.type_errors,
             }
@@ -157,6 +160,7 @@ class ParamAnalyzer:
         self.param_parameter_types.clear()
         self.param_parameter_bounds.clear()
         self.param_parameter_docs.clear()
+        self.param_parameter_allow_none.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -184,7 +188,7 @@ class ParamAnalyzer:
 
         if is_param_class:
             self.param_classes.add(node.name)
-            parameters, parameter_types, parameter_bounds, parameter_docs = (
+            parameters, parameter_types, parameter_bounds, parameter_docs, parameter_allow_none = (
                 self._extract_parameters(node)
             )
 
@@ -195,6 +199,7 @@ class ParamAnalyzer:
                 parent_parameter_types,
                 parent_parameter_bounds,
                 parent_parameter_docs,
+                parent_parameter_allow_none,
             ) = self._collect_inherited_parameters(node, getattr(self, "_current_file_path", None))
 
             # Merge parent parameters with current class parameters
@@ -202,11 +207,13 @@ class ParamAnalyzer:
             all_parameter_types = {**parent_parameter_types, **parameter_types}
             all_parameter_bounds = {**parent_parameter_bounds, **parameter_bounds}
             all_parameter_docs = {**parent_parameter_docs, **parameter_docs}
+            all_parameter_allow_none = {**parent_parameter_allow_none, **parameter_allow_none}
 
             self.param_parameters[node.name] = all_parameters
             self.param_parameter_types[node.name] = all_parameter_types
             self.param_parameter_bounds[node.name] = all_parameter_bounds
             self.param_parameter_docs[node.name] = all_parameter_docs
+            self.param_parameter_allow_none[node.name] = all_parameter_allow_none
 
     def _format_base(self, base: ast.expr) -> str:
         """Format base class for debugging."""
@@ -246,12 +253,13 @@ class ParamAnalyzer:
 
     def _collect_inherited_parameters(
         self, node: ast.ClassDef, current_file_path: str | None = None
-    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
+    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str], dict[str, bool]]:
         """Collect parameters from parent classes in inheritance hierarchy."""
         inherited_parameters = []
         inherited_parameter_types = {}
         inherited_parameter_bounds = {}
         inherited_parameter_docs = {}
+        inherited_parameter_allow_none = {}
 
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -264,6 +272,7 @@ class ParamAnalyzer:
                     parent_types = self.param_parameter_types.get(parent_class_name, {})
                     parent_bounds = self.param_parameter_bounds.get(parent_class_name, {})
                     parent_docs = self.param_parameter_docs.get(parent_class_name, {})
+                    parent_allow_none = self.param_parameter_allow_none.get(parent_class_name, {})
 
                     # Add parent parameters (avoid duplicates)
                     for param in parent_params:
@@ -275,6 +284,8 @@ class ParamAnalyzer:
                             inherited_parameter_bounds[param] = parent_bounds[param]
                         if param in parent_docs:
                             inherited_parameter_docs[param] = parent_docs[param]
+                        if param in parent_allow_none:
+                            inherited_parameter_allow_none[param] = parent_allow_none[param]
 
                 # If not found locally, check if it's an imported class
                 else:
@@ -288,6 +299,7 @@ class ParamAnalyzer:
                         parent_types = imported_class_info.get("parameter_types", {})
                         parent_bounds = imported_class_info.get("parameter_bounds", {})
                         parent_docs = imported_class_info.get("parameter_docs", {})
+                        parent_allow_none = imported_class_info.get("parameter_allow_none", {})
 
                         # Add parent parameters (avoid duplicates)
                         for param in parent_params:
@@ -299,22 +311,26 @@ class ParamAnalyzer:
                                 inherited_parameter_bounds[param] = parent_bounds[param]
                             if param in parent_docs:
                                 inherited_parameter_docs[param] = parent_docs[param]
+                            if param in parent_allow_none:
+                                inherited_parameter_allow_none[param] = parent_allow_none[param]
 
         return (
             inherited_parameters,
             inherited_parameter_types,
             inherited_parameter_bounds,
             inherited_parameter_docs,
+            inherited_parameter_allow_none,
         )
 
     def _extract_parameters(
         self, node: ast.ClassDef
-    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str]]:
+    ) -> tuple[list[str], dict[str, str], dict[str, tuple], dict[str, str], dict[str, bool]]:
         """Extract parameter definitions from a Param class."""
         parameters = []
         parameter_types = {}
         parameter_bounds = {}
         parameter_docs = {}
+        parameter_allow_none = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
@@ -339,7 +355,17 @@ class ParamAnalyzer:
                             if doc_string is not None:
                                 parameter_docs[param_name] = doc_string
 
-        return parameters, parameter_types, parameter_bounds, parameter_docs
+                            # Get allow_None if present
+                            allow_none = self._extract_allow_none_from_call(item.value)
+                            default_value = self._extract_default_from_call(item.value)
+
+                            # Param automatically sets allow_None=True when default=None
+                            if default_value is not None and self._is_none_value(default_value):
+                                parameter_allow_none[param_name] = True
+                            elif allow_none is not None:
+                                parameter_allow_none[param_name] = allow_none
+
+        return parameters, parameter_types, parameter_bounds, parameter_docs, parameter_allow_none
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
         """Extract bounds from a parameter call."""
@@ -377,6 +403,24 @@ class ParamAnalyzer:
             if keyword.arg == "doc":
                 return self._extract_string_value(keyword.value)
         return None
+
+    def _extract_allow_none_from_call(self, call_node: ast.Call) -> bool | None:
+        """Extract allow_None from a parameter call."""
+        for keyword in call_node.keywords:
+            if keyword.arg == "allow_None":
+                return self._extract_boolean_value(keyword.value)
+        return None
+
+    def _extract_default_from_call(self, call_node: ast.Call) -> ast.expr | None:
+        """Extract default value from a parameter call."""
+        for keyword in call_node.keywords:
+            if keyword.arg == "default":
+                return keyword.value
+        return None
+
+    def _is_none_value(self, node: ast.expr) -> bool:
+        """Check if an AST node represents None."""
+        return isinstance(node, ast.Constant) and node.value is None
 
     def _extract_string_value(self, node: ast.expr) -> str | None:
         """Extract string value from AST node."""
@@ -485,13 +529,21 @@ class ParamAnalyzer:
             if not param_type:
                 continue  # Skip if parameter not found (could be inherited or not a param)
 
+            # Check if None is allowed for this parameter
+            inferred_type = self._infer_value_type(param_value)
+            if inferred_type is type(None):  # None value
+                allow_none = self._get_parameter_allow_none(class_name, param_name)
+                if allow_none:
+                    continue  # None is allowed, skip further validation
+                # If allow_None is False or not specified, continue with normal type checking
+
             # Check if assigned value matches expected type
             if param_type in self.param_type_map:
                 expected_types = self.param_type_map[param_type]
                 if not isinstance(expected_types, tuple):
                     expected_types = (expected_types,)
 
-                inferred_type = self._infer_value_type(param_value)
+                # inferred_type was already computed above
 
                 # Special handling for Boolean parameters - they should only accept actual bool values
                 if param_type == "Boolean" and inferred_type and inferred_type is not bool:
@@ -617,12 +669,18 @@ class ParamAnalyzer:
         param_type = param_class_info["type"]
         param_class_info.get("module")
 
-        # Get default value from keyword arguments
+        # Get default value and allow_None from keyword arguments
         default_value = None
+        allow_none = None
         for keyword in node.value.keywords:
             if keyword.arg == "default":
                 default_value = keyword.value
-                break
+            elif keyword.arg == "allow_None":
+                allow_none = self._extract_boolean_value(keyword.value)
+
+        # Param automatically sets allow_None=True when default=None
+        if default_value is not None and self._is_none_value(default_value):
+            allow_none = True
 
         if param_type and default_value and param_type in self.param_type_map:
             expected_types = self.param_type_map[param_type]
@@ -630,6 +688,11 @@ class ParamAnalyzer:
                 expected_types = (expected_types,)
 
             inferred_type = self._infer_value_type(default_value)
+
+            # Check if None is allowed for this parameter
+            if allow_none and inferred_type is type(None):
+                return  # None is allowed, skip further validation
+                # If allow_None is False or not specified, continue with normal type checking
 
             # Special handling for Boolean parameters - they should only accept actual bool values
             if param_type == "Boolean" and inferred_type and inferred_type is not bool:
@@ -708,6 +771,13 @@ class ParamAnalyzer:
                 expected_types = (expected_types,)
 
             inferred_type = self._infer_value_type(assigned_value)
+
+            # Check if None is allowed for this parameter
+            if inferred_type is type(None):  # None value
+                allow_none = self._get_parameter_allow_none(instance_class, param_name)
+                if allow_none:
+                    return  # None is allowed, skip further validation
+                # If allow_None is False or not specified, continue with normal type checking
 
             # Special handling for Boolean parameters - they should only accept actual bool values
             if param_type == "Boolean" and inferred_type and inferred_type is not bool:
@@ -837,6 +907,12 @@ class ParamAnalyzer:
         if class_name in self.param_parameter_types:
             return self.param_parameter_types[class_name].get(param_name)
         return None
+
+    def _get_parameter_allow_none(self, class_name: str, param_name: str) -> bool:
+        """Get the allow_None setting for a parameter from a class definition."""
+        if class_name in self.param_parameter_allow_none:
+            return self.param_parameter_allow_none[class_name].get(param_name, False)
+        return False
 
     def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str | None] | None:
         """Resolve the actual parameter class from the function call."""
@@ -1146,6 +1222,9 @@ class ParamAnalyzer:
                 imported_class_name, {}
             ),
             "parameter_docs": module_analysis.get("param_parameter_docs", {}).get(
+                imported_class_name, {}
+            ),
+            "parameter_allow_none": module_analysis.get("param_parameter_allow_none", {}).get(
                 imported_class_name, {}
             ),
         }

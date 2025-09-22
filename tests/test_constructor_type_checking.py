@@ -424,29 +424,23 @@ class P(param.Parameterized):
     optional = param.Integer(allow_None=True)
 
 P(required=None)   # Should error - None not allowed
-P(optional=None)   # Should error - allow_None not yet implemented
+P(optional=None)   # Should NOT error - allow_None=True
 """
         analyzer = ParamAnalyzer()
         result = analyzer.analyze_file(code)
         errors = result.get("type_errors", [])
 
-        # Currently the analyzer doesn't implement allow_None checking
-        # Both None assignments trigger type errors
-        assert len(errors) == 2
+        # With allow_None implemented, we should get:
+        # - 1 error for 'required' (None not allowed)
+        # - 0 errors for 'optional' (allow_None=True should permit None)
+        assert len(errors) == 1
 
         error_messages = [error["message"] for error in errors]
         assert any(
             "Cannot assign NoneType to parameter 'required' of type Integer" in msg
             for msg in error_messages
         )
-        assert any(
-            "Cannot assign NoneType to parameter 'optional' of type Integer" in msg
-            for msg in error_messages
-        )
-
-        # When allow_None is implemented, this test should be updated to expect:
-        # - 1 error for 'required' (None not allowed)
-        # - 0 errors for 'optional' (allow_None=True should permit None)
+        # No error should be generated for 'optional' since allow_None=True
 
     def test_constructor_exclusive_bounds_both_sides(self):
         """Test constructor with exclusive bounds on both sides."""
