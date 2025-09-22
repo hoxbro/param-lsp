@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from param_lsp.lsp import ParamLanguageServer
+from param_lsp.server import ParamLanguageServer
 
 
 class TestHoverCrossFile:

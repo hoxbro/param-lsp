@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.param_lsp.lsp import ParamAnalyzer
+from src.param_lsp.analyzer import ParamAnalyzer
 
 
 class TestConstructorComplexScenarios:

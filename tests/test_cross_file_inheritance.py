@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from param_lsp.lsp import ParamAnalyzer
+from param_lsp.analyzer import ParamAnalyzer
 
 
 class TestCrossFileInheritance:
