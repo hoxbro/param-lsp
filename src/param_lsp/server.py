@@ -38,6 +38,14 @@ from .analyzer import ParamAnalyzer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Compiled regex patterns for performance
+PARAM_DEPENDS_PATTERN = re.compile(r"@param\.depends\s*\(")
+CONSTRUCTOR_CALL_PATTERN = re.compile(r"(\w+)\s*\([^)]*$")
+CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(r"(\w+)\s*\([^)]*\w*$")
+PARAM_ASSIGNMENT_PATTERN = re.compile(r"(\w+)\s*=")
+CLASS_DEFINITION_PATTERN = re.compile(r"^class\s+(\w+)")
+QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
+
 
 class ParamLanguageServer(LanguageServer):
     """Language Server for HoloViz Param."""
@@ -199,15 +207,13 @@ class ParamLanguageServer(LanguageServer):
 
         # Pattern: find word followed by opening parenthesis, allowing for parameters already typed
         # This pattern matches ClassName( with optional whitespace and existing parameters
-        pattern = r"(\w+)\s*\([^)]*$"
-        match = re.search(pattern, before_cursor)
+        match = CONSTRUCTOR_CALL_PATTERN.search(before_cursor)
 
         # Also check if we're inside parentheses after a class name
         # This helps catch cases where user has started typing parameter letters
         if not match:
             # Look for pattern like: ClassName(some_text
-            pattern_inside = r"(\w+)\s*\([^)]*\w*$"
-            match = re.search(pattern_inside, before_cursor)
+            match = CONSTRUCTOR_CALL_INSIDE_PATTERN.search(before_cursor)
 
         if match:
             class_name = match.group(1)
@@ -223,8 +229,7 @@ class ParamLanguageServer(LanguageServer):
 
                 # Find already used parameters to avoid duplicates
                 used_params = set()
-                param_pattern = r"(\w+)\s*="
-                used_matches = re.findall(param_pattern, before_cursor)
+                used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
                 used_params.update(used_matches)
 
                 for param_name in parameters:
@@ -507,11 +512,11 @@ class ParamLanguageServer(LanguageServer):
             line = lines[line_idx]
 
             # Check for @param.depends( pattern
-            if re.search(r"@param\.depends\s*\(", line):
+            if PARAM_DEPENDS_PATTERN.search(line):
                 # Check if we're still inside the parentheses
                 if line_idx == position.line:
                     # Same line - check if cursor is after the opening parenthesis
-                    match = re.search(r"@param\.depends\s*\(", line)
+                    match = PARAM_DEPENDS_PATTERN.search(line)
                     if match and position.character >= match.end():
                         # Check if parentheses are closed before cursor
                         text_before_cursor = line[: position.character]
@@ -550,7 +555,7 @@ class ParamLanguageServer(LanguageServer):
             line = lines[line_idx].strip()
 
             # Look for class definition
-            match = re.match(r"^class\s+(\w+)", line)
+            match = CLASS_DEFINITION_PATTERN.match(line)
             if match:
                 class_name = match.group(1)
                 return class_name
@@ -566,8 +571,7 @@ class ParamLanguageServer(LanguageServer):
 
         # Look for quoted strings that represent parameter names
         # Pattern matches both single and double quoted strings
-        pattern = r'["\']([^"\']+)["\']'
-        matches = re.findall(pattern, before_cursor)
+        matches = QUOTED_STRING_PATTERN.findall(before_cursor)
 
         for match in matches:
             used_params.add(match)
@@ -586,7 +590,7 @@ class ParamLanguageServer(LanguageServer):
             if line_idx >= len(lines):
                 continue
             line = lines[line_idx]
-            if re.search(r"@param\.depends\s*\(", line):
+            if PARAM_DEPENDS_PATTERN.search(line):
                 start_line = line_idx
                 break
 
@@ -605,8 +609,7 @@ class ParamLanguageServer(LanguageServer):
             decorator_text += line + " "
 
         # Look for quoted strings that represent parameter names
-        pattern = r'["\']([^"\']+)["\']'
-        matches = re.findall(pattern, decorator_text)
+        matches = QUOTED_STRING_PATTERN.findall(decorator_text)
 
         for match in matches:
             used_params.add(match)
