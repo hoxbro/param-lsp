@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 
+from . import __version__
 from .server import server
 
 logging.basicConfig(level=logging.INFO)
@@ -26,8 +27,8 @@ def main():
         port_idx = sys.argv.index("--port") + 1 if "--port" in sys.argv else None
         port = int(sys.argv[port_idx]) if port_idx and port_idx < len(sys.argv) else 8080
 
-        logger.info(f"Starting Param LSP server on TCP port {port}")
+        logger.info(f"Starting Param LSP server ({__version__}) on TCP port {port}")
         server.start_tcp("localhost", port)
     else:
-        logger.info("Starting Param LSP server on stdio")
+        logger.info(f"Starting Param LSP server ({__version__}) on stdio")
         server.start_io()
