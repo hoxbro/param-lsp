@@ -12,7 +12,7 @@ The server analyzes Python AST to understand Param usage patterns and provides i
 # General
 
 - The correct environment is always activated with UV
-- If you create a new file in `src/` or `tests/` use `git add --intent-to-add` for it. DO NOT do this for temporary debug files.
+- If you create a new file in `src/` or `tests/` use `git add --intent-to-add` for it. If you then remove the file remember to `git rm`
 - Use relative import for `param_lsp` and absolute imports for tests
 
 # New Feature
