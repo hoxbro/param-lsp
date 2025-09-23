@@ -1504,14 +1504,9 @@ class ParamAnalyzer:
             parameter_defaults = {}
 
             if hasattr(cls, "param"):
-                for param_name in cls.param.values():
-                    if param_name == "name":  # Skip the 'name' parameter
-                        continue
-
+                for param_name, param_obj in cls.param.objects().items():
                     parameters.append(param_name)
 
-                    # Get parameter object for detailed info
-                    param_obj = getattr(cls.param, param_name, None)
                     if param_obj:
                         # Get parameter type
                         param_type_name = type(param_obj).__name__
@@ -1720,14 +1715,9 @@ class ParamAnalyzer:
             parameter_defaults = {}
 
             if hasattr(cls, "param"):
-                for param_name in cls.param.values():
-                    if param_name == "name":  # Skip the 'name' parameter
-                        continue
-
+                for param_name, param_obj in cls.param.objects().items():
                     parameters.append(param_name)
 
-                    # Get parameter object for detailed info
-                    param_obj = getattr(cls.param, param_name, None)
                     if param_obj:
                         # Get parameter type
                         param_type_name = type(param_obj).__name__

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from lsprotocol.types import Position
 
 from src.param_lsp.server import ParamLanguageServer
@@ -41,9 +42,11 @@ P("""
 
         # Check that we get parameter assignments
         assert "x=1" in completion_labels, "Should suggest 'x=1' with default value"
-        assert "y=hello" in completion_labels, "Should suggest 'y=hello' with default value"
+        assert 'y="hello"' in completion_labels, (
+            "Should suggest 'y=\"hello\"' with quoted string value"
+        )
         assert "x=1" in completion_inserts, "Should insert 'x=1'"
-        assert "y=hello" in completion_inserts, "Should insert 'y=hello'"
+        assert 'y="hello"' in completion_inserts, "Should insert quoted string assignment"
 
     def test_constructor_completion_after_equals(self):
         """Test constructor parameter completion when user has typed 'x='."""
@@ -103,7 +106,7 @@ P(x=5, """
         assert len(completions) == 2, f"Expected 2 completions, got {len(completions)}"
 
         completion_labels = [item.label for item in completions]
-        assert "y=hello" in completion_labels, "Should suggest 'y=hello'"
+        assert 'y="hello"' in completion_labels, "Should suggest 'y=\"hello\"' with quoted string"
         assert "z=True" in completion_labels, "Should suggest 'z=True'"
         assert "x=1" not in completion_labels, "Should not suggest already used 'x'"
 
@@ -197,7 +200,9 @@ Child("""
         assert len(completions) == 2, f"Expected 2 completions, got {len(completions)}"
 
         completion_labels = [item.label for item in completions]
-        assert "base_param=base" in completion_labels, "Should suggest inherited parameter"
+        assert 'base_param="base"' in completion_labels, (
+            "Should suggest inherited parameter with quoted string"
+        )
         assert "child_param=42" in completion_labels, "Should suggest own parameter"
 
     def test_constructor_completion_with_bounds_info(self):
@@ -265,3 +270,40 @@ P("""
         # Should still work with aliased import
         assert len(completions) == 1, f"Expected 1 completion, got {len(completions)}"
         assert completions[0].label == "x=42", "Should suggest 'x=42' with aliased import"
+
+    def test_external_class_constructor_completion(self):
+        """Test constructor completion for external classes like hv.Curve."""
+        pytest.importorskip("holoviews")
+
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        code_py = """\
+import holoviews as hv
+
+hv.Curve("""
+
+        # Simulate document analysis
+        server._analyze_document("file:///test.py", code_py)
+
+        # Test completion after hv.Curve(
+        position = Position(line=2, character=9)  # After "hv.Curve("
+        completions = server._get_constructor_parameter_completions(
+            "file:///test.py", "hv.Curve(", position.character
+        )
+
+        # Should have completions for hv.Curve parameters
+        assert len(completions) > 0, "Should have completions for hv.Curve parameters"
+
+        completion_labels = [item.label for item in completions]
+        # HoloViews Curve should have parameters like 'name', 'label', 'group', etc.
+        assert any("label" in label for label in completion_labels), (
+            "Should suggest label parameter for hv.Curve"
+        )
+        # Should have 7 main parameters (name is filtered out)
+        assert len(completions) >= 7, (
+            f"Should suggest at least 7 parameters, got {len(completions)}"
+        )
+        # Should NOT suggest name parameter (it's filtered out for constructors)
+        assert not any("name" in label for label in completion_labels), (
+            "Should NOT suggest name parameter for hv.Curve constructors"
+        )

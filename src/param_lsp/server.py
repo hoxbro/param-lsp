@@ -40,8 +40,10 @@ logger = logging.getLogger(__name__)
 
 # Compiled regex patterns for performance
 PARAM_DEPENDS_PATTERN = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)
-CONSTRUCTOR_CALL_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*\([^)]*$", re.MULTILINE)
-CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*\([^)]*\w*$", re.MULTILINE)
+CONSTRUCTOR_CALL_PATTERN = re.compile(r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*$", re.MULTILINE)
+CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*\w*$", re.MULTILINE
+)
 PARAM_ASSIGNMENT_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*=", re.MULTILINE)
 CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
 QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
@@ -218,6 +220,9 @@ class ParamLanguageServer(LanguageServer):
         if match:
             class_name = match.group(2)
 
+            # Get analyzer for external class resolution
+            analyzer = self.document_cache[uri]["analyzer"]
+
             # Check if this is a known param class
             if class_name in param_classes:
                 parameters = param_parameters.get(class_name, [])
@@ -243,7 +248,8 @@ class ParamLanguageServer(LanguageServer):
                     default_value = parameter_defaults.get(param_name)
 
                     if default_value is not None:
-                        display_value = self._format_default_for_display(default_value)
+                        param_type = parameter_types.get(param_name)
+                        display_value = self._format_default_for_display(default_value, param_type)
 
                         # Build documentation for this specific parameter
                         doc_parts = []
@@ -300,6 +306,9 @@ class ParamLanguageServer(LanguageServer):
                         # Skip parameters that are already used
                         if param_name in used_params:
                             continue
+                        # Skip the 'name' parameter as it's rarely set in constructors
+                        if param_name == "name":
+                            continue
 
                         # Build documentation for the parameter
                         doc_parts = []
@@ -341,7 +350,10 @@ class ParamLanguageServer(LanguageServer):
                         # Create insert text with default value if available
                         default_value = parameter_defaults.get(param_name)
                         if default_value is not None:
-                            display_value = self._format_default_for_display(default_value)
+                            param_type = parameter_types.get(param_name)
+                            display_value = self._format_default_for_display(
+                                default_value, param_type
+                            )
                             insert_text = f"{param_name}={display_value}"
                             label = f"{param_name}={display_value}"
                         else:
@@ -360,6 +372,112 @@ class ParamLanguageServer(LanguageServer):
                                 preselect=False,  # Don't auto-select, show all options
                             )
                         )
+            else:
+                # Check if this is an external param class (e.g., hv.Curve)
+                # Resolve the full class path using import aliases
+                full_class_path = None
+
+                if "." in class_name:
+                    # Handle dotted names like hv.Curve
+                    parts = class_name.split(".")
+                    if len(parts) >= 2:
+                        alias = parts[0]
+                        class_part = ".".join(parts[1:])
+                        if alias in analyzer.imports:
+                            full_module = analyzer.imports[alias]
+                            full_class_path = f"{full_module}.{class_part}"
+                        else:
+                            full_class_path = class_name
+                else:
+                    # Simple class name - check if it's in external classes directly
+                    full_class_path = class_name
+
+                # Check if this resolved class is in external_param_classes
+                external_class_info = analyzer.external_param_classes.get(full_class_path)
+
+                # If not cached, try to introspect it on-the-fly for completion
+                if external_class_info is None and full_class_path:
+                    external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+                if external_class_info:
+                    parameters = external_class_info.get("parameters", [])
+                    parameter_types = external_class_info.get("parameter_types", {})
+                    parameter_docs = external_class_info.get("parameter_docs", {})
+                    parameter_bounds = external_class_info.get("parameter_bounds", {})
+                    parameter_allow_none = external_class_info.get("parameter_allow_none", {})
+                    parameter_defaults = external_class_info.get("parameter_defaults", {})
+
+                    # Handle parameter suggestions same as local classes
+                    used_params = set()
+                    used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+                    used_params.update(match[1] for match in used_matches)
+
+                    for param_name in parameters:
+                        if param_name in used_params:
+                            continue
+                        # Skip the 'name' parameter as it's rarely set in constructors
+                        if param_name == "name":
+                            continue
+
+                        # Build documentation for the parameter
+                        doc_parts = []
+                        param_type = parameter_types.get(param_name)
+                        if param_type:
+                            python_type = self._get_python_type_name(param_type)
+                            doc_parts.append(f"Type: {param_type} ({python_type})")
+
+                        bounds = parameter_bounds.get(param_name)
+                        if bounds:
+                            if len(bounds) == 2:
+                                min_val, max_val = bounds
+                                doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
+                            elif len(bounds) == 4:
+                                min_val, max_val, left_inclusive, right_inclusive = bounds
+                                left_bracket = "[" if left_inclusive else "("
+                                right_bracket = "]" if right_inclusive else ")"
+                                doc_parts.append(
+                                    f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}"
+                                )
+
+                        allow_none = parameter_allow_none.get(param_name, False)
+                        if allow_none:
+                            doc_parts.append("Allows None")
+
+                        param_doc = parameter_docs.get(param_name)
+                        if param_doc:
+                            doc_parts.append(f"Description: {param_doc}")
+
+                        documentation = (
+                            "\n".join(doc_parts)
+                            if doc_parts
+                            else f"Parameter of {full_class_path}"
+                        )
+
+                        # Create insert text with default value if available
+                        default_value = parameter_defaults.get(param_name)
+                        if default_value is not None:
+                            param_type = parameter_types.get(param_name)
+                            display_value = self._format_default_for_display(
+                                default_value, param_type
+                            )
+                            insert_text = f"{param_name}={display_value}"
+                            label = f"{param_name}={display_value}"
+                        else:
+                            insert_text = f"{param_name}="
+                            label = param_name
+
+                        completions.append(
+                            CompletionItem(
+                                label=label,
+                                kind=CompletionItemKind.Property,
+                                detail=f"Parameter of {full_class_path}",
+                                documentation=documentation,
+                                insert_text=insert_text,
+                                filter_text=param_name,
+                                sort_text=f"{param_name:0>3}",
+                                preselect=False,
+                            )
+                        )
 
         return completions
 
@@ -376,9 +494,31 @@ class ParamLanguageServer(LanguageServer):
                 return python_types.__name__
         return param_type.lower()
 
-    def _format_default_for_display(self, default_value: str) -> str:
-        """Format default value for autocomplete display, removing unnecessary quotes."""
-        # If it's a quoted string, remove the quotes for display
+    def _format_default_for_display(
+        self, default_value: str, param_type: str | None = None
+    ) -> str:
+        """Format default value for autocomplete display."""
+        # For String parameters, ensure the quotes are shown to users
+        if param_type == "String":
+            # If it's already a quoted string, remove quotes and re-add as double quotes for consistency
+            if (
+                default_value.startswith("'")
+                and default_value.endswith("'")
+                and len(default_value) >= 2
+            ):
+                unquoted = default_value[1:-1]  # Remove single quotes
+                return f'"{unquoted}"'  # Add double quotes
+            elif (
+                default_value.startswith('"')
+                and default_value.endswith('"')
+                and len(default_value) >= 2
+            ):
+                return default_value  # Already double-quoted, keep as-is
+            else:
+                # Not quoted, add double quotes
+                return f'"{default_value}"'
+
+        # For non-string parameters, remove quotes if present (for cleaner display)
         if (
             default_value.startswith("'")
             and default_value.endswith("'")
