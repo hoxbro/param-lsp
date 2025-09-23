@@ -10,7 +10,7 @@ class TestConstructorTypeChecking:
 
     def test_constructor_integer_type_mismatch(self):
         """Test that constructor calls with wrong integer types are detected."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -19,7 +19,7 @@ class P(param.Parameterized):
 P(x="A")  # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -28,11 +28,11 @@ P(x="A")  # Should trigger error
             in errors[0]["message"]
         )
         assert errors[0]["code"] == "constructor-type-mismatch"
-        assert errors[0]["line"] == 6  # 0-based line number
+        assert errors[0]["line"] == 5  # 0-based line number
 
     def test_constructor_boolean_type_mismatch(self):
         """Test that constructor calls with wrong boolean types are detected."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -41,7 +41,7 @@ class P(param.Parameterized):
 P(flag="true")  # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -53,7 +53,7 @@ P(flag="true")  # Should trigger error
 
     def test_constructor_bounds_violation(self):
         """Test that constructor calls with values outside bounds are detected."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -62,7 +62,7 @@ class P(param.Parameterized):
 P(y=15)  # Should trigger bounds error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -74,7 +74,7 @@ P(y=15)  # Should trigger bounds error
 
     def test_constructor_valid_assignments(self):
         """Test that valid constructor calls don't trigger errors."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -90,14 +90,14 @@ P(name="test")                  # Valid string
 P(x=5, y=2.5, flag=False, name="valid")  # All valid
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 0
 
     def test_constructor_multiple_errors(self):
         """Test that multiple constructor errors are detected."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -108,7 +108,7 @@ class P(param.Parameterized):
 P(x="A", y=15, flag="true")  # Should trigger 3 errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -128,7 +128,7 @@ P(x="A", y=15, flag="true")  # Should trigger 3 errors
 
     def test_constructor_inherited_parameters(self):
         """Test that constructor type checking works with inherited parameters."""
-        code = """
+        code_py = """\
 import param
 
 class Base(param.Parameterized):
@@ -140,7 +140,7 @@ class Child(Base):
 Child(x="A", y=123)  # Should trigger 2 errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -155,7 +155,7 @@ Child(x="A", y=123)  # Should trigger 2 errors
 
     def test_constructor_unknown_parameters_ignored(self):
         """Test that unknown parameters in constructor don't cause issues."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -164,14 +164,14 @@ class P(param.Parameterized):
 P(x=5, unknown_param="value")  # Should only check known parameters
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 0
 
     def test_constructor_non_param_classes_ignored(self):
         """Test that non-param classes are ignored."""
-        code = """
+        code_py = """\
 import param
 
 class NonParamClass:
@@ -185,14 +185,14 @@ NonParamClass(x="anything")  # Should be ignored
 P(x=5)                       # Valid param class call
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 0
 
     def test_constructor_inclusive_bounds_checking(self):
         """Test that inclusive bounds are properly checked in constructors."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -202,7 +202,7 @@ P(x=0)   # Should trigger error (left exclusive)
 P(x=10)  # Should be valid (right inclusive)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -214,7 +214,7 @@ P(x=10)  # Should be valid (right inclusive)
 
     def test_constructor_number_type_accepts_int_and_float(self):
         """Test that Number parameters accept both int and float in constructors."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -225,7 +225,7 @@ P(value=5.5)   # Should be valid (float)
 P(value="5")   # Should trigger error (string)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -233,7 +233,7 @@ P(value="5")   # Should trigger error (string)
 
     def test_constructor_list_tuple_dict_types(self):
         """Test that collection types work correctly in constructors."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -249,7 +249,7 @@ P(coords=123)             # Should trigger error
 P(mapping=[1, 2, 3])      # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -268,7 +268,7 @@ P(mapping=[1, 2, 3])      # Should trigger error
 
     def test_constructor_with_different_import_styles(self):
         """Test constructor checking with different import styles."""
-        code = """
+        code_py = """\
 import param as p
 
 class P(p.Parameterized):
@@ -277,7 +277,7 @@ class P(p.Parameterized):
 P(x="A")  # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -285,7 +285,7 @@ P(x="A")  # Should trigger error
 
     def test_constructor_from_import_style(self):
         """Test constructor checking with 'from param import' style."""
-        code = """
+        code_py = """
 from param import Parameterized, Integer, String
 
 class P(Parameterized):
@@ -295,7 +295,7 @@ class P(Parameterized):
 P(x="A", name=123)  # Should trigger 2 errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -309,7 +309,7 @@ P(x="A", name=123)  # Should trigger 2 errors
 
     def test_constructor_negative_numbers_and_bounds(self):
         """Test constructor with negative numbers and bounds."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -321,7 +321,7 @@ P(temp=-15)   # Should trigger bounds error
 P(count=-1)   # Should trigger bounds error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -337,7 +337,7 @@ P(count=-1)   # Should trigger bounds error
 
     def test_constructor_complex_inheritance_chain(self):
         """Test constructor checking with complex inheritance chains."""
-        code = """
+        code_py = """\
 import param
 
 class Base(param.Parameterized):
@@ -352,7 +352,7 @@ class Child(Middle):
 Child(base_param=123, middle_param="abc", child_param="true")  # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -371,7 +371,7 @@ Child(base_param=123, middle_param="abc", child_param="true")  # All should erro
 
     def test_constructor_mixed_valid_invalid_parameters(self):
         """Test constructor with mix of valid and invalid parameters."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -383,7 +383,7 @@ class P(param.Parameterized):
 P(a=5, b="valid", c="invalid", d=15)  # 2 should error, 2 should be valid
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -396,7 +396,7 @@ P(a=5, b="valid", c="invalid", d=15)  # 2 should error, 2 should be valid
 
     def test_constructor_parameter_overriding_in_inheritance(self):
         """Test constructor checking when child class overrides parent parameters."""
-        code = """
+        code_py = """\
 import param
 
 class Parent(param.Parameterized):
@@ -408,7 +408,7 @@ class Child(Parent):
 Child(x="should_error")  # Should error because x is now Integer in Child
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -416,7 +416,7 @@ Child(x="should_error")  # Should error because x is now Integer in Child
 
     def test_constructor_with_None_values(self):
         """Test constructor with None values and allow_None parameter."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -427,7 +427,7 @@ P(required=None)   # Should error - None not allowed
 P(optional=None)   # Should NOT error - allow_None=True
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # With allow_None implemented, we should get:
@@ -444,7 +444,7 @@ P(optional=None)   # Should NOT error - allow_None=True
 
     def test_constructor_exclusive_bounds_both_sides(self):
         """Test constructor with exclusive bounds on both sides."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -455,7 +455,7 @@ P(x=10)   # Should error (right exclusive)
 P(x=5)    # Should be valid
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -471,7 +471,7 @@ P(x=5)    # Should be valid
 
     def test_constructor_float_vs_integer_bounds(self):
         """Test constructor bounds checking with float vs integer boundaries."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -483,7 +483,7 @@ P(num_param=1.2)    # Should error - outside bounds
 P(num_param=2.0)    # Should be valid
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2

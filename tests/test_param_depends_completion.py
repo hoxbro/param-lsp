@@ -14,7 +14,8 @@ class TestParamDependsCompletion:
         """Test basic param.depends completion functionality."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1, allow_None=True)
@@ -25,9 +26,9 @@ class P(param.Parameterized):
         ..."""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=7, character=18)  # After the opening parenthesis
 
         # Test if we detect param.depends context
@@ -60,7 +61,8 @@ class P(param.Parameterized):
         """Test that already used parameters are not suggested again."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1)
@@ -71,9 +73,9 @@ class P(param.Parameterized):
     def tmp(self):
         ..."""
 
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=7, character=23)  # After "x", (the comma)
 
         completions = server._get_param_depends_completions("file:///test.py", lines, position)
@@ -90,7 +92,8 @@ class P(param.Parameterized):
         """Test param.depends completion across multiple lines."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1)
@@ -102,9 +105,9 @@ class P(param.Parameterized):
     def tmp(self):
         ..."""
 
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=8, character=8)  # On the empty line inside decorator
 
         # Should still detect param.depends context
@@ -121,7 +124,8 @@ class P(param.Parameterized):
         """Test that completions are not provided outside param.depends context."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1)
@@ -131,9 +135,9 @@ class P(param.Parameterized):
         # Regular method, not in decorator
         ..."""
 
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=7, character=8)  # Inside regular method
 
         # Should not detect param.depends context
@@ -151,7 +155,8 @@ class P(param.Parameterized):
         """Test param.depends completion with inherited parameters."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class Base(param.Parameterized):
     base_param = param.String(default="base")
@@ -163,9 +168,9 @@ class Child(Base):
     def method(self):
         ..."""
 
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=9, character=18)  # After the opening parenthesis
 
         completions = server._get_param_depends_completions("file:///test.py", lines, position)
@@ -182,7 +187,8 @@ class Child(Base):
         server = ParamLanguageServer("test-server", "1.0.0")
 
         # Test line comment
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1)
@@ -192,9 +198,9 @@ class P(param.Parameterized):
     def tmp(self):
         ..."""
 
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=7, character=18)  # After the commented @param.depends(
 
         # Should NOT detect param.depends context
@@ -210,7 +216,8 @@ class P(param.Parameterized):
         server = ParamLanguageServer("test-server", "1.0.0")
 
         # Test inline comment
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1)
@@ -219,9 +226,9 @@ class P(param.Parameterized):
     def tmp(self):  # @param.depends(
         ..."""
 
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
-        lines = [str(line) for line in code.split("\n")]
+        lines = [str(line) for line in code_py.split("\n")]
         position = Position(line=7, character=30)  # After the inline commented @param.depends(
 
         # Should NOT detect param.depends context

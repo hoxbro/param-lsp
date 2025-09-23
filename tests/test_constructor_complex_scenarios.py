@@ -12,7 +12,7 @@ class TestConstructorComplexScenarios:
         """Test constructor validation with cross-file inheritance."""
         # This would require setting up a workspace with multiple files
         # For now, we'll test the scenario within a single file that simulates cross-file inheritance
-        code = """
+        code_py = """\
 import param
 
 # Simulate base class from another file
@@ -27,7 +27,7 @@ LocalChild(base_x=42, base_name="test", child_value=50)        # All valid
 LocalChild(base_x="bad", base_name=123, child_value=150)       # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -48,7 +48,7 @@ LocalChild(base_x="bad", base_name=123, child_value=150)       # All should erro
 
     def test_constructor_with_diamond_inheritance(self):
         """Test constructor validation with diamond inheritance pattern."""
-        code = """
+        code_py = """\
 import param
 
 class Base(param.Parameterized):
@@ -78,7 +78,7 @@ Diamond(
 )  # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -101,7 +101,7 @@ Diamond(
 
     def test_constructor_with_parameter_shadowing(self):
         """Test constructor validation when parameters are shadowed in inheritance."""
-        code = """
+        code_py = """\
 import param
 
 class Parent(param.Parameterized):
@@ -116,7 +116,7 @@ Child(x=42, y=10)      # Valid - x is Integer in Child, y is Integer
 Child(x="bad", y="bad") # Both should error - x expects Integer, y expects Integer
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -130,7 +130,7 @@ Child(x="bad", y="bad") # Both should error - x expects Integer, y expects Integ
 
     def test_constructor_with_multiple_inheritance_conflicts(self):
         """Test constructor validation with conflicting parameter types from multiple inheritance."""
-        code = """
+        code_py = """\
 import param
 
 class MixinA(param.Parameterized):
@@ -149,7 +149,7 @@ Combined(shared="string", a_only=42, b_only=True, own_param=3.14)  # String valu
 Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer value
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Verify the analyzer chose one consistent type for 'shared'
@@ -165,7 +165,7 @@ Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer val
 
     def test_constructor_with_complex_bounds_scenarios(self):
         """Test constructor validation with complex bounds scenarios."""
-        code = """
+        code_py = """\
 import param
 
 class ComplexBounds(param.Parameterized):
@@ -178,7 +178,7 @@ ComplexBounds(percentage=0.01, angle=-180, probability=0.5, positive_int=10)   #
 ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        # Multiple errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Verify bounds are correctly extracted including None bounds
@@ -211,7 +211,7 @@ ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        #
 
     def test_constructor_with_numeric_edge_values(self):
         """Test constructor validation with numeric edge values."""
-        code = """
+        code_py = """\
 import param
 
 class NumericEdges(param.Parameterized):
@@ -223,7 +223,7 @@ NumericEdges(small_float=1e-8, big_int=1500000, precise=0.5)    # All valid
 NumericEdges(small_float=1e-11, big_int=3000000, precise=1.0)   # All outside bounds
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -234,7 +234,7 @@ NumericEdges(small_float=1e-11, big_int=3000000, precise=1.0)   # All outside bo
 
     def test_constructor_with_realistic_class_hierarchy(self):
         """Test constructor validation with realistic class hierarchy."""
-        code = """
+        code_py = """\
 import param
 
 class Shape(param.Parameterized):
@@ -268,7 +268,7 @@ ColoredRectangle(
 )  # Multiple errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert (
@@ -288,7 +288,7 @@ ColoredRectangle(
 
     def test_constructor_with_nested_class_definitions(self):
         """Test constructor validation with nested class definitions."""
-        code = """
+        code_py = """\
 import param
 
 class Outer(param.Parameterized):
@@ -303,7 +303,7 @@ Outer(outer_param=123)                        # Should error
 Outer.Inner(inner_param="bad")                # Should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Verify both nested and outer classes are recognized
@@ -337,7 +337,7 @@ Outer.Inner(inner_param="bad")                # Should error
 
     def test_constructor_with_method_call_patterns(self):
         """Test constructor validation with method call patterns that look like constructors."""
-        code = """
+        code_py = """\
 import param
 
 class Factory:
@@ -352,7 +352,7 @@ instance = factory.create_instance(x=42)      # Should not error - method call
 direct = SomeClass(x="bad")                   # Should error - direct constructor
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -363,7 +363,7 @@ direct = SomeClass(x="bad")                   # Should error - direct constructo
 
     def test_constructor_with_comprehensions_and_generators(self):
         """Test constructor validation with comprehensions and generator expressions."""
-        code = """
+        code_py = """\
 import param
 
 class Container(param.Parameterized):
@@ -376,7 +376,7 @@ Container(items=(x for x in range(5)))                     # Generator to List -
 Container(items="not_a_list")                              # Should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # The analyzer should detect the direct string assignment
@@ -388,7 +388,7 @@ Container(items="not_a_list")                              # Should error
 
     def test_constructor_performance_with_many_parameters(self):
         """Test constructor validation performance with many parameters."""
-        code = """
+        code_py = """\
 import param
 
 class ManyParams(param.Parameterized):
@@ -414,7 +414,7 @@ ManyParams(
 )  # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 10  # All parameters should have errors

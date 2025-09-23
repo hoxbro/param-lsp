@@ -248,12 +248,12 @@ class TestCacheIntegration:
         external_library_cache.get = Mock(return_value=test_data)
 
         try:
-            code = """
+            code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 w.value = "invalid"  # should error
 """
-            result = analyzer.analyze_file(code)
+            result = analyzer.analyze_file(code_py)
 
             # Verify cache was called
             external_library_cache.get.assert_called_with("panel", "panel.widgets.IntSlider")
@@ -278,11 +278,11 @@ w.value = "invalid"  # should error
         external_library_cache.set = Mock()
 
         try:
-            code = """
+            code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 """
-            analyzer.analyze_file(code)
+            analyzer.analyze_file(code_py)
 
             # Verify cache set was called
             external_library_cache.set.assert_called()

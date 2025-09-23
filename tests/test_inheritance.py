@@ -8,7 +8,7 @@ class TestParameterInheritance:
 
     def test_basic_inheritance(self, analyzer):
         """Test basic parameter inheritance from param.Parameterized."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -20,7 +20,7 @@ class S(P):
 S().b = "a"
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -36,7 +36,7 @@ S().b = "a"
 
     def test_multi_level_inheritance(self, analyzer):
         """Test inheritance across multiple levels."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -54,7 +54,7 @@ T().b = "not_bool"
 T().name = 123
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -78,7 +78,7 @@ T().name = 123
 
     def test_parameter_overriding(self, analyzer):
         """Test parameter overriding in child classes."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -90,7 +90,7 @@ class S(P):
 S().value = 123  # Should error - expecting string now
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -107,7 +107,7 @@ S().value = 123  # Should error - expecting string now
 
     def test_inheritance_with_bounds(self, analyzer):
         """Test that parameter bounds are inherited correctly."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -120,7 +120,7 @@ S().x = 15  # Should violate inherited bounds
 S().y = 10  # Should violate local bounds
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -135,7 +135,7 @@ S().y = 10  # Should violate local bounds
 
     def test_inheritance_with_docs(self, analyzer):
         """Test that parameter documentation is inherited correctly."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -145,7 +145,7 @@ class S(P):
     y = param.String("test", doc="Child parameter")
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -156,7 +156,7 @@ class S(P):
 
     def test_complex_inheritance_chain(self, analyzer):
         """Test complex inheritance with multiple parents and parameters."""
-        code = """
+        code_py = """\
 import param
 
 class Base(param.Parameterized):
@@ -177,7 +177,7 @@ C().a_param = "not_int"   # Should error
 C().c_param = "not_num"   # Should error
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # All classes should be recognized
         expected_classes = {"Base", "A", "B", "C"}
@@ -197,7 +197,7 @@ C().c_param = "not_num"   # Should error
 
     def test_inheritance_processing_order(self, analyzer):
         """Test that classes are processed in correct dependency order."""
-        code = """
+        code_py = """\
 import param
 
 # Define child before parent to test processing order
@@ -210,7 +210,7 @@ class P(param.Parameterized):
 S().x = "not_int"  # Should detect error for inherited parameter
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]

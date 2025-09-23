@@ -8,7 +8,7 @@ class TestParameterTypeChecking:
 
     def test_valid_parameter_types(self, analyzer):
         """Test that valid parameter types don't generate errors."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -21,21 +21,21 @@ class TestClass(param.Parameterized):
     dict_param = param.Dict(default={})
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "TestClass" in result["param_classes"]
         assert len(result["type_errors"]) == 0
 
     def test_string_type_mismatch(self, analyzer):
         """Test String parameter with non-string default."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
     string_param = param.String(default=123)
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 1
         error = result["type_errors"][0]
@@ -46,14 +46,14 @@ class TestClass(param.Parameterized):
 
     def test_integer_type_mismatch(self, analyzer):
         """Test Integer parameter with non-integer default."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
     int_param = param.Integer(default="not_int")
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 1
         error = result["type_errors"][0]
@@ -64,7 +64,7 @@ class TestClass(param.Parameterized):
 
     def test_boolean_type_strict_checking(self, analyzer):
         """Test Boolean parameter strict type checking (should only accept True/False)."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -73,7 +73,7 @@ class TestClass(param.Parameterized):
     bool_with_string = param.Boolean(default="yes")
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should have 3 errors - Boolean parameters should only accept True/False
         assert len(result["type_errors"]) == 3
@@ -84,7 +84,7 @@ class TestClass(param.Parameterized):
 
     def test_boolean_valid_values(self, analyzer):
         """Test Boolean parameter with valid True/False values."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -92,13 +92,13 @@ class TestClass(param.Parameterized):
     bool_false = param.Boolean(default=False)
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
 
     def test_number_type_accepts_int_and_float(self, analyzer):
         """Test Number parameter accepts both int and float."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -106,13 +106,13 @@ class TestClass(param.Parameterized):
     number_float = param.Number(default=5.5)
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
 
     def test_list_tuple_dict_types(self, analyzer):
         """Test List, Tuple, and Dict parameter types."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -126,7 +126,7 @@ class TestClass(param.Parameterized):
     dict_wrong = param.Dict(default=[])
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should have 3 errors for the wrong types
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
@@ -134,7 +134,7 @@ class TestClass(param.Parameterized):
 
     def test_parameter_with_different_import_styles(self, analyzer):
         """Test parameter detection with different import styles."""
-        code = """
+        code_py = """\
 import param as p
 from param import Integer, String
 
@@ -144,7 +144,7 @@ class TestClass(p.Parameterized):
     param3 = Integer(default="invalid") # Error
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "TestClass" in result["param_classes"]
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
@@ -152,7 +152,7 @@ class TestClass(p.Parameterized):
 
     def test_non_param_classes_ignored(self, analyzer):
         """Test that non-param classes are ignored."""
-        code = """
+        code_py = """\
 import param
 
 class RegularClass:
@@ -162,7 +162,7 @@ class ParamClass(param.Parameterized):
     param_attr = param.String(default="valid")
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert result["param_classes"] == {"ParamClass"}
         assert "RegularClass" not in result["param_classes"]

@@ -14,7 +14,8 @@ class TestConstructorCompletion:
         """Test basic constructor parameter completion functionality."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1, doc="An integer parameter")
@@ -24,7 +25,7 @@ class P(param.Parameterized):
 P("""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion at end of P(
         position = Position(line=7, character=2)  # After P(
@@ -48,7 +49,8 @@ P("""
         """Test constructor parameter completion when user has typed 'x='."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=42, doc="An integer parameter")
@@ -58,7 +60,7 @@ class P(param.Parameterized):
 P(x="""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion at end of P(x=
         position = Position(line=7, character=4)  # After P(x=
@@ -77,7 +79,8 @@ P(x="""
         """Test constructor completion with some parameters already provided."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=1)
@@ -88,7 +91,7 @@ class P(param.Parameterized):
 P(x=5, """
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion after existing parameter
         position = Position(line=7, character=7)  # After P(x=5,
@@ -108,7 +111,8 @@ P(x=5, """
         """Test constructor completion for parameters without default values."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer()  # No default
@@ -118,7 +122,7 @@ class P(param.Parameterized):
 P("""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion at end of P(
         position = Position(line=6, character=2)  # After P(
@@ -142,7 +146,8 @@ P("""
         """Test completion when user typed 'x=' but parameter has no default."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer()  # No default
@@ -152,7 +157,7 @@ class P(param.Parameterized):
 P(x="""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion at end of P(x=
         position = Position(line=6, character=4)  # After P(x=
@@ -167,7 +172,8 @@ P(x="""
         """Test constructor completion with inherited parameters."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class Base(param.Parameterized):
     base_param = param.String(default="base")
@@ -179,7 +185,7 @@ class Child(Base):
 Child("""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion for Child constructor
         position = Position(line=9, character=6)  # After Child(
@@ -198,7 +204,8 @@ Child("""
         """Test that completion includes bounds information in documentation."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param
+        code_py = """\
+import param
 
 class P(param.Parameterized):
     x = param.Integer(default=5, bounds=(0, 10), doc="An integer with bounds")
@@ -208,7 +215,7 @@ class P(param.Parameterized):
 P("""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion at end of P(
         position = Position(line=6, character=2)  # After P(
@@ -237,7 +244,8 @@ P("""
         """Test constructor completion with different param import styles."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
-        code = """import param as p
+        code_py = """\
+import param as p
 
 class P(p.Parameterized):
     x = p.Integer(default=42)
@@ -246,7 +254,7 @@ class P(p.Parameterized):
 P("""
 
         # Simulate document analysis
-        server._analyze_document("file:///test.py", code)
+        server._analyze_document("file:///test.py", code_py)
 
         # Test completion with param imported as 'p'
         position = Position(line=6, character=2)  # After P(

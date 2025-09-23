@@ -14,13 +14,13 @@ class TestExternalParameterizedClasses:
 
     def test_panel_widget_runtime_assignment(self, analyzer):
         """Test runtime assignment type checking for Panel widgets."""
-        code = """
+        code_py = """\
 import panel as pn
 
 w = pn.widgets.IntSlider()
 w.value = "2"  # should error - expects int
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect external param class
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -35,7 +35,7 @@ w.value = "2"  # should error - expects int
 
     def test_panel_widget_constructor_type_checking(self, analyzer):
         """Test constructor type checking for Panel widgets."""
-        code = """
+        code_py = """\
 import panel as pn
 
 # Valid constructor
@@ -47,7 +47,7 @@ w2 = pn.widgets.IntSlider(value="5")
 # Invalid constructor - boolean type mismatch
 w3 = pn.widgets.Checkbox(value="true")
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect external param classes
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -70,7 +70,7 @@ w3 = pn.widgets.Checkbox(value="true")
 
     def test_holoviews_element_support(self, analyzer):
         """Test HoloViews element support."""
-        code = """
+        code_py = """
 import holoviews as hv
 
 # Valid assignments
@@ -81,7 +81,7 @@ curve.label = "test"
 scatter = hv.Scatter([(1, 2), (3, 4)])
 scatter.label = 123  # should error - expects str
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect external param classes
         assert "holoviews.Curve" in analyzer.external_param_classes
@@ -95,7 +95,7 @@ scatter.label = 123  # should error - expects str
 
     def test_holoviews_constructor_type_checking(self, analyzer):
         """Test HoloViews constructor type checking."""
-        code = """
+        code_py = """
 import holoviews as hv
 
 # Valid constructor
@@ -104,7 +104,7 @@ scatter1 = hv.Scatter([(1, 2), (3, 4)], label="test")
 # Invalid constructor - type mismatch
 scatter2 = hv.Scatter([(1, 2), (3, 4)], label=123)
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect external param class
         assert "holoviews.Scatter" in analyzer.external_param_classes
@@ -117,7 +117,7 @@ scatter2 = hv.Scatter([(1, 2), (3, 4)], label=123)
 
     def test_multiple_external_libraries(self, analyzer):
         """Test support for multiple external libraries in the same file."""
-        code = """
+        code_py = """\
 import panel as pn
 import holoviews as hv
 
@@ -129,7 +129,7 @@ w.value = "invalid"
 curve = hv.Curve([1, 2, 3])
 curve.label = 999
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect both external param classes
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -140,12 +140,12 @@ curve.label = 999
 
     def test_external_class_parameter_introspection(self, analyzer):
         """Test that external class parameters are properly introspected."""
-        code = """
+        code_py = """\
 import panel as pn
 
 w = pn.widgets.IntSlider()
 """
-        analyzer.analyze_file(code)
+        analyzer.analyze_file(code_py)
 
         # Should have introspected the class
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -183,13 +183,13 @@ w2 = pn.widgets.IntSlider()
 
     def test_non_parameterized_external_classes_ignored(self, analyzer):
         """Test that non-Parameterized external classes are ignored."""
-        code = """
+        code_py = """
 import json
 
 # This should not be detected as a param class
 data = json.loads('{"key": "value"}')
 """
-        analyzer.analyze_file(code)
+        analyzer.analyze_file(code_py)
 
         # Should not detect any external param classes
         valid_external_classes = [
@@ -201,14 +201,14 @@ data = json.loads('{"key": "value"}')
         """Test that inheritance from external Parameterized classes works."""
         # Note: This test might require the external classes to be available
         # in the current environment, so we'll test the introspection capability
-        code = """
+        code_py = """\
 import panel as pn
 
 # Create a widget that should inherit from param.Parameterized
 w = pn.widgets.TextInput()
 w.value = 123  # should error - expects str
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect the external class
         assert "panel.widgets.TextInput" in analyzer.external_param_classes
@@ -227,7 +227,7 @@ w.value = 123  # should error - expects str
 
     def test_example2_mixed_libraries(self, analyzer):
         """Test the updated example2.py with both Panel and HoloViews."""
-        code = """
+        code_py = """
 from __future__ import annotations
 
 import holoviews as hv
@@ -240,7 +240,7 @@ p.group = 1
 
 w.value = "2"  # should error
 """
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should detect both external param classes
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes

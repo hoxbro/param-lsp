@@ -8,7 +8,7 @@ class TestBoundsValidation:
 
     def test_valid_bounds_definition(self, analyzer):
         """Test valid bounds definitions don't generate errors."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -16,7 +16,7 @@ class TestClass(param.Parameterized):
     number_param = param.Number(default=2.5, bounds=(0.0, 5.0))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
         assert "TestClass" in result["param_parameter_bounds"]
@@ -26,7 +26,7 @@ class TestClass(param.Parameterized):
 
     def test_invalid_bounds_min_greater_than_max(self, analyzer):
         """Test bounds where min >= max generates error."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -34,7 +34,7 @@ class TestClass(param.Parameterized):
     invalid_bounds2 = param.Number(bounds=(5.0, 5.0))  # min == max
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         invalid_bounds_errors = [e for e in result["type_errors"] if e["code"] == "invalid-bounds"]
         assert len(invalid_bounds_errors) == 2
@@ -45,7 +45,7 @@ class TestClass(param.Parameterized):
 
     def test_default_value_outside_bounds(self, analyzer):
         """Test default values outside bounds generate errors."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -55,7 +55,7 @@ class TestClass(param.Parameterized):
     float_too_high = param.Number(default=6.0, bounds=(0.0, 5.0))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         bounds_violation_errors = [
             e for e in result["type_errors"] if e["code"] == "default-bounds-violation"
@@ -69,7 +69,7 @@ class TestClass(param.Parameterized):
 
     def test_inclusive_bounds_violations(self, analyzer):
         """Test inclusive_bounds parameter affects bound checking."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -84,7 +84,7 @@ class TestClass(param.Parameterized):
     valid_inclusive_right = param.Number(default=0.0, bounds=(0, 5), inclusive_bounds=(True, False))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         bounds_violation_errors = [
             e for e in result["type_errors"] if e["code"] == "default-bounds-violation"
@@ -102,7 +102,7 @@ class TestClass(param.Parameterized):
 
     def test_default_inclusive_bounds(self, analyzer):
         """Test that bounds are inclusive by default."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -111,7 +111,7 @@ class TestClass(param.Parameterized):
     at_max = param.Integer(default=10, bounds=(0, 10))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         bounds_violation_errors = [
             e for e in result["type_errors"] if e["code"] == "default-bounds-violation"
@@ -120,7 +120,7 @@ class TestClass(param.Parameterized):
 
     def test_bounds_extraction_and_storage(self, analyzer):
         """Test that bounds are correctly extracted and stored."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -129,7 +129,7 @@ class TestClass(param.Parameterized):
     exclusive_bounds = param.Number(default=2.5, bounds=(0, 5), inclusive_bounds=(False, True))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         bounds = result["param_parameter_bounds"]["TestClass"]
 
@@ -150,7 +150,7 @@ class TestClass(param.Parameterized):
 
     def test_negative_bounds(self, analyzer):
         """Test bounds with negative numbers."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -158,7 +158,7 @@ class TestClass(param.Parameterized):
     mixed_bounds = param.Number(default=0.0, bounds=(-10.0, 10.0))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
         bounds = result["param_parameter_bounds"]["TestClass"]
@@ -167,7 +167,7 @@ class TestClass(param.Parameterized):
 
     def test_bounds_with_non_numeric_parameters(self, analyzer):
         """Test that bounds are only checked for numeric parameter types."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -176,7 +176,7 @@ class TestClass(param.Parameterized):
     number_param = param.Number(default=15, bounds=(0, 10))          # Should be checked
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Only the Number parameter should generate bounds violation
         bounds_violation_errors = [
@@ -187,7 +187,7 @@ class TestClass(param.Parameterized):
 
     def test_empty_default_with_bounds_warning(self, analyzer):
         """Test warning for empty default values with bounds specified."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -195,7 +195,7 @@ class TestClass(param.Parameterized):
     empty_tuple_with_bounds = param.Tuple(default=(), bounds=(1, 3))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         empty_default_warnings = [
             e for e in result["type_errors"] if e["code"] == "empty-default-with-bounds"

@@ -8,7 +8,7 @@ class TestIntegration:
 
     def test_complete_analysis_workflow(self, analyzer):
         """Test complete analysis workflow with all features."""
-        code = """
+        code_py = """
 from __future__ import annotations
 import param
 
@@ -57,7 +57,7 @@ example.count = 0               # Bounds violation
 example.ratio = 0               # Exclusive bounds violation
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Verify class detection
         assert "CompleteExample" in result["param_classes"]
@@ -116,7 +116,7 @@ example.ratio = 0               # Exclusive bounds violation
 
     def test_real_world_example(self, analyzer):
         """Test with a realistic param class example."""
-        code = '''
+        code_py = '''
 import param
 
 class DataProcessor(param.Parameterized):
@@ -172,7 +172,7 @@ processor.learning_rate = 1.5       # Bounds error
 processor.use_gpu = 1              # Boolean type error
 '''
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Verify comprehensive analysis
         assert "DataProcessor" in result["param_classes"]
@@ -211,7 +211,7 @@ processor.use_gpu = 1              # Boolean type error
 
     def test_edge_cases_and_corner_cases(self, analyzer):
         """Test edge cases and corner cases."""
-        code = """
+        code_py = """\
 import param
 
 class EdgeCases(param.Parameterized):
@@ -245,7 +245,7 @@ edge.extreme_bounds = 1e9        # Valid (within bounds)
 edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Verify all edge cases are handled
         assert "EdgeCases" in result["param_classes"]
@@ -268,7 +268,7 @@ edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
     def test_error_recovery_and_robustness(self, analyzer):
         """Test that the analyzer recovers gracefully from syntax errors and edge cases."""
         # Test with some invalid syntax mixed with valid param code
-        code = """
+        code_py = """\
 import param
 
 class ValidClass(param.Parameterized):
@@ -279,7 +279,7 @@ class ValidClass(param.Parameterized):
 """
 
         # This should not crash the analyzer
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Should still extract the valid parts
         assert "ValidClass" in result["param_classes"]

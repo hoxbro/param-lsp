@@ -10,7 +10,7 @@ class TestConstructorIntegration:
 
     def test_constructor_validation_with_existing_runtime_checks(self):
         """Test that constructor validation works alongside existing runtime assignment checks."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -29,7 +29,7 @@ instance3 = P(x=10, y=20)  # Constructor error on y
 instance3.x = "runtime_bad"  # Runtime error on x
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -44,7 +44,7 @@ instance3.x = "runtime_bad"  # Runtime error on x
 
     def test_constructor_validation_with_inheritance_and_runtime(self):
         """Test constructor validation with inheritance and runtime assignments."""
-        code = """
+        code_py = """\
 import param
 
 class Base(param.Parameterized):
@@ -62,7 +62,7 @@ child2.base_x = "runtime_bad"
 child2.child_y = 456
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -76,7 +76,7 @@ child2.child_y = 456
 
     def test_constructor_validation_with_bounds_and_defaults(self):
         """Test constructor validation works with parameter bounds and default values."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -91,7 +91,7 @@ P(y=5)           # Valid - within bounds despite bad default
 P(z=123)         # Invalid - wrong type
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have errors for:
@@ -113,7 +113,7 @@ P(z=123)         # Invalid - wrong type
 
     def test_constructor_validation_with_doc_strings(self):
         """Test that constructor validation works with parameter documentation."""
-        code = """
+        code_py = """\
 import param
 
 class DocumentedClass(param.Parameterized):
@@ -128,7 +128,7 @@ DocumentedClass(x=42, y="test", z=True)
 DocumentedClass(x="bad", y=123, z="false")
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have 3 constructor errors
@@ -143,7 +143,7 @@ DocumentedClass(x="bad", y=123, z="false")
 
     def test_constructor_validation_with_import_resolution(self):
         """Test constructor validation with different import styles."""
-        code = """
+        code_py = """
 # Test various import styles
 import param
 import param as p
@@ -169,7 +169,7 @@ Style2(x=2)
 Style3(x=3)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have exactly 3 constructor errors (one for each bad call)
@@ -182,7 +182,7 @@ Style3(x=3)
 
     def test_constructor_validation_comprehensive_workflow(self):
         """Test complete workflow with all validation features enabled."""
-        code = """
+        code_py = """\
 import param
 
 class CompleteExample(param.Parameterized):
@@ -230,7 +230,7 @@ extended = ExtendedExample(
 extended.priority = 10  # Runtime bounds error on new parameter
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have many errors from different validation types
@@ -254,7 +254,7 @@ extended.priority = 10  # Runtime bounds error on new parameter
 
     def test_constructor_validation_error_recovery(self):
         """Test that constructor validation continues after errors."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -272,7 +272,7 @@ P(x=42)
 P(x="error4")
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should catch all 4 errors and not stop after first

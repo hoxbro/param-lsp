@@ -8,7 +8,7 @@ class TestDocExtraction:
 
     def test_doc_parameter_extraction(self, analyzer):
         """Test that doc parameters are correctly extracted."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -25,7 +25,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         assert "TestClass" in result["param_parameter_docs"]
         docs = result["param_parameter_docs"]["TestClass"]
@@ -43,7 +43,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_different_quote_types(self, analyzer):
         """Test doc parameter extraction with different quote types."""
-        code = '''
+        code_py = '''
 import param
 
 class TestClass(param.Parameterized):
@@ -52,7 +52,7 @@ class TestClass(param.Parameterized):
     triple_quotes = param.String(default="test", doc="""Triple quoted documentation""")
 '''
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -62,7 +62,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_special_characters(self, analyzer):
         """Test doc parameter extraction with special characters."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -77,7 +77,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -89,7 +89,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_parameter_order_independence(self, analyzer):
         """Test that doc parameter works regardless of parameter order."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -111,7 +111,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -121,7 +121,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_bounds_and_other_parameters(self, analyzer):
         """Test doc extraction alongside other parameter attributes."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -135,7 +135,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Check that doc is extracted
         docs = result["param_parameter_docs"]["TestClass"]
@@ -154,7 +154,7 @@ class TestClass(param.Parameterized):
 
     def test_empty_doc_parameter(self, analyzer):
         """Test handling of empty doc parameters."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -162,7 +162,7 @@ class TestClass(param.Parameterized):
     none_doc = param.String(default="test", doc=None)  # This would be a runtime error, but test parsing
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -175,7 +175,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_with_different_import_styles(self, analyzer):
         """Test doc extraction with different import styles."""
-        code = """
+        code_py = """\
 import param as p
 from param import String, Integer
 
@@ -185,7 +185,7 @@ class TestClass(p.Parameterized):
     no_doc = Integer(default=5)
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -199,7 +199,7 @@ class TestClass(p.Parameterized):
 
     def test_multiple_classes_doc_extraction(self, analyzer):
         """Test doc extraction across multiple param classes."""
-        code = """
+        code_py = """\
 import param
 
 class ClassA(param.Parameterized):
@@ -212,7 +212,7 @@ class ClassC(param.Parameterized):
     param_c = param.Boolean(default=True)  # No doc
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]
 
@@ -227,7 +227,7 @@ class ClassC(param.Parameterized):
 
     def test_doc_parameter_with_complex_expressions(self, analyzer):
         """Test that only simple string literals are extracted for doc."""
-        code = """
+        code_py = """\
 import param
 
 DOC_CONSTANT = "Constant documentation"
@@ -241,7 +241,7 @@ class TestClass(param.Parameterized):
     method_doc = param.String(default="test", doc=str("method call"))
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -256,7 +256,7 @@ class TestClass(param.Parameterized):
 
     def test_doc_storage_structure(self, analyzer):
         """Test the structure of doc storage in analysis results."""
-        code = """
+        code_py = """\
 import param
 
 class TestClass(param.Parameterized):
@@ -264,7 +264,7 @@ class TestClass(param.Parameterized):
     param2 = param.Integer(default=5, doc="Doc 2")
 """
 
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
 
         # Check that param_parameter_docs is in the result
         assert "param_parameter_docs" in result

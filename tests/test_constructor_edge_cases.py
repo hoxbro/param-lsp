@@ -10,7 +10,7 @@ class TestConstructorEdgeCases:
 
     def test_constructor_with_nested_calls(self):
         """Test constructor calls with nested function calls as arguments."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -27,7 +27,7 @@ P(x=get_number(), name=get_string())  # Should not error - can't infer return ty
 P(x="direct_string")                  # Should error - direct string literal
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should only error on the direct string literal, not the function calls
@@ -36,7 +36,7 @@ P(x="direct_string")                  # Should error - direct string literal
 
     def test_constructor_with_variables(self):
         """Test constructor calls with variables as arguments."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -46,7 +46,7 @@ my_var = "string"
 P(x=my_var)  # Should not error - can't infer variable types at static analysis time
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should not error since we can't infer variable types
@@ -54,7 +54,7 @@ P(x=my_var)  # Should not error - can't infer variable types at static analysis 
 
     def test_constructor_with_expressions(self):
         """Test constructor calls with arithmetic expressions."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -66,7 +66,7 @@ P(x=1.5 + 2.5)  # Should not error - can't determine result type statically
 P(y=10 / 2)     # Should not error - arithmetic expression
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should not error since we don't evaluate expressions
@@ -74,7 +74,7 @@ P(y=10 / 2)     # Should not error - arithmetic expression
 
     def test_constructor_with_class_attributes(self):
         """Test constructor calls using class attributes."""
-        code = """
+        code_py = """\
 import param
 
 class Constants:
@@ -88,7 +88,7 @@ class P(param.Parameterized):
 P(x=Constants.VALUE, name=Constants.NAME)  # Should not error - can't infer attribute types
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should not error since we don't resolve class attributes
@@ -96,7 +96,7 @@ P(x=Constants.VALUE, name=Constants.NAME)  # Should not error - can't infer attr
 
     def test_constructor_with_kwargs_dict(self):
         """Test constructor calls with **kwargs expansion."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -108,7 +108,7 @@ P(**params)  # Should not error - can't analyze **kwargs
 P(x=5, **params)  # Should not error - can't analyze **kwargs
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should not error since we skip **kwargs
@@ -116,7 +116,7 @@ P(x=5, **params)  # Should not error - can't analyze **kwargs
 
     def test_constructor_chained_calls(self):
         """Test chained constructor calls."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -131,7 +131,7 @@ p1 = factory.create_p()  # Should not error
 p2 = P(x="error")        # Should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -139,7 +139,7 @@ p2 = P(x="error")        # Should error
 
     def test_constructor_with_list_comprehension(self):
         """Test constructor with list comprehension arguments."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -149,7 +149,7 @@ P(items=[x for x in range(10)])  # Should not error - list comprehension creates
 P(items="not a list")            # Should error - direct string
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -157,7 +157,7 @@ P(items="not a list")            # Should error - direct string
 
     def test_constructor_with_complex_literals(self):
         """Test constructor with complex literal values."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -171,7 +171,7 @@ P(items=[[1, 2], [3, 4]])                  # Valid nested list
 P(data=[1, 2, 3])                          # Should error - list to Dict
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -179,7 +179,7 @@ P(data=[1, 2, 3])                          # Should error - list to Dict
 
     def test_constructor_with_empty_collections(self):
         """Test constructor with empty collection literals."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -193,7 +193,7 @@ P(coords=())      # Valid empty tuple
 P(items={})       # Should error - dict to List
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -201,7 +201,7 @@ P(items={})       # Should error - dict to List
 
     def test_constructor_with_multiple_classes_same_param_name(self):
         """Test constructor validation with multiple classes having same parameter names."""
-        code = """
+        code_py = """\
 import param
 
 class ClassA(param.Parameterized):
@@ -216,7 +216,7 @@ ClassA(value="bad")  # Should error - string to Integer in ClassA
 ClassB(value=123)    # Should error - integer to String in ClassB
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -232,7 +232,7 @@ ClassB(value=123)    # Should error - integer to String in ClassB
 
     def test_constructor_with_scientific_notation(self):
         """Test constructor with scientific notation numbers."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -244,7 +244,7 @@ P(large=1e10)    # Valid large scientific notation
 P(small=1e3)     # Should error - outside bounds (1000 > 1)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -255,7 +255,7 @@ P(small=1e3)     # Should error - outside bounds (1000 > 1)
 
     def test_constructor_with_boolean_edge_cases(self):
         """Test constructor with various boolean-like values."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -270,7 +270,7 @@ P(flag="false")   # Should error - string not boolean
 P(flag=None)      # Should error - None not boolean (unless allow_None=True)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 5  # All non-boolean values should error
@@ -293,7 +293,7 @@ P(flag=None)      # Should error - None not boolean (unless allow_None=True)
 
     def test_constructor_zero_and_negative_zero(self):
         """Test constructor with zero and negative zero edge cases."""
-        code = """
+        code_py = """\
 import param
 
 class P(param.Parameterized):
@@ -306,7 +306,7 @@ P(non_negative=0)  # Valid - left inclusive
 P(non_negative=-0.0) # Valid - left inclusive
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code)
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
