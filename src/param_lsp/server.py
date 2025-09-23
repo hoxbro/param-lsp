@@ -127,53 +127,71 @@ class ParamLanguageServer(LanguageServer):
         # Publish diagnostics
         self.publish_diagnostics(uri, diagnostics)
 
+    def _is_in_param_definition_context(self, line: str, character: int) -> bool:
+        """Check if we're in a parameter definition context like param.String("""
+        before_cursor = line[:character]
+
+        # Check for patterns like param.ParameterType(
+        param_def_pattern = re.compile(r"param\.([A-Z]\w*)\s*\([^)]*$")
+        match = param_def_pattern.search(before_cursor)
+
+        if match:
+            param_type = match.group(1)
+            # Check if it's a valid param type
+            return param_type in self.param_types
+
+        return False
+
     def _get_completions_for_param_class(self, line: str, character: int) -> list[CompletionItem]:
         """Get completions for param class attributes and methods."""
 
-        # Add parameter types with enhanced documentation
-        completions = []
-        for param_type in self.param_types:
-            documentation = f"Param parameter type: {param_type}"
+        # Only show param types when typing after "param."
+        before_cursor = line[:character]
+        if before_cursor.rstrip().endswith("param."):
+            completions = []
+            for param_type in self.param_types:
+                documentation = f"Param parameter type: {param_type}"
 
-            # Try to get actual documentation from param module
-            if param:
-                try:
-                    param_class = getattr(param, param_type, None)
-                    if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
-                        # Extract first line of docstring for concise documentation
-                        doc_lines = param_class.__doc__.strip().split("\n")
-                        if doc_lines:
-                            documentation = doc_lines[0].strip()
-                except (AttributeError, TypeError):
-                    pass
+                # Try to get actual documentation from param module
+                if param:
+                    try:
+                        param_class = getattr(param, param_type, None)
+                        if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
+                            # Extract first line of docstring for concise documentation
+                            doc_lines = param_class.__doc__.strip().split("\n")
+                            if doc_lines:
+                                documentation = doc_lines[0].strip()
+                    except (AttributeError, TypeError):
+                        pass
 
-            completions.append(
-                CompletionItem(
-                    label=param_type,
-                    kind=CompletionItemKind.Class,
-                    detail=f"param.{param_type}",
-                    documentation=documentation,
+                completions.append(
+                    CompletionItem(
+                        label=param_type,
+                        kind=CompletionItemKind.Class,
+                        detail=f"param.{param_type}",
+                        documentation=documentation,
+                    )
                 )
-            )
+            return completions
 
-        # Add common parameter arguments with detailed documentation
-        param_args = [
-            ("default", "Default value for the parameter"),
-            ("doc", "Documentation string describing the parameter"),
-            ("label", "Human-readable name for the parameter"),
-            ("precedence", "Numeric precedence for parameter ordering"),
-            ("instantiate", "Whether to instantiate the default value per instance"),
-            ("constant", "Whether the parameter value cannot be changed after construction"),
-            ("readonly", "Whether the parameter value can be modified after construction"),
-            ("allow_None", "Whether None is allowed as a valid value"),
-            ("per_instance", "Whether the parameter is stored per instance"),
-            ("bounds", "Tuple of (min, max) values for numeric parameters"),
-            ("inclusive_bounds", "Tuple of (left_inclusive, right_inclusive) booleans"),
-            ("softbounds", "Tuple of (soft_min, soft_max) for suggested ranges"),
-        ]
+        # Show parameter arguments only when inside param.ParameterType(...)
+        elif self._is_in_param_definition_context(line, character):
+            param_args = [
+                ("default", "Default value for the parameter"),
+                ("doc", "Documentation string describing the parameter"),
+                ("label", "Human-readable name for the parameter"),
+                ("precedence", "Numeric precedence for parameter ordering"),
+                ("instantiate", "Whether to instantiate the default value per instance"),
+                ("constant", "Whether the parameter value cannot be changed after construction"),
+                ("readonly", "Whether the parameter value can be modified after construction"),
+                ("allow_None", "Whether None is allowed as a valid value"),
+                ("per_instance", "Whether the parameter is stored per instance"),
+                ("bounds", "Tuple of (min, max) values for numeric parameters"),
+                ("inclusive_bounds", "Tuple of (left_inclusive, right_inclusive) booleans"),
+                ("softbounds", "Tuple of (soft_min, soft_max) for suggested ranges"),
+            ]
 
-        completions.extend(
-            [
+            return [
                 CompletionItem(
                     label=arg_name,
                     kind=CompletionItemKind.Property,
@@ -182,9 +200,62 @@ class ParamLanguageServer(LanguageServer):
                 )
                 for arg_name, arg_doc in param_args
             ]
-        )
 
-        return completions
+        # Don't show any generic completions in other contexts
+        return []
+
+    def _is_in_constructor_context(self, uri: str, line: str, character: int) -> bool:
+        """Check if the cursor is in a param class constructor context."""
+        if uri not in self.document_cache:
+            return False
+
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = analysis.get("param_classes", set())
+
+        # Find which param class constructor is being called
+        before_cursor = line[:character]
+
+        # Check both patterns for constructor detection
+        match = CONSTRUCTOR_CALL_PATTERN.search(before_cursor)
+        if not match:
+            match = CONSTRUCTOR_CALL_INSIDE_PATTERN.search(before_cursor)
+
+        if match:
+            class_name = match.group(2)
+
+            # Check if this is a known param class
+            if class_name in param_classes:
+                return True
+
+            # Check if this is an external param class
+            analyzer = self.document_cache[uri]["analyzer"]
+
+            # Resolve the full class path using import aliases
+            full_class_path = None
+            if "." in class_name:
+                # Handle dotted names like hv.Curve
+                parts = class_name.split(".")
+                if len(parts) >= 2:
+                    alias = parts[0]
+                    class_part = ".".join(parts[1:])
+                    if alias in analyzer.imports:
+                        full_module = analyzer.imports[alias]
+                        full_class_path = f"{full_module}.{class_part}"
+                    else:
+                        full_class_path = class_name
+            else:
+                # Simple class name - check if it's in external classes directly
+                full_class_path = class_name
+
+            # Check if this resolved class is in external_param_classes
+            external_class_info = analyzer.external_param_classes.get(full_class_path)
+            if external_class_info is None and full_class_path:
+                external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+            if external_class_info:
+                return True
+
+        return False
 
     def _get_constructor_parameter_completions(
         self, uri: str, line: str, character: int
@@ -697,6 +768,10 @@ class ParamLanguageServer(LanguageServer):
             if param_name in used_params:
                 continue
 
+            # Skip the 'name' parameter as it's rarely used in decorators
+            if param_name == "name":
+                continue
+
             # Filter based on partial text being typed
             if partial_text and not param_name.startswith(partial_text):
                 continue
@@ -1008,6 +1083,11 @@ def completion(params: CompletionParams) -> CompletionList:
         # Mark as complete and ensure all items are visible
         completion_list = CompletionList(is_incomplete=False, items=constructor_completions)
         return completion_list
+
+    # Check if we're in a constructor context but have no completions (all params used)
+    # In this case, don't fall back to generic param completions
+    if server._is_in_constructor_context(uri, current_line, position.character):
+        return CompletionList(is_incomplete=False, items=[])
 
     # Get completions based on general context
     completions = server._get_completions_for_param_class(current_line, position.character)
