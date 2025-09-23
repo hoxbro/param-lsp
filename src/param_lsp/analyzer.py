@@ -79,35 +79,55 @@ class ParamAnalyzer:
 
     def analyze_file(self, content: str, file_path: str | None = None) -> dict[str, Any]:
         """Analyze a Python file for Param usage."""
+        tree = None
         try:
             tree = ast.parse(content)
             self._reset_analysis()
             self._current_file_path = file_path
         except SyntaxError:
             # Try to handle incomplete code (e.g., unclosed parentheses during typing)
-            # Find and remove lines that cause syntax errors
             lines = content.split("\n")
 
-            # Try removing lines with incomplete syntax from the end
-            for i in range(1, len(lines) + 1):
-                # Try parsing without the last i lines
-                truncated_content = "\n".join(lines[:-i] if i < len(lines) else [])
-
-                if not truncated_content.strip():
-                    continue  # Skip empty content
-
+            # First, try to fix common incomplete syntax patterns
+            fixed_content = self._try_fix_incomplete_syntax(lines)
+            if fixed_content != content:
                 try:
-                    tree = ast.parse(truncated_content)
+                    tree = ast.parse(fixed_content)
                     self._reset_analysis()
                     self._current_file_path = file_path
-                    logger.info(f"Successfully parsed after removing {i} lines with syntax errors")
-                    break
+                    logger.info("Successfully parsed after fixing incomplete syntax")
+                    # Continue with the fixed content
                 except SyntaxError:
-                    continue
-            else:
-                # If we couldn't parse even with all lines removed, give up
-                logger.error("Could not parse file due to syntax errors")
-                return {}
+                    pass  # Fall back to line removal approach
+
+            # If fixing didn't work, try removing lines with incomplete syntax from the end
+            if tree is None:
+                for i in range(1, len(lines) + 1):
+                    # Try parsing without the last i lines
+                    truncated_content = "\n".join(lines[:-i] if i < len(lines) else [])
+
+                    if not truncated_content.strip():
+                        continue  # Skip empty content
+
+                    try:
+                        tree = ast.parse(truncated_content)
+                        self._reset_analysis()
+                        self._current_file_path = file_path
+                        logger.info(
+                            f"Successfully parsed after removing {i} lines with syntax errors"
+                        )
+                        break
+                    except SyntaxError:
+                        continue
+                else:
+                    # If we couldn't parse even with all lines removed, give up
+                    logger.error("Could not parse file due to syntax errors")
+                    return {}
+
+        # At this point, tree should be assigned, but add safety check
+        if tree is None:
+            logger.error("Failed to parse file - tree is None")
+            return {}
 
         # First pass: collect imports
         for node in ast.walk(tree):
@@ -286,13 +306,24 @@ class ParamAnalyzer:
             )
             if imported_class_info:
                 return True
-        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
-            module = base.value.id
-            return (module == "param" and base.attr == "Parameterized") or (
-                module in self.imports
-                and self.imports[module].endswith("param")
-                and base.attr == "Parameterized"
-            )
+        elif isinstance(base, ast.Attribute):
+            # Handle simple case: param.Parameterized
+            if isinstance(base.value, ast.Name):
+                module = base.value.id
+                if (module == "param" and base.attr == "Parameterized") or (
+                    module in self.imports
+                    and self.imports[module].endswith("param")
+                    and base.attr == "Parameterized"
+                ):
+                    return True
+
+            # Handle complex attribute access like pn.widgets.IntSlider
+            full_class_path = self._resolve_full_class_path(base)
+            if full_class_path:
+                # Check if this external class is a Parameterized class
+                class_info = self._analyze_external_class_ast(full_class_path)
+                if class_info:
+                    return True
         return False
 
     def _collect_inherited_parameters(
@@ -356,6 +387,35 @@ class ParamAnalyzer:
                         parent_docs = imported_class_info.get("parameter_docs", {})
                         parent_allow_none = imported_class_info.get("parameter_allow_none", {})
                         parent_defaults = imported_class_info.get("parameter_defaults", {})
+
+                        # Add parent parameters (avoid duplicates)
+                        for param in parent_params:
+                            if param not in inherited_parameters:
+                                inherited_parameters.append(param)
+                            if param in parent_types:
+                                inherited_parameter_types[param] = parent_types[param]
+                            if param in parent_bounds:
+                                inherited_parameter_bounds[param] = parent_bounds[param]
+                            if param in parent_docs:
+                                inherited_parameter_docs[param] = parent_docs[param]
+                            if param in parent_allow_none:
+                                inherited_parameter_allow_none[param] = parent_allow_none[param]
+                            if param in parent_defaults:
+                                inherited_parameter_defaults[param] = parent_defaults[param]
+
+            elif isinstance(base, ast.Attribute):
+                # Handle complex attribute access like pn.widgets.IntSlider
+                full_class_path = self._resolve_full_class_path(base)
+                if full_class_path:
+                    # Check if this external class is a Parameterized class
+                    class_info = self._analyze_external_class_ast(full_class_path)
+                    if class_info:
+                        parent_params = class_info.get("parameters", [])
+                        parent_types = class_info.get("parameter_types", {})
+                        parent_bounds = class_info.get("parameter_bounds", {})
+                        parent_docs = class_info.get("parameter_docs", {})
+                        parent_allow_none = class_info.get("parameter_allow_none", {})
+                        parent_defaults = class_info.get("parameter_defaults", {})
 
                         # Add parent parameters (avoid duplicates)
                         for param in parent_params:
@@ -1459,6 +1519,39 @@ class ParamAnalyzer:
             class_info = None
 
         return class_info
+
+    def _try_fix_incomplete_syntax(self, lines: list[str]) -> str:
+        """Try to fix common incomplete syntax patterns."""
+        fixed_lines = []
+
+        for line in lines:
+            fixed_line = line
+
+            # Fix incomplete imports like "from param" -> "import param"
+            if line.strip().startswith("from param") and " import " not in line:
+                fixed_line = "import param"
+
+            # Fix incomplete @param.depends( by adding closing parenthesis and quotes
+            elif "@param.depends(" in line and ")" not in line:
+                # Handle unclosed quotes in @param.depends
+                if '"' in line and line.count('"') % 2 == 1:
+                    # Unclosed double quote
+                    fixed_line = line + '")'
+                elif "'" in line and line.count("'") % 2 == 1:
+                    # Unclosed single quote
+                    fixed_line = line + "')"
+                else:
+                    # No quotes or balanced quotes, just add closing parenthesis
+                    fixed_line = line + ")"
+
+            # Fix incomplete function definitions after @param.depends
+            elif line.strip().startswith("def ") and line.endswith(": ..."):
+                # Make it a proper function definition
+                fixed_line = line.replace(": ...", ":\n        pass")
+
+            fixed_lines.append(fixed_line)
+
+        return "\n".join(fixed_lines)
 
     def _introspect_external_class_runtime(self, full_class_path: str) -> dict[str, Any] | None:
         """Introspect an external class using runtime imports for allowed libraries."""

@@ -688,9 +688,16 @@ class ParamLanguageServer(LanguageServer):
         # Find already used parameters to avoid duplicates
         used_params = self._extract_used_depends_parameters_multiline(lines, position)
 
+        # Extract partial text being typed to filter completions
+        partial_text = self._extract_partial_parameter_text(lines, position)
+
         for param_name in parameters:
             # Skip parameters that are already used
             if param_name in used_params:
+                continue
+
+            # Filter based on partial text being typed
+            if partial_text and not param_name.startswith(partial_text):
                 continue
 
             # Build documentation for the parameter
@@ -769,6 +776,38 @@ class ParamLanguageServer(LanguageServer):
                         return True
 
         return False
+
+    def _extract_partial_parameter_text(self, lines: list[str], position: Position) -> str:
+        """Extract the partial parameter text being typed."""
+        if position.line >= len(lines):
+            return ""
+
+        line = lines[position.line]
+        text_before_cursor = line[: position.character]
+
+        # Look for partial string being typed in quotes
+        # Pattern: @param.depends("partial_text or @param.depends('partial_text
+
+        # Find the last opening quote before cursor and extract text after it
+        # Look for unmatched quotes (incomplete strings)
+
+        # Find all quote positions
+        double_quotes = [m.start() for m in re.finditer(r'"', text_before_cursor)]
+        single_quotes = [m.start() for m in re.finditer(r"'", text_before_cursor)]
+
+        # Check for unclosed double quote
+        if double_quotes and len(double_quotes) % 2 == 1:
+            # Odd number of double quotes means unclosed string
+            last_quote_pos = double_quotes[-1]
+            return text_before_cursor[last_quote_pos + 1 :]
+
+        # Check for unclosed single quote
+        if single_quotes and len(single_quotes) % 2 == 1:
+            # Odd number of single quotes means unclosed string
+            last_quote_pos = single_quotes[-1]
+            return text_before_cursor[last_quote_pos + 1 :]
+
+        return ""
 
     def _find_containing_class(self, lines: list[str], current_line: int) -> str | None:
         """Find the class that contains the current line."""
