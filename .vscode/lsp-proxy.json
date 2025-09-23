@@ -1,0 +1,5 @@
+{
+  "languageId": "python",
+  "command": "param-lsp",
+  "fileExtensions": [".py"]
+}
