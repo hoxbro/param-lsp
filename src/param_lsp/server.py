@@ -45,6 +45,7 @@ CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*\w*$", re.MULTILINE
 )
 PARAM_ASSIGNMENT_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*=", re.MULTILINE)
+CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN = re.compile(r"\b(\w+)\s*=")
 CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
 QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
 
@@ -298,9 +299,9 @@ class ParamLanguageServer(LanguageServer):
                 else:
                     # Normal case - suggest all unused parameters
                     used_params = set()
-                    used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
-                    # Extract param names from tuples (prefix, param_name)
-                    used_params.update(match[1] for match in used_matches)
+                    used_matches = CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+                    # Extract param names - returns simple strings for constructor context
+                    used_params.update(used_matches)
 
                     for param_name in parameters:
                         # Skip parameters that are already used
@@ -409,8 +410,8 @@ class ParamLanguageServer(LanguageServer):
 
                     # Handle parameter suggestions same as local classes
                     used_params = set()
-                    used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
-                    used_params.update(match[1] for match in used_matches)
+                    used_matches = CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+                    used_params.update(used_matches)
 
                     for param_name in parameters:
                         if param_name in used_params:

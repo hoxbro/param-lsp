@@ -307,3 +307,34 @@ hv.Curve("""
         assert not any("name" in label for label in completion_labels), (
             "Should NOT suggest name parameter for hv.Curve constructors"
         )
+
+    def test_constructor_completion_no_duplicate_parameters(self):
+        """Test that already-used parameters are not suggested again."""
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        code_py = """\
+import param
+
+
+class P(param.Parameterized):
+    x = param.Integer(default=1, allow_None=True)
+    y = param.Integer(default=21)
+
+P(x=1, y=21, """
+
+        # Simulate document analysis
+        server._analyze_document("file:///test.py", code_py)
+
+        # Test completion after both parameters are already used
+        line = "P(x=1, y=21, "
+        completions = server._get_constructor_parameter_completions(
+            "file:///test.py", line, len(line)
+        )
+
+        # Should not suggest any parameters since both x and y are already used
+        # (name parameter is filtered out for constructors)
+        assert len(completions) == 0, f"Expected 0 completions, got {len(completions)}"
+
+        completion_labels = [item.label for item in completions]
+        assert "x=1" not in completion_labels, "Should NOT suggest 'x=1' - already used"
+        assert "y=21" not in completion_labels, "Should NOT suggest 'y=21' - already used"
