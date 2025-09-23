@@ -90,6 +90,7 @@ ignore = [
     "E741", # Ambiguous variable name
     "PLR2004", # magic-value-comparison
     "PLR09", # Branches
+    "PERF203", # Try/except inside loop
 ]
 extend-unsafe-fixes = [
     "F401", # unused imports

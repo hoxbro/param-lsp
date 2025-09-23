@@ -74,6 +74,9 @@ class ParamAnalyzer:
             str, dict[str, Any] | None
         ] = {}  # full_class_path -> class_info
 
+        # Populate external library cache on initialization
+        self._populate_external_library_cache()
+
     def analyze_file(self, content: str, file_path: str | None = None) -> dict[str, Any]:
         """Analyze a Python file for Param usage."""
         try:
@@ -1604,3 +1607,162 @@ class ParamAnalyzer:
                 full_class_path = self._resolve_full_class_path(node.func)
                 if full_class_path:
                     self._analyze_external_class_ast(full_class_path)
+
+    def _populate_external_library_cache(self):
+        """Populate the external library cache with all param.Parameterized classes on startup."""
+        # Check if cache already has data to avoid unnecessary repopulation
+        cache_files = list(external_library_cache.cache_dir.glob("*.json"))
+        if cache_files:
+            logger.debug(
+                f"External library cache already populated ({len(cache_files)} files), skipping"
+            )
+            return
+
+        logger.info("Populating external library cache...")
+
+        # Import available libraries first to avoid try-except in loop
+        available_libraries = []
+        for library_name in ALLOWED_EXTERNAL_LIBRARIES:
+            try:
+                library = importlib.import_module(library_name)
+                available_libraries.append((library_name, library))
+            except ImportError:
+                logger.debug(f"Library {library_name} not available, skipping cache population")
+
+        # Process available libraries
+        for library_name, library in available_libraries:
+            logger.info(f"Discovering param.Parameterized classes in {library_name}...")
+            classes_found = self._discover_param_classes_in_library(library, library_name)
+            logger.info(f"Found {classes_found} param.Parameterized classes in {library_name}")
+
+        logger.info("External library cache population complete")
+
+    def _discover_param_classes_in_library(self, library, library_name: str) -> int:
+        """Discover and cache all param.Parameterized classes in a library."""
+        classes_cached = 0
+
+        # Get all classes in the library
+        all_classes = self._get_all_classes_in_module(library)
+
+        for cls in all_classes:
+            try:
+                # Check if it's a subclass of param.Parameterized
+                if issubclass(cls, param.Parameterized) and cls != param.Parameterized:
+                    module_name = getattr(cls, "__module__", "unknown")
+                    class_name = getattr(cls, "__name__", "unknown")
+                    full_path = f"{module_name}.{class_name}"
+
+                    # Check if already cached to avoid unnecessary work
+                    existing = external_library_cache.get(library_name, full_path)
+                    if existing:
+                        continue
+
+                    # Introspect and cache the class
+                    cache_data = self._introspect_param_class_for_cache(cls)
+                    if cache_data:
+                        external_library_cache.set(library_name, full_path, cache_data)
+                        classes_cached += 1
+
+            except (TypeError, AttributeError):
+                # Skip classes that can't be processed
+                continue
+
+        return classes_cached
+
+    def _get_all_classes_in_module(
+        self, module, visited_modules: set[str] | None = None
+    ) -> list[type]:
+        """Recursively get all classes in a module and its submodules."""
+        if visited_modules is None:
+            visited_modules = set()
+
+        module_name = getattr(module, "__name__", str(module))
+        if module_name in visited_modules:
+            return []
+        visited_modules.add(module_name)
+
+        classes = []
+
+        # Get all attributes in the module
+        for name in dir(module):
+            if name.startswith("_"):
+                continue
+
+            try:
+                attr = getattr(module, name)
+
+                # Check if it's a class
+                if isinstance(attr, type):
+                    classes.append(attr)
+
+                # Check if it's a submodule
+                elif hasattr(attr, "__name__") and hasattr(attr, "__file__"):
+                    attr_module_name = attr.__name__
+                    # Only recurse into submodules of the current module
+                    if attr_module_name.startswith(module_name + "."):
+                        classes.extend(self._get_all_classes_in_module(attr, visited_modules))
+
+            except (ImportError, AttributeError, TypeError):
+                # Skip attributes that can't be imported or accessed
+                continue
+
+        return classes
+
+    def _introspect_param_class_for_cache(self, cls) -> dict[str, Any] | None:
+        """Introspect a param.Parameterized class and return cache-ready data."""
+        try:
+            # Extract parameter information using param's introspection
+            parameters = []
+            parameter_types = {}
+            parameter_bounds = {}
+            parameter_docs = {}
+            parameter_allow_none = {}
+            parameter_defaults = {}
+
+            if hasattr(cls, "param"):
+                for param_name in cls.param.values():
+                    if param_name == "name":  # Skip the 'name' parameter
+                        continue
+
+                    parameters.append(param_name)
+
+                    # Get parameter object for detailed info
+                    param_obj = getattr(cls.param, param_name, None)
+                    if param_obj:
+                        # Get parameter type
+                        param_type_name = type(param_obj).__name__
+                        parameter_types[param_name] = param_type_name
+
+                        # Get bounds if present
+                        if hasattr(param_obj, "bounds") and param_obj.bounds is not None:
+                            bounds = param_obj.bounds
+                            # Handle inclusive bounds
+                            if hasattr(param_obj, "inclusive_bounds"):
+                                inclusive_bounds = param_obj.inclusive_bounds
+                                parameter_bounds[param_name] = (*bounds, *inclusive_bounds)
+                            else:
+                                parameter_bounds[param_name] = bounds
+
+                        # Get doc string
+                        if hasattr(param_obj, "doc") and param_obj.doc:
+                            parameter_docs[param_name] = param_obj.doc
+
+                        # Get allow_None
+                        if hasattr(param_obj, "allow_None"):
+                            parameter_allow_none[param_name] = param_obj.allow_None
+
+                        # Get default value
+                        if hasattr(param_obj, "default"):
+                            parameter_defaults[param_name] = str(param_obj.default)
+
+            return {
+                "parameters": parameters,
+                "parameter_types": parameter_types,
+                "parameter_bounds": parameter_bounds,
+                "parameter_docs": parameter_docs,
+                "parameter_allow_none": parameter_allow_none,
+                "parameter_defaults": parameter_defaults,
+            }
+
+        except Exception:
+            return None
