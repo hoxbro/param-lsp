@@ -227,73 +227,138 @@ class ParamLanguageServer(LanguageServer):
                 parameter_allow_none = param_parameter_allow_none.get(class_name, {})
                 parameter_defaults = param_parameter_defaults.get(class_name, {})
 
-                # Find already used parameters to avoid duplicates
-                used_params = set()
-                used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
-                used_params.update(used_matches)
-
+                # Check if user has typed a specific parameter assignment like "x="
+                specific_param_match = None
                 for param_name in parameters:
-                    # Skip parameters that are already used
-                    if param_name in used_params:
-                        continue
-                    # Build documentation for the parameter
-                    doc_parts = []
-
-                    # Add parameter type info
-                    param_type = parameter_types.get(param_name)
-                    if param_type:
-                        python_type = self._get_python_type_name(param_type)
-                        doc_parts.append(f"Type: {param_type} ({python_type})")
-
-                    # Add bounds info
-                    bounds = parameter_bounds.get(param_name)
-                    if bounds:
-                        if len(bounds) == 2:
-                            min_val, max_val = bounds
-                            doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
-                        elif len(bounds) == 4:
-                            min_val, max_val, left_inclusive, right_inclusive = bounds
-                            left_bracket = "[" if left_inclusive else "("
-                            right_bracket = "]" if right_inclusive else ")"
-                            doc_parts.append(
-                                f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}"
-                            )
-
-                    # Add allow_None info
-                    allow_none = parameter_allow_none.get(param_name, False)
-                    if allow_none:
-                        doc_parts.append("Allows None")
-
-                    # Add parameter-specific documentation
-                    param_doc = parameter_docs.get(param_name)
-                    if param_doc:
-                        doc_parts.append(f"Description: {param_doc}")
-
-                    documentation = (
-                        "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
+                    param_assignment_match = re.search(
+                        rf"\b{re.escape(param_name)}\s*=\s*$", before_cursor
                     )
+                    if param_assignment_match:
+                        specific_param_match = param_name
+                        break
 
-                    # Create insert text with default value if available
+                if specific_param_match:
+                    # User typed "param_name=", suggest only the default value for that parameter
+                    param_name = specific_param_match
                     default_value = parameter_defaults.get(param_name)
-                    if default_value is not None:
-                        insert_text = f"{param_name}={default_value}"
-                        label = f"{param_name}={default_value}"
-                    else:
-                        insert_text = f"{param_name}="
-                        label = param_name
 
-                    completions.append(
-                        CompletionItem(
-                            label=label,
-                            kind=CompletionItemKind.Property,
-                            detail=f"Parameter of {class_name}",
-                            documentation=documentation,
-                            insert_text=insert_text,
-                            filter_text=param_name,  # Help with filtering
-                            sort_text=f"{param_name:0>3}",  # Ensure stable sort order
-                            preselect=False,  # Don't auto-select, show all options
+                    if default_value is not None:
+                        display_value = self._format_default_for_display(default_value)
+
+                        # Build documentation for this specific parameter
+                        doc_parts = []
+                        param_type = parameter_types.get(param_name)
+                        if param_type:
+                            python_type = self._get_python_type_name(param_type)
+                            doc_parts.append(f"Type: {param_type} ({python_type})")
+
+                        bounds = parameter_bounds.get(param_name)
+                        if bounds:
+                            if len(bounds) == 2:
+                                min_val, max_val = bounds
+                                doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
+                            elif len(bounds) == 4:
+                                min_val, max_val, left_inclusive, right_inclusive = bounds
+                                left_bracket = "[" if left_inclusive else "("
+                                right_bracket = "]" if right_inclusive else ")"
+                                doc_parts.append(
+                                    f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}"
+                                )
+
+                        allow_none = parameter_allow_none.get(param_name, False)
+                        if allow_none:
+                            doc_parts.append("Allows None")
+
+                        param_doc = parameter_docs.get(param_name)
+                        if param_doc:
+                            doc_parts.append(f"Description: {param_doc}")
+
+                        documentation = (
+                            "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
                         )
-                    )
+
+                        completions.append(
+                            CompletionItem(
+                                label=f"{param_name}={display_value}",
+                                kind=CompletionItemKind.Property,
+                                detail=f"Default value for {param_name}",
+                                documentation=documentation,
+                                insert_text=display_value,
+                                filter_text=param_name,
+                                sort_text="0",  # Highest priority
+                                preselect=True,  # Auto-select the default value
+                            )
+                        )
+                else:
+                    # Normal case - suggest all unused parameters
+                    used_params = set()
+                    used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+                    used_params.update(used_matches)
+
+                    for param_name in parameters:
+                        # Skip parameters that are already used
+                        if param_name in used_params:
+                            continue
+
+                        # Build documentation for the parameter
+                        doc_parts = []
+
+                        # Add parameter type info
+                        param_type = parameter_types.get(param_name)
+                        if param_type:
+                            python_type = self._get_python_type_name(param_type)
+                            doc_parts.append(f"Type: {param_type} ({python_type})")
+
+                        # Add bounds info
+                        bounds = parameter_bounds.get(param_name)
+                        if bounds:
+                            if len(bounds) == 2:
+                                min_val, max_val = bounds
+                                doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
+                            elif len(bounds) == 4:
+                                min_val, max_val, left_inclusive, right_inclusive = bounds
+                                left_bracket = "[" if left_inclusive else "("
+                                right_bracket = "]" if right_inclusive else ")"
+                                doc_parts.append(
+                                    f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}"
+                                )
+
+                        # Add allow_None info
+                        allow_none = parameter_allow_none.get(param_name, False)
+                        if allow_none:
+                            doc_parts.append("Allows None")
+
+                        # Add parameter-specific documentation
+                        param_doc = parameter_docs.get(param_name)
+                        if param_doc:
+                            doc_parts.append(f"Description: {param_doc}")
+
+                        documentation = (
+                            "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
+                        )
+
+                        # Create insert text with default value if available
+                        default_value = parameter_defaults.get(param_name)
+                        if default_value is not None:
+                            display_value = self._format_default_for_display(default_value)
+                            insert_text = f"{param_name}={display_value}"
+                            label = f"{param_name}={display_value}"
+                        else:
+                            insert_text = f"{param_name}="
+                            label = param_name
+
+                        completions.append(
+                            CompletionItem(
+                                label=label,
+                                kind=CompletionItemKind.Property,
+                                detail=f"Parameter of {class_name}",
+                                documentation=documentation,
+                                insert_text=insert_text,
+                                filter_text=param_name,  # Help with filtering
+                                sort_text=f"{param_name:0>3}",  # Ensure stable sort order
+                                preselect=False,  # Don't auto-select, show all options
+                            )
+                        )
 
         return completions
 
@@ -309,6 +374,24 @@ class ParamLanguageServer(LanguageServer):
                 # Single type like int -> "int"
                 return python_types.__name__
         return param_type.lower()
+
+    def _format_default_for_display(self, default_value: str) -> str:
+        """Format default value for autocomplete display, removing unnecessary quotes."""
+        # If it's a quoted string, remove the quotes for display
+        if (
+            default_value.startswith("'")
+            and default_value.endswith("'")
+            and len(default_value) >= 2
+        ):
+            return default_value[1:-1]  # Remove single quotes
+        elif (
+            default_value.startswith('"')
+            and default_value.endswith('"')
+            and len(default_value) >= 2
+        ):
+            return default_value[1:-1]  # Remove double quotes
+        else:
+            return default_value  # Return as-is for numbers, booleans, etc.
 
     def _get_hover_info(self, uri: str, line: str, word: str) -> str | None:
         """Get hover information for a word."""
