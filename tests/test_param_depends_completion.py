@@ -177,6 +177,63 @@ class Child(Base):
         assert '"base_param"' in completion_labels, "Should suggest inherited parameter"
         assert '"child_param"' in completion_labels, "Should suggest own parameter"
 
+    def test_param_depends_ignores_commented_lines(self):
+        """Test that commented param.depends lines are ignored."""
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        # Test line comment
+        code = """import param
+
+class P(param.Parameterized):
+    x = param.Integer(default=1)
+    y = param.Integer(default=21)
+
+    # @param.depends(
+    def tmp(self):
+        ..."""
+
+        server._analyze_document("file:///test.py", code)
+
+        lines = [str(line) for line in code.split("\n")]
+        position = Position(line=7, character=18)  # After the commented @param.depends(
+
+        # Should NOT detect param.depends context
+        is_in_depends = server._is_in_param_depends_decorator(lines, position)
+        assert not is_in_depends, "Should not detect param.depends context in commented line"
+
+        # Should not provide param.depends completions
+        completions = server._get_param_depends_completions("file:///test.py", lines, position)
+        assert len(completions) == 0, "Should not provide completions for commented param.depends"
+
+    def test_param_depends_ignores_inline_comments(self):
+        """Test that inline commented param.depends are ignored."""
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        # Test inline comment
+        code = """import param
+
+class P(param.Parameterized):
+    x = param.Integer(default=1)
+    y = param.Integer(default=21)
+
+    def tmp(self):  # @param.depends(
+        ..."""
+
+        server._analyze_document("file:///test.py", code)
+
+        lines = [str(line) for line in code.split("\n")]
+        position = Position(line=7, character=30)  # After the inline commented @param.depends(
+
+        # Should NOT detect param.depends context
+        is_in_depends = server._is_in_param_depends_decorator(lines, position)
+        assert not is_in_depends, "Should not detect param.depends context in inline comment"
+
+        # Should not provide param.depends completions
+        completions = server._get_param_depends_completions("file:///test.py", lines, position)
+        assert len(completions) == 0, (
+            "Should not provide completions for inline commented param.depends"
+        )
+
     def test_extract_used_depends_parameters(self):
         """Test extraction of already used parameters from param.depends line."""
         server = ParamLanguageServer("test-server", "1.0.0")

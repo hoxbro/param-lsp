@@ -39,7 +39,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Compiled regex patterns for performance
-PARAM_DEPENDS_PATTERN = re.compile(r"@param\.depends\s*\(")
+PARAM_DEPENDS_PATTERN = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)
 CONSTRUCTOR_CALL_PATTERN = re.compile(r"(\w+)\s*\([^)]*$")
 CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(r"(\w+)\s*\([^)]*\w*$")
 PARAM_ASSIGNMENT_PATTERN = re.compile(r"(\w+)\s*=")
@@ -594,7 +594,7 @@ class ParamLanguageServer(LanguageServer):
                 continue
             line = lines[line_idx]
 
-            # Check for @param.depends( pattern
+            # Check for @param.depends( pattern (regex automatically excludes commented cases)
             if PARAM_DEPENDS_PATTERN.search(line):
                 # Check if we're still inside the parentheses
                 if line_idx == position.line:
