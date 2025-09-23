@@ -683,14 +683,28 @@ def did_change(params: DidChangeTextDocumentParams):
                 else:
                     # Multi-line change
                     new_lines = change.text.split("\n")
-                    lines[start_line] = lines[start_line][:start_char] + new_lines[0]
-                    for i in range(start_line + 1, end_line + 1):
-                        if i < len(lines):
-                            del lines[start_line + 1]
-                    if len(new_lines) > 1:
-                        lines[start_line] += new_lines[-1] + lines[end_line][end_char:]
+
+                    # Get the text before the start position and after the end position
+                    prefix = lines[start_line][:start_char]
+                    suffix = lines[end_line][end_char:] if end_line < len(lines) else ""
+
+                    # Remove lines from end_line down to start_line + 1 (but keep start_line)
+                    for _ in range(end_line, start_line, -1):
+                        if _ < len(lines):
+                            del lines[_]
+
+                    # Handle the replacement
+                    if len(new_lines) == 1:
+                        # Single line replacement
+                        lines[start_line] = prefix + new_lines[0] + suffix
+                    else:
+                        # Multi-line replacement
+                        lines[start_line] = prefix + new_lines[0]
+                        # Insert middle lines
                         for i, new_line in enumerate(new_lines[1:-1], 1):
                             lines.insert(start_line + i, new_line)
+                        # Add the last line with suffix
+                        lines.insert(start_line + len(new_lines) - 1, new_lines[-1] + suffix)
 
                 content = "\n".join(lines)
             else:
