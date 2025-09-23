@@ -1,0 +1,76 @@
+{
+  "name": "param-lsp-vscode",
+  "displayName": "Param LSP",
+  "description": "Language Server Protocol support for HoloViz Param library",
+  "version": "0.1.0",
+  "publisher": "param-lsp",
+  "icon": "param-logo.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/holoviz-dev/param-lsp"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "python",
+    "param",
+    "holoviz",
+    "lsp",
+    "language-server"
+  ],
+  "activationEvents": [
+    "onLanguage:python"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "python",
+        "extensions": [".py"]
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Param LSP Configuration",
+      "properties": {
+        "param-lsp.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable Param LSP"
+        },
+        "param-lsp.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "install-ext": "code --install-extension *.vsix"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.2.2"
+  }
+}

@@ -7,3 +7,13 @@ _version.py
 
 .vscode
 .*_cache
+
+node_modules/
+out/
+*.vsix
+.vscode-test/
+.nyc_output/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
