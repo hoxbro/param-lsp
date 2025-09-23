@@ -1598,6 +1598,9 @@ class ParamAnalyzer:
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
+                    # Skip the 'name' parameter as it's rarely set in constructors
+                    if param_name == "name":
+                        continue
                     parameters.append(param_name)
 
                     if param_obj:
@@ -1809,6 +1812,9 @@ class ParamAnalyzer:
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
+                    # Skip the 'name' parameter as it's rarely set in constructors
+                    if param_name == "name":
+                        continue
                     parameters.append(param_name)
 
                     if param_obj:

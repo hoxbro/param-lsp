@@ -39,12 +39,11 @@ class T(pn.widgets.IntSlider):
         assert "start" in t_params
         assert "end" in t_params
         assert "step" in t_params
-        assert "name" in t_params  # From param.Parameterized base class
+        # Note: 'name' parameter is excluded from autocompletion
 
         # Verify parameter types are correctly inherited
         param_types = result["param_parameter_types"]["T"]
         assert param_types["value"] == "Integer"
-        assert param_types["name"] == "String"
 
     def test_panel_widget_chain_inheritance(self):
         """Test inheritance chain through Panel widgets."""
