@@ -57,21 +57,21 @@ class TestExternalLibraryCache:
             version = cache._get_library_version("nonexistent_lib")
             assert version is None
 
-    def test_cache_key_generation(self):
-        """Test cache key generation."""
+    def test_cache_path_generation(self):
+        """Test cache path generation produces different paths for different libraries/versions."""
         cache = ExternalLibraryCache()
-        key1 = cache._get_cache_key("panel", "1.0.0")
-        key2 = cache._get_cache_key("panel", "1.0.1")
-        key3 = cache._get_cache_key("holoviews", "1.0.0")
+        path1 = cache._get_cache_path("panel", "1.0.0")
+        path2 = cache._get_cache_path("panel", "1.0.1")
+        path3 = cache._get_cache_path("holoviews", "1.0.0")
 
-        # Keys should be different for different versions and libraries
-        assert key1 != key2
-        assert key1 != key3
-        assert key2 != key3
+        # Paths should be different for different versions and libraries
+        assert path1 != path2
+        assert path1 != path3
+        assert path2 != path3
 
-        # Same library and version should produce same key
-        key1_again = cache._get_cache_key("panel", "1.0.0")
-        assert key1 == key1_again
+        # Same library and version should produce same path
+        path1_again = cache._get_cache_path("panel", "1.0.0")
+        assert path1 == path1_again
 
     def test_cache_set_and_get(self, enable_cache_for_test):
         """Test setting and getting cache data."""
