@@ -40,10 +40,10 @@ logger = logging.getLogger(__name__)
 
 # Compiled regex patterns for performance
 PARAM_DEPENDS_PATTERN = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)
-CONSTRUCTOR_CALL_PATTERN = re.compile(r"(\w+)\s*\([^)]*$")
-CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(r"(\w+)\s*\([^)]*\w*$")
-PARAM_ASSIGNMENT_PATTERN = re.compile(r"(\w+)\s*=")
-CLASS_DEFINITION_PATTERN = re.compile(r"^class\s+(\w+)")
+CONSTRUCTOR_CALL_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*\([^)]*$", re.MULTILINE)
+CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*\([^)]*\w*$", re.MULTILINE)
+PARAM_ASSIGNMENT_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*=", re.MULTILINE)
+CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
 QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
 
 
@@ -216,7 +216,7 @@ class ParamLanguageServer(LanguageServer):
             match = CONSTRUCTOR_CALL_INSIDE_PATTERN.search(before_cursor)
 
         if match:
-            class_name = match.group(1)
+            class_name = match.group(2)
 
             # Check if this is a known param class
             if class_name in param_classes:
@@ -231,7 +231,7 @@ class ParamLanguageServer(LanguageServer):
                 specific_param_match = None
                 for param_name in parameters:
                     param_assignment_match = re.search(
-                        rf"\b{re.escape(param_name)}\s*=\s*$", before_cursor
+                        rf"^([^#]*?){re.escape(param_name)}\s*=\s*$", before_cursor, re.MULTILINE
                     )
                     if param_assignment_match:
                         specific_param_match = param_name
@@ -293,7 +293,8 @@ class ParamLanguageServer(LanguageServer):
                     # Normal case - suggest all unused parameters
                     used_params = set()
                     used_matches = PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
-                    used_params.update(used_matches)
+                    # Extract param names from tuples (prefix, param_name)
+                    used_params.update(match[1] for match in used_matches)
 
                     for param_name in parameters:
                         # Skip parameters that are already used
@@ -640,7 +641,7 @@ class ParamLanguageServer(LanguageServer):
             # Look for class definition
             match = CLASS_DEFINITION_PATTERN.match(line)
             if match:
-                class_name = match.group(1)
+                class_name = match.group(2)
                 return class_name
 
         return None
