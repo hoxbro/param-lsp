@@ -54,6 +54,9 @@ PARAM_ATTR_ACCESS_PATTERN = re.compile(
 PARAM_OBJECT_ATTR_ACCESS_PATTERN = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\..*$", re.MULTILINE
 )
+REACTIVE_EXPRESSION_PATTERN = re.compile(
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\.rx\(\)\..*$", re.MULTILINE
+)
 
 
 class ParamLanguageServer(LanguageServer):
@@ -1314,8 +1317,31 @@ class ParamLanguageServer(LanguageServer):
                 }
             )
 
+        # Parameter methods (available on all parameter types)
+        parameter_methods = {
+            "rx": "Create a reactive expression for this parameter",
+        }
+
         # Combine all available attributes
         all_attributes = {**common_attributes, **type_specific_attributes}
+
+        # Add parameter methods
+        for method_name, method_doc in parameter_methods.items():
+            # Filter based on partial text being typed
+            if partial_text and not method_name.startswith(partial_text):
+                continue
+
+            completions.append(
+                CompletionItem(
+                    label=f"{method_name}()",
+                    kind=CompletionItemKind.Method,
+                    detail=f"Parameter.{method_name}()",
+                    documentation=f"{method_doc}\n\nParameter type: {param_type}",
+                    insert_text=f"{method_name}()",
+                    filter_text=method_name,
+                    sort_text=f"0_{method_name}",  # Sort methods before properties
+                )
+            )
 
         # Create completion items for matching attributes
         for attr_name, attr_doc in all_attributes.items():
@@ -1332,6 +1358,155 @@ class ParamLanguageServer(LanguageServer):
                     insert_text=attr_name,
                     filter_text=attr_name,
                     sort_text=f"{attr_name:0>3}",
+                )
+            )
+
+        return completions
+
+    def _get_reactive_expression_completions(
+        self, uri: str, line: str, character: int
+    ) -> list[CompletionItem]:
+        """Get method completions for reactive expressions like P().param.x.rx().method."""
+        completions = []
+
+        if uri not in self.document_cache:
+            return completions
+
+        # Check if we're in a reactive expression context
+        before_cursor = line[:character]
+        match = REACTIVE_EXPRESSION_PATTERN.search(before_cursor)
+
+        if not match:
+            return completions
+
+        class_name = match.group(2)
+        param_name = match.group(3)
+
+        # Resolve the class name (could be a variable or class name)
+        analyzer = self.document_cache[uri]["analyzer"]
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = analysis.get("param_classes", set())
+        param_parameters = analysis.get("param_parameters", {})
+
+        resolved_class_name = self._resolve_class_name_from_context(uri, class_name, param_classes)
+
+        # Check if this is a valid parameter of a known class
+        parameters = []
+
+        if resolved_class_name and resolved_class_name in param_classes:
+            # Local class
+            parameters = param_parameters.get(resolved_class_name, [])
+        else:
+            # Check if it's an external param class
+            check_class_name = resolved_class_name if resolved_class_name else class_name
+            full_class_path = None
+
+            if "." in check_class_name:
+                # Handle dotted names like hv.Curve
+                parts = check_class_name.split(".")
+                if len(parts) >= 2:
+                    alias = parts[0]
+                    class_part = ".".join(parts[1:])
+                    if alias in analyzer.imports:
+                        full_module = analyzer.imports[alias]
+                        full_class_path = f"{full_module}.{class_part}"
+                    else:
+                        full_class_path = check_class_name
+            else:
+                # Simple class name
+                full_class_path = check_class_name
+
+            external_class_info = analyzer.external_param_classes.get(full_class_path)
+            if external_class_info is None and full_class_path:
+                external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+            if external_class_info:
+                parameters = external_class_info.get("parameters", [])
+
+        # Check if param_name is a valid parameter
+        if param_name not in parameters:
+            return completions
+
+        # Extract partial text being typed after .rx().
+        partial_text = ""
+        rx_method_match = re.search(rf"\.{re.escape(param_name)}\.rx\(\)\.(\w*)$", before_cursor)
+        if rx_method_match:
+            partial_text = rx_method_match.group(1)
+
+        # Reactive expression methods (from param documentation)
+        rx_methods = {
+            "and_": "Applies the `and` operator",
+            "bool": "Reactive version of `bool()`",
+            "in_": "Checks if value is in a collection",
+            "is_": "Checks object identity",
+            "is_not": "Checks absence of object identity",
+            "len": "Returns length of object",
+            "map": "Maps a function to collection items",
+            "or_": "Applies the `or` operator",
+            "pipe": "Pipes value into a function",
+            "updating": "Indicates if expression is currently updating",
+            "when": "Updates only when specific conditions are met",
+            "where": "Reactive ternary conditional",
+            "watch": "Triggers side-effect when expression outputs a new event",
+        }
+
+        # Reactive expression properties
+        rx_properties = {
+            "value": "Retrieves or sets the current value of the reactive expression",
+        }
+
+        # Add method completions
+        for method_name, method_doc in rx_methods.items():
+            # Filter based on partial text being typed
+            if partial_text and not method_name.startswith(partial_text):
+                continue
+
+            # Determine if method takes arguments
+            if method_name in [
+                "and_",
+                "in_",
+                "is_",
+                "is_not",
+                "or_",
+                "map",
+                "pipe",
+                "when",
+                "where",
+                "watch",
+            ]:
+                insert_text = f"{method_name}()"
+                label = f"{method_name}()"
+            else:
+                insert_text = f"{method_name}()"
+                label = f"{method_name}()"
+
+            completions.append(
+                CompletionItem(
+                    label=label,
+                    kind=CompletionItemKind.Method,
+                    detail=f"rx.{method_name}",
+                    documentation=f"{method_doc}\n\nReactive expression method for parameter '{param_name}'",
+                    insert_text=insert_text,
+                    filter_text=method_name,
+                    sort_text=f"0_{method_name}",  # Sort methods first
+                )
+            )
+
+        # Add property completions
+        for prop_name, prop_doc in rx_properties.items():
+            # Filter based on partial text being typed
+            if partial_text and not prop_name.startswith(partial_text):
+                continue
+
+            completions.append(
+                CompletionItem(
+                    label=prop_name,
+                    kind=CompletionItemKind.Property,
+                    detail=f"rx.{prop_name}",
+                    documentation=f"{prop_doc}\n\nReactive expression property for parameter '{param_name}'",
+                    insert_text=prop_name,
+                    filter_text=prop_name,
+                    sort_text=f"{prop_name:0>3}",
                 )
             )
 
@@ -1456,6 +1631,13 @@ def completion(params: CompletionParams) -> CompletionList:
     depends_completions = server._get_param_depends_completions(uri, lines, position)
     if depends_completions:
         return CompletionList(is_incomplete=False, items=depends_completions)
+
+    # Check if we're in a reactive expression context (e.g., P().param.x.rx().method)
+    rx_completions = server._get_reactive_expression_completions(
+        uri, current_line, position.character
+    )
+    if rx_completions:
+        return CompletionList(is_incomplete=False, items=rx_completions)
 
     # Check if we're in a Parameter object attribute access context (e.g., P().param.x.default)
     param_obj_attr_completions = server._get_param_object_attribute_completions(

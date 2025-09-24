@@ -44,6 +44,7 @@ P().param.x."""
         assert "label" in completion_labels, "Should suggest 'label' attribute"
         assert "owner" in completion_labels, "Should suggest 'owner' attribute"
         assert "allow_None" in completion_labels, "Should suggest 'allow_None' attribute"
+        assert "rx()" in completion_labels, "Should suggest 'rx()' method"
 
         # Check Integer-specific attributes
         assert "bounds" in completion_labels, "Should suggest 'bounds' attribute for Integer"
