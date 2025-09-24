@@ -49,7 +49,7 @@ CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN = re.compile(r"\b(\w+)\s*=")
 CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
 QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
 PARAM_ATTR_ACCESS_PATTERN = re.compile(
-    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\..*$", re.MULTILINE
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.?.*$", re.MULTILINE
 )
 PARAM_OBJECT_ATTR_ACCESS_PATTERN = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\..*$", re.MULTILINE
