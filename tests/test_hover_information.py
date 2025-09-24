@@ -70,7 +70,7 @@ class TestClass(param.Parameterized):
         hover_info = lsp_server._get_hover_info(uri, "exclusive_bounds", "exclusive_bounds")
 
         assert hover_info is not None
-        assert "Allowed types: int or float" in hover_info
+        assert "Allowed types: int | float" in hover_info
         assert "Bounds: `(0, 5]`" in hover_info
         assert "A number with exclusive left bound" in hover_info
 
@@ -97,7 +97,7 @@ class TestClass(param.Parameterized):
 
         # Check all components are present
         assert "**Number Parameter 'comprehensive_param'**" in hover_info
-        assert "Allowed types: int or float" in hover_info
+        assert "Allowed types: int | float" in hover_info
         assert "Bounds: `[1.0, 10.0)`" in hover_info  # Left inclusive, right exclusive
         assert "A comprehensive parameter with all the information" in hover_info
 
@@ -289,3 +289,77 @@ class TestClass(param.Parameterized):
         # Check structure with double newlines
         sections = hover_info.split("\n\n")
         assert len(sections) >= 2  # At least header and documentation
+
+    def test_hover_with_allow_none(self, lsp_server):
+        """Test hover information for parameters with allow_None=True."""
+        code_py = """\
+import param
+
+class TestClass(param.Parameterized):
+    optional_string = param.String(default=None, allow_None=True, doc="String that allows None")
+    optional_int = param.Integer(allow_None=True, doc="Integer that allows None")
+    required_string = param.String(default="required", doc="String that doesn't allow None")
+    default_none = param.Number(default=None, doc="Number with default=None (auto allow_None)")
+"""
+
+        uri = "file:///test.py"
+        lsp_server._analyze_document(uri, code_py)
+
+        # Test hover for string parameter with explicit allow_None=True
+        hover_info = lsp_server._get_hover_info(uri, "optional_string", "optional_string")
+
+        assert hover_info is not None
+        assert "String Parameter 'optional_string'" in hover_info
+        assert "Allowed types: str | None" in hover_info
+        assert "String that allows None" in hover_info
+
+        # Test hover for integer parameter with allow_None=True
+        hover_info = lsp_server._get_hover_info(uri, "optional_int", "optional_int")
+
+        assert hover_info is not None
+        assert "Integer Parameter 'optional_int'" in hover_info
+        assert "Allowed types: int | None" in hover_info
+        assert "Integer that allows None" in hover_info
+
+        # Test hover for parameter without allow_None (should not show None)
+        hover_info = lsp_server._get_hover_info(uri, "required_string", "required_string")
+
+        assert hover_info is not None
+        assert "String Parameter 'required_string'" in hover_info
+        assert "Allowed types: str" in hover_info  # Should NOT include None
+        assert "String that doesn't allow None" in hover_info
+
+        # Test hover for parameter with default=None (auto allow_None=True)
+        hover_info = lsp_server._get_hover_info(uri, "default_none", "default_none")
+
+        assert hover_info is not None
+        assert "Number Parameter 'default_none'" in hover_info
+        assert (
+            "Allowed types: int | float | None" in hover_info
+        )  # Should include None due to default=None
+        assert "Number with default=None" in hover_info
+
+    def test_hover_allow_none_with_bounds(self, lsp_server):
+        """Test hover information for parameters with both allow_None and bounds."""
+        code_py = """\
+import param
+
+class TestClass(param.Parameterized):
+    bounded_optional = param.Number(
+        default=5.0,
+        bounds=(0, 10),
+        allow_None=True,
+        doc="Number with bounds that allows None"
+    )
+"""
+
+        uri = "file:///test.py"
+        lsp_server._analyze_document(uri, code_py)
+
+        hover_info = lsp_server._get_hover_info(uri, "bounded_optional", "bounded_optional")
+
+        assert hover_info is not None
+        assert "Number Parameter 'bounded_optional'" in hover_info
+        assert "Allowed types: int | float | None" in hover_info
+        assert "Bounds: `[0, 10]`" in hover_info
+        assert "Number with bounds that allows None" in hover_info

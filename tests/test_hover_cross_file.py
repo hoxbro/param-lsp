@@ -262,3 +262,62 @@ obj.unknown_param = "value"  # This parameter doesn't exist
         # Test hover for known parameter works
         hover_known = server._get_hover_info(uri, "obj.known_param = 'value'", "known_param")
         assert hover_known is not None, "Should provide hover info for known parameter"
+
+    def test_hover_inherited_parameter_with_allow_none(self, tmp_path):
+        """Test hover information for inherited parameters with allow_None."""
+        # Create parent module with allow_None parameter
+        parent_file = tmp_path / "parent.py"
+        parent_file.write_text("""
+import param
+
+class Parent(param.Parameterized):
+    optional_value = param.String(default=None, allow_None=True, doc="String that allows None")
+    required_value = param.Integer(default=5, doc="Integer that doesn't allow None")
+""")
+
+        # Create child module
+        child_file = tmp_path / "child.py"
+        child_file.write_text("""
+import param
+from parent import Parent
+
+class Child(Parent):
+    pass
+
+Child().optional_value = None  # Should be valid
+Child().required_value = "invalid"  # Should be invalid
+""")
+
+        # Set up language server
+        server = ParamLanguageServer("param-lsp", "v0.1.0")
+        server.workspace_root = str(tmp_path)
+        server.analyzer = server.analyzer.__class__(str(tmp_path))
+
+        # Analyze the child file
+        with open(child_file) as f:
+            content = f.read()
+
+        uri = f"file://{child_file}"
+        server._analyze_document(uri, content)
+
+        # Test hover for inherited parameter with allow_None=True
+        hover_optional = server._get_hover_info(
+            uri, "Child().optional_value = None", "optional_value"
+        )
+        assert hover_optional is not None, (
+            "Should provide hover info for inherited parameter with allow_None"
+        )
+        assert "String Parameter 'optional_value'" in hover_optional
+        assert "Allowed types: str | None" in hover_optional
+        assert "String that allows None" in hover_optional
+
+        # Test hover for inherited parameter without allow_None
+        hover_required = server._get_hover_info(
+            uri, "Child().required_value = 'invalid'", "required_value"
+        )
+        assert hover_required is not None, (
+            "Should provide hover info for inherited parameter without allow_None"
+        )
+        assert "Integer Parameter 'required_value'" in hover_required
+        assert "Allowed types: int" in hover_required  # Should NOT include None
+        assert "Integer that doesn't allow None" in hover_required

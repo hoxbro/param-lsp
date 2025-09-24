@@ -562,18 +562,26 @@ class ParamLanguageServer(LanguageServer):
 
         return completions
 
-    def _get_python_type_name(self, param_type: str) -> str:
+    def _get_python_type_name(self, param_type: str, allow_none: bool = False) -> str:
         """Map param type to Python type name for hover display using existing param_type_map."""
         if param_type in self.analyzer.param_type_map:
             python_types = self.analyzer.param_type_map[param_type]
             if isinstance(python_types, tuple):
                 # Multiple types like (int, float) -> "int or float"
                 type_names = [t.__name__ for t in python_types]
-                return " or ".join(type_names)
             else:
                 # Single type like int -> "int"
-                return python_types.__name__
-        return param_type.lower()
+                type_names = [python_types.__name__]
+
+            # Add None if allow_None is True
+            if allow_none:
+                type_names.append("None")
+
+            return " | ".join(type_names)
+
+        # For unknown param types, just return the param type name
+        base_type = param_type.lower()
+        return f"{base_type} | None" if allow_none else base_type
 
     def _format_default_for_display(
         self, default_value: str, param_type: str | None = None
@@ -647,6 +655,7 @@ class ParamLanguageServer(LanguageServer):
             param_parameter_types = analysis.get("param_parameter_types", {})
             param_parameter_docs = analysis.get("param_parameter_docs", {})
             param_parameter_bounds = analysis.get("param_parameter_bounds", {})
+            param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
 
             for class_name, parameters in param_parameters.items():
                 if word in parameters:
@@ -656,6 +665,7 @@ class ParamLanguageServer(LanguageServer):
                         param_parameter_types,
                         param_parameter_docs,
                         param_parameter_bounds,
+                        param_parameter_allow_none,
                     )
                     if hover_info:
                         return hover_info
@@ -839,14 +849,19 @@ class ParamLanguageServer(LanguageServer):
         param_parameter_types: dict,
         param_parameter_docs: dict,
         param_parameter_bounds: dict,
+        param_parameter_allow_none: dict | None = None,
     ) -> str | None:
         """Build hover information for a local parameter."""
         param_type = param_parameter_types.get(class_name, {}).get(param_name)
 
         if param_type:
             hover_parts = [f"**{param_type} Parameter '{param_name}'**"]
-            # Map param types to Python types
-            python_type = self._get_python_type_name(param_type)
+            # Check if None is allowed for this parameter
+            allow_none = False
+            if param_parameter_allow_none:
+                allow_none = param_parameter_allow_none.get(class_name, {}).get(param_name, False)
+            # Map param types to Python types, including None if allowed
+            python_type = self._get_python_type_name(param_type, allow_none)
             hover_parts.append(f"Allowed types: {python_type}")
         else:
             hover_parts = [f"**Parameter '{param_name}' in class '{class_name}'**"]
@@ -880,8 +895,10 @@ class ParamLanguageServer(LanguageServer):
 
         if param_type:
             hover_parts = [f"**{param_type} Parameter '{param_name}' (from {class_name})**"]
-            # Map param types to Python types
-            python_type = self._get_python_type_name(param_type)
+            # Check if None is allowed for this parameter
+            allow_none = class_info.get("parameter_allow_none", {}).get(param_name, False)
+            # Map param types to Python types, including None if allowed
+            python_type = self._get_python_type_name(param_type, allow_none)
             hover_parts.append(f"Allowed types: {python_type}")
         else:
             hover_parts = [f"**Parameter '{param_name}' in external class '{class_name}'**"]
@@ -897,11 +914,6 @@ class ParamLanguageServer(LanguageServer):
                 left_bracket = "[" if left_inclusive else "("
                 right_bracket = "]" if right_inclusive else ")"
                 hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
-
-        # Add allow_None information
-        allow_none = class_info.get("parameter_allow_none", {}).get(param_name)
-        if allow_none is not None:
-            hover_parts.append(f"Allow None: `{allow_none}`")
 
         # Add documentation at the bottom with proper formatting
         doc = class_info.get("parameter_docs", {}).get(param_name)
