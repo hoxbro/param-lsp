@@ -17,6 +17,32 @@ def enable_cache_for_test(monkeypatch):
     monkeypatch.setenv("PARAM_LSP_DISABLE_CACHE", "0")
 
 
+@pytest.fixture
+def isolated_cache():
+    """
+    Provide an isolated cache environment for tests that modify the global cache.
+
+    This fixture prevents cache pollution between tests by using a temporary
+    cache directory that's automatically cleaned up after the test.
+
+    Usage:
+        def test_something(isolated_cache):
+            # Test code that modifies cache
+            external_library_cache.clear()  # Safe - won't affect other tests
+    """
+    # Save the original cache directory
+    original_cache_dir = external_library_cache.cache_dir
+
+    # Create and use a temporary directory for this test
+    with tempfile.TemporaryDirectory() as temp_dir:
+        external_library_cache.cache_dir = Path(temp_dir)
+        try:
+            yield external_library_cache
+        finally:
+            # Restore the original cache directory
+            external_library_cache.cache_dir = original_cache_dir
+
+
 class TestExternalLibraryCache:
     """Test the ExternalLibraryCache functionality."""
 
@@ -267,30 +293,20 @@ w.value = "invalid"  # should error
             # Restore original method
             external_library_cache.get = original_get
 
-    def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test):
+    def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test, isolated_cache):
         """Test that the analyzer populates the cache after introspection."""
 
-        # Clear any existing cache
-        external_library_cache.clear()
+        # Verify cache is initially empty
+        assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
 
-        # Mock the set method to verify it's called
-        original_set = external_library_cache.set
-        external_library_cache.set = Mock()
-
-        try:
-            code_py = """\
+        code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 """
-            analyzer.analyze_file(code_py)
+        analyzer.analyze_file(code_py)
 
-            # Verify cache set was called
-            external_library_cache.set.assert_called()
-            call_args = external_library_cache.set.call_args
-            assert call_args[0][0] == "panel"  # library name
-            assert call_args[0][1] == "panel.widgets.IntSlider"  # class path
-            assert isinstance(call_args[0][2], dict)  # data
-
-        finally:
-            # Restore original method
-            external_library_cache.set = original_set
+        # Verify cache was populated with the expected data
+        cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
+        assert cached_data is not None
+        assert isinstance(cached_data, dict)
+        assert "parameters" in cached_data
