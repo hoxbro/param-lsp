@@ -35,8 +35,8 @@ P().param."""
         )
 
         # Should have completions for both parameters and methods
-        assert len(completions) == 4, (
-            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        assert len(completions) == 5, (
+            f"Expected 5 completions (3 methods + 2 parameters), got {len(completions)}"
         )
 
         completion_labels = [item.label for item in completions]
@@ -44,6 +44,7 @@ P().param."""
         assert "y" in completion_labels, "Should suggest 'y' parameter"
         assert "objects()" in completion_labels, "Should suggest 'objects()' method"
         assert "values()" in completion_labels, "Should suggest 'values()' method"
+        assert "update()" in completion_labels, "Should suggest 'update()' method"
 
         # Check that documentation includes type information
         x_completion = next((c for c in completions if c.label == "x"), None)
@@ -111,8 +112,8 @@ Child().param."""
         )
 
         # Should suggest both inherited and own parameters plus methods
-        assert len(completions) == 4, (
-            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        assert len(completions) == 5, (
+            f"Expected 5 completions (3 methods + 2 parameters), got {len(completions)}"
         )
 
         completion_labels = [item.label for item in completions]
@@ -120,6 +121,7 @@ Child().param."""
         assert "child_param" in completion_labels, "Should suggest own parameter"
         assert "objects()" in completion_labels, "Should suggest 'objects()' method"
         assert "values()" in completion_labels, "Should suggest 'values()' method"
+        assert "update()" in completion_labels, "Should suggest 'update()' method"
 
     def test_param_attribute_completion_constructor_call(self):
         """Test param attribute completion on constructor call result."""
@@ -145,8 +147,8 @@ P().param."""
         )
 
         # Should have completions for parameters and methods
-        assert len(completions) == 4, (
-            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        assert len(completions) == 5, (
+            f"Expected 5 completions (3 methods + 2 parameters), got {len(completions)}"
         )
 
         completion_labels = [item.label for item in completions]
@@ -154,6 +156,7 @@ P().param."""
         assert "y" in completion_labels, "Should suggest 'y' parameter"
         assert "objects()" in completion_labels, "Should suggest 'objects()' method"
         assert "values()" in completion_labels, "Should suggest 'values()' method"
+        assert "update()" in completion_labels, "Should suggest 'update()' method"
 
         # Check that documentation includes bounds for x
         x_completion = next((c for c in completions if c.label == "x"), None)
@@ -185,8 +188,8 @@ P(x=5).param."""
         )
 
         # Should have completions for all parameters and methods
-        assert len(completions) == 4, (
-            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        assert len(completions) == 5, (
+            f"Expected 5 completions (3 methods + 2 parameters), got {len(completions)}"
         )
 
         completion_labels = [item.label for item in completions]
@@ -194,6 +197,7 @@ P(x=5).param."""
         assert "y" in completion_labels, "Should suggest 'y' parameter"
         assert "objects()" in completion_labels, "Should suggest 'objects()' method"
         assert "values()" in completion_labels, "Should suggest 'values()' method"
+        assert "update()" in completion_labels, "Should suggest 'update()' method"
 
     def test_param_attribute_completion_external_class(self):
         """Test param attribute completion for external classes."""
@@ -296,8 +300,8 @@ P().param."""
         )
 
         # Should have completions for all parameters and methods
-        assert len(completions) == 5, (
-            f"Expected 5 completions (2 methods + 3 parameters), got {len(completions)}"
+        assert len(completions) == 6, (
+            f"Expected 6 completions (3 methods + 3 parameters), got {len(completions)}"
         )
 
         # Check specific parameter documentation
@@ -356,8 +360,8 @@ P().param."""
         )
 
         # Should have completions for both parameters and methods
-        assert len(completions) == 4, (
-            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        assert len(completions) == 5, (
+            f"Expected 5 completions (3 methods + 2 parameters), got {len(completions)}"
         )
 
         completion_labels = [item.label for item in completions]
@@ -365,6 +369,7 @@ P().param."""
         # Check that methods are included
         assert "objects()" in completion_labels, "Should suggest 'objects()' method"
         assert "values()" in completion_labels, "Should suggest 'values()' method"
+        assert "update()" in completion_labels, "Should suggest 'update()' method"
 
         # Check that parameters are still included
         assert "x" in completion_labels, "Should suggest 'x' parameter"
@@ -373,22 +378,27 @@ P().param."""
         # Check method completions details
         objects_completion = next((c for c in completions if c.label == "objects()"), None)
         values_completion = next((c for c in completions if c.label == "values()"), None)
+        update_completion = next((c for c in completions if c.label == "update()"), None)
 
         assert objects_completion is not None, "Should have completion for objects()"
         assert values_completion is not None, "Should have completion for values()"
+        assert update_completion is not None, "Should have completion for update()"
 
         assert objects_completion.kind == CompletionItemKind.Method, "objects() should be a method"
         assert values_completion.kind == CompletionItemKind.Method, "values() should be a method"
+        assert update_completion.kind == CompletionItemKind.Method, "update() should be a method"
 
         assert isinstance(objects_completion.documentation, str), (
             "Documentation should be a string"
         )
         assert isinstance(values_completion.documentation, str), "Documentation should be a string"
+        assert isinstance(update_completion.documentation, str), "Documentation should be a string"
 
         assert (
             "dictionary of (parameter_name, parameter_object)" in objects_completion.documentation
         )
         assert "iterator of parameter values" in values_completion.documentation
+        assert "Update multiple parameters at once" in update_completion.documentation
 
     def test_param_attribute_completion_method_filtering(self):
         """Test that method completions are filtered based on partial text."""

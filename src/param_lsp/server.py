@@ -23,6 +23,7 @@ from lsprotocol.types import (
     HoverParams,
     InitializeParams,
     InitializeResult,
+    InsertTextFormat,
     MarkupContent,
     MarkupKind,
     Position,
@@ -56,6 +57,9 @@ PARAM_OBJECT_ATTR_ACCESS_PATTERN = re.compile(
 )
 REACTIVE_EXPRESSION_PATTERN = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\.rx\..*$", re.MULTILINE
+)
+PARAM_UPDATE_PATTERN = re.compile(
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.update\s*\([^)]*$", re.MULTILINE
 )
 
 
@@ -587,9 +591,34 @@ class ParamLanguageServer(LanguageServer):
         self, default_value: str, param_type: str | None = None
     ) -> str:
         """Format default value for autocomplete display."""
-        # For String parameters, ensure the quotes are shown to users
-        if param_type == "String":
-            # If it's already a quoted string, remove quotes and re-add as double quotes for consistency
+        # Check if the default value is a string literal (regardless of parameter type)
+        is_string_literal = False
+
+        # If it's already quoted, it's a string literal
+        if (
+            default_value.startswith("'")
+            and default_value.endswith("'")
+            and len(default_value) >= 2
+        ) or (
+            default_value.startswith('"')
+            and default_value.endswith('"')
+            and len(default_value) >= 2
+        ):
+            is_string_literal = True
+        # If it's not quoted but contains letters (not just numbers/symbols), it might be a string
+        elif default_value not in ["None", "True", "False", "[]", "{}", "()"]:
+            # Check if it looks like a string value (contains letters and isn't a number)
+            try:
+                # If it can be parsed as a number, it's not a string literal
+                float(default_value)
+            except ValueError:
+                # Contains non-numeric characters, likely a string
+                if any(c.isalpha() for c in default_value):
+                    is_string_literal = True
+
+        # For string literals, ensure they have double quotes
+        if is_string_literal:
+            # If it's already quoted, standardize to double quotes
             if (
                 default_value.startswith("'")
                 and default_value.endswith("'")
@@ -606,9 +635,8 @@ class ParamLanguageServer(LanguageServer):
             else:
                 # Not quoted, add double quotes
                 return f'"{default_value}"'
-
-        # For non-string parameters, remove quotes if present (for cleaner display)
-        if (
+        # For non-string values, remove quotes if present
+        elif (
             default_value.startswith("'")
             and default_value.endswith("'")
             and len(default_value) >= 2
@@ -1343,7 +1371,7 @@ class ParamLanguageServer(LanguageServer):
         if param_dot_match:
             partial_text = param_dot_match.group(1)
 
-        # Add param namespace method completions (objects, values)
+        # Add param namespace method completions (objects, values, update)
         param_methods = [
             {
                 "name": "objects",
@@ -1356,6 +1384,12 @@ class ParamLanguageServer(LanguageServer):
                 "insert_text": "values()",
                 "documentation": "Returns an iterator of parameter values for all parameters of this Parameterized object.",
                 "detail": "param.values() method",
+            },
+            {
+                "name": "update",
+                "insert_text": "update($0)",
+                "documentation": "Update multiple parameters at once by passing parameter names as keyword arguments.",
+                "detail": "param.update() method",
             },
         ]
 
@@ -1371,6 +1405,11 @@ class ParamLanguageServer(LanguageServer):
             else:
                 insert_text = method_name  # just the method name
 
+            # Set snippet format for update method to position cursor inside parentheses
+            insert_text_format = None
+            if method_name == "update" and "$0" in insert_text:
+                insert_text_format = InsertTextFormat.Snippet
+
             completions.append(
                 CompletionItem(
                     label=method_name + "()",
@@ -1378,6 +1417,7 @@ class ParamLanguageServer(LanguageServer):
                     detail=method["detail"],
                     documentation=method["documentation"],
                     insert_text=insert_text,
+                    insert_text_format=insert_text_format,
                     filter_text=method_name,
                     sort_text=f"0_{method_name}",  # Sort methods before parameters
                 )
@@ -1749,6 +1789,165 @@ class ParamLanguageServer(LanguageServer):
 
         return completions
 
+    def _get_param_update_completions(
+        self, uri: str, line: str, character: int
+    ) -> list[CompletionItem]:
+        """Get parameter completions for obj.param.update() keyword arguments."""
+        completions = []
+
+        if uri not in self.document_cache:
+            return completions
+
+        # Check if we're in a param.update() context
+        before_cursor = line[:character]
+        match = PARAM_UPDATE_PATTERN.search(before_cursor)
+
+        if not match:
+            return completions
+
+        class_name = match.group(2)
+
+        # Get analyzer for external class resolution
+        analyzer = self.document_cache[uri]["analyzer"]
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = analysis.get("param_classes", set())
+        param_parameters = analysis.get("param_parameters", {})
+        param_parameter_types = analysis.get("param_parameter_types", {})
+        param_parameter_docs = analysis.get("param_parameter_docs", {})
+        param_parameter_bounds = analysis.get("param_parameter_bounds", {})
+        param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
+        param_parameter_defaults = analysis.get("param_parameter_defaults", {})
+
+        # Check if this is a known param class (local or external)
+        parameters = []
+        parameter_types = {}
+        parameter_docs = {}
+        parameter_bounds = {}
+        parameter_allow_none = {}
+        parameter_defaults = {}
+
+        # First, try to resolve the class name (could be a variable or class name)
+        resolved_class_name = self._resolve_class_name_from_context(uri, class_name, param_classes)
+
+        if resolved_class_name and resolved_class_name in param_classes:
+            # Local class
+            parameters = param_parameters.get(resolved_class_name, [])
+            parameter_types = param_parameter_types.get(resolved_class_name, {})
+            parameter_docs = param_parameter_docs.get(resolved_class_name, {})
+            parameter_bounds = param_parameter_bounds.get(resolved_class_name, {})
+            parameter_allow_none = param_parameter_allow_none.get(resolved_class_name, {})
+            parameter_defaults = param_parameter_defaults.get(resolved_class_name, {})
+        else:
+            # Check if it's an external param class
+            check_class_name = resolved_class_name if resolved_class_name else class_name
+            full_class_path = None
+
+            if "." in check_class_name:
+                # Handle dotted names like hv.Curve
+                parts = check_class_name.split(".")
+                if len(parts) >= 2:
+                    alias = parts[0]
+                    class_part = ".".join(parts[1:])
+                    if alias in analyzer.imports:
+                        full_module = analyzer.imports[alias]
+                        full_class_path = f"{full_module}.{class_part}"
+                    else:
+                        full_class_path = check_class_name
+            else:
+                # Simple class name - check if it's in external classes directly
+                full_class_path = check_class_name
+
+            # Check if this resolved class is in external_param_classes
+            external_class_info = analyzer.external_param_classes.get(full_class_path)
+            if external_class_info is None and full_class_path:
+                external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+            if external_class_info:
+                parameters = external_class_info.get("parameters", [])
+                parameter_types = external_class_info.get("parameter_types", {})
+                parameter_docs = external_class_info.get("parameter_docs", {})
+                parameter_bounds = external_class_info.get("parameter_bounds", {})
+                parameter_allow_none = external_class_info.get("parameter_allow_none", {})
+                parameter_defaults = external_class_info.get("parameter_defaults", {})
+
+        # If we don't have any parameters, no completions
+        if not parameters:
+            return completions
+
+        # Extract used parameters to avoid duplicates (similar to constructor completions)
+        used_params = set()
+        used_matches = CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+        used_params.update(used_matches)
+
+        # Create completion items for each parameter as keyword arguments
+        for param_name in parameters:
+            # Skip the 'name' parameter as it's rarely set in updates
+            if param_name == "name":
+                continue
+
+            # Skip parameters that are already used
+            if param_name in used_params:
+                continue
+
+            # Build documentation for the parameter
+            doc_parts = []
+
+            # Add parameter type info
+            param_type = parameter_types.get(param_name)
+            if param_type:
+                python_type = self._get_python_type_name(param_type)
+                doc_parts.append(f"Type: {param_type} ({python_type})")
+
+            # Add bounds info
+            bounds = parameter_bounds.get(param_name)
+            if bounds:
+                if len(bounds) == 2:
+                    min_val, max_val = bounds
+                    doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
+                elif len(bounds) == 4:
+                    min_val, max_val, left_inclusive, right_inclusive = bounds
+                    left_bracket = "[" if left_inclusive else "("
+                    right_bracket = "]" if right_inclusive else ")"
+                    doc_parts.append(f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}")
+
+            # Add allow_None info
+            allow_none = parameter_allow_none.get(param_name, False)
+            if allow_none:
+                doc_parts.append("Allows None")
+
+            # Add parameter-specific documentation
+            param_doc = parameter_docs.get(param_name)
+            if param_doc:
+                doc_parts.append(f"Description: {param_doc}")
+
+            documentation = "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
+
+            # Create insert text with default value if available
+            default_value = parameter_defaults.get(param_name)
+            if default_value is not None:
+                param_type = parameter_types.get(param_name)
+                display_value = self._format_default_for_display(default_value, param_type)
+                insert_text = f"{param_name}={display_value}"
+                label = f"{param_name}={display_value}"
+            else:
+                insert_text = f"{param_name}="
+                label = param_name
+
+            completions.append(
+                CompletionItem(
+                    label=label,
+                    kind=CompletionItemKind.Property,
+                    detail=f"Parameter of {class_name}",
+                    documentation=documentation,
+                    insert_text=insert_text,
+                    filter_text=param_name,
+                    sort_text=f"{param_name:0>3}",
+                    preselect=False,
+                )
+            )
+
+        return completions
+
 
 server = ParamLanguageServer("param-lsp", __version__)
 
@@ -1868,6 +2067,13 @@ def completion(params: CompletionParams) -> CompletionList:
     depends_completions = server._get_param_depends_completions(uri, lines, position)
     if depends_completions:
         return CompletionList(is_incomplete=False, items=depends_completions)
+
+    # Check if we're in a param.update({}) context
+    update_completions = server._get_param_update_completions(
+        uri, current_line, position.character
+    )
+    if update_completions:
+        return CompletionList(is_incomplete=False, items=update_completions)
 
     # Check if we're in a reactive expression context (e.g., P().param.x.rx.method)
     rx_completions = server._get_reactive_expression_completions(
