@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "param-lsp",
   "icon": "param-logo.png",
+  "readme": "README.md",
   "repository": {
     "type": "git",
     "url": "https://github.com/holoviz-dev/param-lsp"
