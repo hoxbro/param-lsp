@@ -72,6 +72,8 @@ jobs:
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'dev') ||
           (github.event_name == 'push' && (contains(steps.vars.outputs.tag, 'a') || contains(steps.vars.outputs.tag, 'b') || contains(steps.vars.outputs.tag, 'rc')))
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           cd vscode-extension
           npm run publish-pre
@@ -79,6 +81,8 @@ jobs:
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'main') ||
           (github.event_name == 'push' && !(contains(steps.vars.outputs.tag, 'a') || contains(steps.vars.outputs.tag, 'b') || contains(steps.vars.outputs.tag, 'rc')))
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           cd vscode-extension
-          # npm run publish
+          npm run publish
