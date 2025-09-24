@@ -620,6 +620,15 @@ class ParamLanguageServer(LanguageServer):
         if uri in self.document_cache:
             analysis = self.document_cache[uri]["analysis"]
 
+            # Check if it's the rx method in parameter context
+            if word == "rx" and self._is_rx_method_context(line):
+                return self._build_rx_method_hover_info()
+
+            # Check if it's a reactive expression method
+            rx_method_info = self._get_reactive_expression_method_hover_info(line, word)
+            if rx_method_info:
+                return rx_method_info
+
             # Check if it's a parameter type
             if word in self.param_types:
                 if param:
@@ -655,6 +664,118 @@ class ParamLanguageServer(LanguageServer):
                     )
                     if hover_info:
                         return hover_info
+
+        return None
+
+    def _is_rx_method_context(self, line: str) -> bool:
+        """Check if the rx word is in a parameter context like obj.param.x.rx()."""
+        # Check if line contains pattern like .param.something.rx
+        return bool(re.search(r"\.param\.\w+\.rx\b", line))
+
+    def _build_rx_method_hover_info(self) -> str:
+        """Build hover information for the rx() method."""
+        hover_parts = [
+            "**rx() Method**",
+            "Create a reactive expression for this parameter.",
+            "",
+            "Reactive expressions enable you to build computational graphs that automatically update when parameter values change.",
+            "",
+            "**Documentation**: [Reactive Expressions Guide](https://param.holoviz.org/user_guide/Reactive_Expressions.html)",
+        ]
+        return "\n".join(hover_parts)
+
+    def _get_reactive_expression_method_hover_info(self, line: str, word: str) -> str | None:
+        """Get hover information for reactive expression methods."""
+        # Check if we're in a reactive expression context
+        if not re.search(r"\.param\.\w+\.rx\(\)\.", line):
+            return None
+
+        # Define reactive expression methods with their documentation
+        rx_methods_docs = {
+            "and_": {
+                "signature": "and_(other)",
+                "description": "Returns a reactive expression that applies the `and` operator between this expression and another value.",
+                "example": "param_rx.and_(other_value)",
+            },
+            "bool": {
+                "signature": "bool()",
+                "description": "Returns a reactive expression that applies the `bool()` function to this expression's value.",
+                "example": "param_rx.bool()",
+            },
+            "in_": {
+                "signature": "in_(container)",
+                "description": "Returns a reactive expression that checks if this expression's value is in the given container.",
+                "example": "param_rx.in_([1, 2, 3])",
+            },
+            "is_": {
+                "signature": "is_(other)",
+                "description": "Returns a reactive expression that checks object identity between this expression and another value using the `is` operator.",
+                "example": "param_rx.is_(None)",
+            },
+            "is_not": {
+                "signature": "is_not(other)",
+                "description": "Returns a reactive expression that checks absence of object identity using the `is not` operator.",
+                "example": "param_rx.is_not(None)",
+            },
+            "len": {
+                "signature": "len()",
+                "description": "Returns a reactive expression that applies the `len()` function to this expression's value.",
+                "example": "param_rx.len()",
+            },
+            "map": {
+                "signature": "map(func, *args, **kwargs)",
+                "description": "Returns a reactive expression that maps a function over the collection items in this expression's value.",
+                "example": "param_rx.map(lambda x: x * 2)",
+            },
+            "or_": {
+                "signature": "or_(other)",
+                "description": "Returns a reactive expression that applies the `or` operator between this expression and another value.",
+                "example": "param_rx.or_(default_value)",
+            },
+            "pipe": {
+                "signature": "pipe(func, *args, **kwargs)",
+                "description": "Returns a reactive expression that pipes this expression's value into the given function.",
+                "example": "param_rx.pipe(str.upper)",
+            },
+            "updating": {
+                "signature": "updating()",
+                "description": "Returns a boolean reactive expression indicating whether this expression is currently updating.",
+                "example": "param_rx.updating()",
+            },
+            "when": {
+                "signature": "when(*conditions)",
+                "description": "Returns a reactive expression that only updates when the specified conditions are met.",
+                "example": "param_rx.when(condition_rx)",
+            },
+            "where": {
+                "signature": "where(condition, other)",
+                "description": "Returns a reactive expression implementing a ternary conditional (like numpy.where).",
+                "example": "param_rx.where(condition, true_value)",
+            },
+            "watch": {
+                "signature": "watch(callback, onlychanged=True)",
+                "description": "Triggers a side-effect callback when this reactive expression outputs a new event.",
+                "example": "param_rx.watch(lambda x: print(f'Value changed to {x}'))",
+            },
+            "value": {
+                "signature": "value",
+                "description": "Property to get or set the current value of this reactive expression.",
+                "example": "current_val = param_rx.value",
+            },
+        }
+
+        if word in rx_methods_docs:
+            method_info = rx_methods_docs[word]
+            hover_parts = [
+                f"**{method_info['signature']}**",
+                "",
+                method_info["description"],
+                "",
+                f"**Example**: `{method_info['example']}`",
+                "",
+                "Part of HoloViz Param reactive expressions system.",
+            ]
+            return "\n".join(hover_parts)
 
         return None
 
