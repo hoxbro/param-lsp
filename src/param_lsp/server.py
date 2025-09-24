@@ -55,7 +55,7 @@ PARAM_OBJECT_ATTR_ACCESS_PATTERN = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\..*$", re.MULTILINE
 )
 REACTIVE_EXPRESSION_PATTERN = re.compile(
-    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\.rx\(\)\..*$", re.MULTILINE
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\.rx\..*$", re.MULTILINE
 )
 
 
@@ -685,14 +685,14 @@ class ParamLanguageServer(LanguageServer):
         return None
 
     def _is_rx_method_context(self, line: str) -> bool:
-        """Check if the rx word is in a parameter context like obj.param.x.rx()."""
+        """Check if the rx word is in a parameter context like obj.param.x.rx."""
         # Check if line contains pattern like .param.something.rx
         return bool(re.search(r"\.param\.\w+\.rx\b", line))
 
     def _build_rx_method_hover_info(self) -> str:
-        """Build hover information for the rx() method."""
+        """Build hover information for the rx property."""
         hover_parts = [
-            "**rx() Method**",
+            "**rx Property**",
             "Create a reactive expression for this parameter.",
             "",
             "Reactive expressions enable you to build computational graphs that automatically update when parameter values change.",
@@ -754,7 +754,7 @@ class ParamLanguageServer(LanguageServer):
     def _get_reactive_expression_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for reactive expression methods."""
         # Check if we're in a reactive expression context
-        if not re.search(r"\.param\.\w+\.rx\(\)\.", line):
+        if not re.search(r"\.param\.\w+\.rx\.", line):
             return None
 
         # Define reactive expression methods with their documentation
@@ -1532,6 +1532,7 @@ class ParamLanguageServer(LanguageServer):
             "per_instance": "Whether the parameter is per-instance",
             "precedence": "Precedence level for GUI ordering",
             "watchers": "Dictionary of parameter watchers",
+            "rx": "Reactive expression property for this parameter",
         }
 
         # Type-specific attributes
@@ -1563,9 +1564,7 @@ class ParamLanguageServer(LanguageServer):
             )
 
         # Parameter methods (available on all parameter types)
-        parameter_methods = {
-            "rx": "Create a reactive expression for this parameter",
-        }
+        parameter_methods = {}
 
         # Combine all available attributes
         all_attributes = {**common_attributes, **type_specific_attributes}
@@ -1617,7 +1616,7 @@ class ParamLanguageServer(LanguageServer):
     def _get_reactive_expression_completions(
         self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
-        """Get method completions for reactive expressions like P().param.x.rx().method."""
+        """Get method completions for reactive expressions like P().param.x.rx.method."""
         completions = []
 
         if uri not in self.document_cache:
@@ -1678,9 +1677,9 @@ class ParamLanguageServer(LanguageServer):
         if param_name not in parameters:
             return completions
 
-        # Extract partial text being typed after .rx().
+        # Extract partial text being typed after .rx.
         partial_text = ""
-        rx_method_match = re.search(rf"\.{re.escape(param_name)}\.rx\(\)\.(\w*)$", before_cursor)
+        rx_method_match = re.search(rf"\.{re.escape(param_name)}\.rx\.(\w*)$", before_cursor)
         if rx_method_match:
             partial_text = rx_method_match.group(1)
 
@@ -1870,7 +1869,7 @@ def completion(params: CompletionParams) -> CompletionList:
     if depends_completions:
         return CompletionList(is_incomplete=False, items=depends_completions)
 
-    # Check if we're in a reactive expression context (e.g., P().param.x.rx().method)
+    # Check if we're in a reactive expression context (e.g., P().param.x.rx.method)
     rx_completions = server._get_reactive_expression_completions(
         uri, current_line, position.character
     )

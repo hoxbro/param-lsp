@@ -8,10 +8,10 @@ from src.param_lsp.server import ParamLanguageServer
 
 
 class TestReactiveExpressionCompletion:
-    """Test reactive expression completion like P().param.x.rx().method()."""
+    """Test reactive expression completion like P().param.x.rx.method()."""
 
     def test_param_object_rx_method_completion(self):
-        """Test that rx() method is available on parameter objects."""
+        """Test that rx property is available on parameter objects."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
         code_py = """\
@@ -32,19 +32,19 @@ P().param.x."""
             "file:///test.py", "P().param.x.", position.character
         )
 
-        # Should include rx() method among other attributes
+        # Should include rx property among other attributes
         completion_labels = [item.label for item in completions]
-        assert "rx()" in completion_labels, "Should suggest 'rx()' method"
+        assert "rx" in completion_labels, "Should suggest 'rx' property"
 
-        # Check rx() method details
-        rx_completion = next((c for c in completions if c.label == "rx()"), None)
-        assert rx_completion is not None, "Should have completion for rx()"
-        assert rx_completion.kind == CompletionItemKind.Method, "rx() should be a method"
+        # Check rx property details
+        rx_completion = next((c for c in completions if c.label == "rx"), None)
+        assert rx_completion is not None, "Should have completion for rx"
+        assert rx_completion.kind == CompletionItemKind.Property, "rx should be a property"
         assert isinstance(rx_completion.documentation, str), "Documentation should be a string"
         assert "reactive expression" in rx_completion.documentation.lower()
 
     def test_reactive_expression_method_completions(self):
-        """Test reactive expression method completions after P().param.x.rx()."""
+        """Test reactive expression method completions after P().param.x.rx."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
         code_py = """\
@@ -55,15 +55,15 @@ class P(param.Parameterized):
     y = param.String(default="hello")
 
 # Test reactive expression completions
-P().param.x.rx()."""
+P().param.x.rx."""
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
-        # Test completion at end of P().param.x.rx().
-        position = Position(line=7, character=17)  # After "P().param.x.rx()."
+        # Test completion at end of P().param.x.rx.
+        position = Position(line=7, character=17)  # After "P().param.x.rx."
         completions = server._get_reactive_expression_completions(
-            "file:///test.py", "P().param.x.rx().", position.character
+            "file:///test.py", "P().param.x.rx.", position.character
         )
 
         # Should have completions for reactive expression methods
@@ -110,15 +110,15 @@ class P(param.Parameterized):
     x = param.Integer(default=5)
 
 # Test partial reactive expression completion
-P().param.x.rx().w"""
+P().param.x.rx.w"""
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
         # Test completion after partial typing "w"
-        position = Position(line=6, character=18)  # After "P().param.x.rx().w"
+        position = Position(line=6, character=18)  # After "P().param.x.rx.w"
         completions = server._get_reactive_expression_completions(
-            "file:///test.py", "P().param.x.rx().w", position.character
+            "file:///test.py", "P().param.x.rx.w", position.character
         )
 
         # Should only suggest methods that start with "w"
@@ -142,15 +142,15 @@ class P(param.Parameterized):
     x = param.Integer(default=5)
 
 # Test partial reactive expression completion
-P().param.x.rx().v"""
+P().param.x.rx.v"""
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
         # Test completion after partial typing "v"
-        position = Position(line=6, character=18)  # After "P().param.x.rx().v"
+        position = Position(line=6, character=18)  # After "P().param.x.rx.v"
         completions = server._get_reactive_expression_completions(
-            "file:///test.py", "P().param.x.rx().v", position.character
+            "file:///test.py", "P().param.x.rx.v", position.character
         )
 
         # Should suggest value property
@@ -168,15 +168,15 @@ class P(param.Parameterized):
     x = param.Integer(default=5)
 
 # Test completion for non-existent parameter
-P().param.nonexistent.rx()."""
+P().param.nonexistent.rx."""
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
         # Test completion for invalid parameter name
-        position = Position(line=6, character=28)  # After "P().param.nonexistent.rx()."
+        position = Position(line=6, character=28)  # After "P().param.nonexistent.rx."
         completions = server._get_reactive_expression_completions(
-            "file:///test.py", "P().param.nonexistent.rx().", position.character
+            "file:///test.py", "P().param.nonexistent.rx.", position.character
         )
 
         # Should not have any completions for invalid parameter
@@ -190,15 +190,15 @@ P().param.nonexistent.rx()."""
 
         code_py = """\
 # Unknown class
-UnknownClass().param.x.rx()."""
+UnknownClass().param.x.rx."""
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
         # Test completion for unknown class
-        position = Position(line=1, character=30)  # After "UnknownClass().param.x.rx()."
+        position = Position(line=1, character=30)  # After "UnknownClass().param.x.rx."
         completions = server._get_reactive_expression_completions(
-            "file:///test.py", "UnknownClass().param.x.rx().", position.character
+            "file:///test.py", "UnknownClass().param.x.rx.", position.character
         )
 
         # Should not have any completions for unknown class
@@ -217,15 +217,15 @@ class P(param.Parameterized):
     temperature = param.Number(default=20.0, doc="Temperature in celsius")
 
 # Test reactive expression documentation
-P().param.temperature.rx()."""
+P().param.temperature.rx."""
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
         # Test completion
-        position = Position(line=6, character=28)  # After "P().param.temperature.rx()."
+        position = Position(line=6, character=28)  # After "P().param.temperature.rx."
         completions = server._get_reactive_expression_completions(
-            "file:///test.py", "P().param.temperature.rx().", position.character
+            "file:///test.py", "P().param.temperature.rx.", position.character
         )
 
         # Check documentation quality for various methods
@@ -255,7 +255,7 @@ class TestReactiveExpressionHover:
     """Test hover information for reactive expressions."""
 
     def test_rx_method_hover(self):
-        """Test hover information for the rx() method."""
+        """Test hover information for the rx property."""
         server = ParamLanguageServer("test-server", "1.0.0")
 
         code_py = """\
@@ -265,17 +265,17 @@ class P(param.Parameterized):
     x = param.Integer(default=5)
 
 # Test rx method hover
-P().param.x.rx()
+P().param.x.rx
 """
 
         # Simulate document analysis
         server._analyze_document("file:///test.py", code_py)
 
         # Test hover for rx method
-        hover_info = server._get_hover_info("file:///test.py", "P().param.x.rx()", "rx")
+        hover_info = server._get_hover_info("file:///test.py", "P().param.x.rx", "rx")
 
         assert hover_info is not None, "Should have hover info for rx method"
-        assert "**rx() Method**" in hover_info, "Should have method title"
+        assert "**rx Property**" in hover_info, "Should have property title"
         assert "reactive expression" in hover_info.lower(), "Should mention reactive expressions"
         assert "https://param.holoviz.org/user_guide/Reactive_Expressions.html" in hover_info, (
             "Should include documentation link"
@@ -292,7 +292,7 @@ class P(param.Parameterized):
     x = param.Integer(default=5)
 
 # Test reactive expression method hover
-P().param.x.rx().map(lambda x: x * 2)
+P().param.x.rx.map(lambda x: x * 2)
 """
 
         # Simulate document analysis
@@ -300,7 +300,7 @@ P().param.x.rx().map(lambda x: x * 2)
 
         # Test hover for map method
         hover_info = server._get_hover_info(
-            "file:///test.py", "P().param.x.rx().map(lambda x: x * 2)", "map"
+            "file:///test.py", "P().param.x.rx.map(lambda x: x * 2)", "map"
         )
 
         assert hover_info is not None, "Should have hover info for map method"
@@ -319,7 +319,7 @@ class P(param.Parameterized):
     temperature = param.Number(default=20.0)
 
 # Test reactive expression value property hover
-current_temp = P().param.temperature.rx().value
+current_temp = P().param.temperature.rx.value
 """
 
         # Simulate document analysis
@@ -327,7 +327,7 @@ current_temp = P().param.temperature.rx().value
 
         # Test hover for value property
         hover_info = server._get_hover_info(
-            "file:///test.py", "P().param.temperature.rx().value", "value"
+            "file:///test.py", "P().param.temperature.rx.value", "value"
         )
 
         assert hover_info is not None, "Should have hover info for value property"
@@ -346,9 +346,9 @@ class P(param.Parameterized):
     flag = param.Boolean(default=True)
 
 # Test various reactive expression methods
-P().param.flag.rx().and_(other_condition)
-P().param.flag.rx().watch(callback)
-P().param.flag.rx().when(condition)
+P().param.flag.rx.and_(other_condition)
+P().param.flag.rx.watch(callback)
+P().param.flag.rx.when(condition)
 """
 
         # Simulate document analysis
@@ -356,7 +356,7 @@ P().param.flag.rx().when(condition)
 
         # Test hover for and_ method
         hover_info = server._get_hover_info(
-            "file:///test.py", "P().param.flag.rx().and_(other_condition)", "and_"
+            "file:///test.py", "P().param.flag.rx.and_(other_condition)", "and_"
         )
         assert hover_info is not None, "Should have hover info for and_ method"
         assert "**and_(other)**" in hover_info, "Should have correct signature for and_"
@@ -364,7 +364,7 @@ P().param.flag.rx().when(condition)
 
         # Test hover for watch method
         hover_info = server._get_hover_info(
-            "file:///test.py", "P().param.flag.rx().watch(callback)", "watch"
+            "file:///test.py", "P().param.flag.rx.watch(callback)", "watch"
         )
         assert hover_info is not None, "Should have hover info for watch method"
         assert "**watch(callback, onlychanged=True)**" in hover_info, (
@@ -374,7 +374,7 @@ P().param.flag.rx().when(condition)
 
         # Test hover for when method
         hover_info = server._get_hover_info(
-            "file:///test.py", "P().param.flag.rx().when(condition)", "when"
+            "file:///test.py", "P().param.flag.rx.when(condition)", "when"
         )
         assert hover_info is not None, "Should have hover info for when method"
         assert "**when(*conditions)**" in hover_info, "Should have correct signature for when"
@@ -420,7 +420,7 @@ class P(param.Parameterized):
     x = param.Integer(default=5)
 
 # Test proper rx context
-P().param.x.rx()
+P().param.x.rx
 
 # Test non-parameter rx (should not get reactive hover)
 def rx():
@@ -433,7 +433,7 @@ result = rx()
         server._analyze_document("file:///test.py", code_py)
 
         # Test rx in parameter context
-        hover_info = server._get_hover_info("file:///test.py", "P().param.x.rx()", "rx")
+        hover_info = server._get_hover_info("file:///test.py", "P().param.x.rx", "rx")
         assert hover_info is not None, "Should have hover info for parameter rx method"
         assert "reactive expression" in hover_info.lower(), "Should be about reactive expressions"
 

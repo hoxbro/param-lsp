@@ -137,7 +137,7 @@ result = obj.param.v  # cursor here - should suggest values() with parentheses
         )
 
     def test_param_rx_method_smart_parentheses(self):
-        """Test that rx() method has smart parentheses detection."""
+        """Test that rx property completion works correctly."""
         server = ParamLanguageServer("param-lsp", "test")
 
         test_content = """
@@ -165,13 +165,13 @@ obj = MyClass()
                 rx_completion = completion
                 break
 
-        assert rx_completion is not None, "rx method completion should be found"
-        assert rx_completion.insert_text == "rx()", (
-            f"Expected 'rx()', got '{rx_completion.insert_text}'"
+        assert rx_completion is not None, "rx property completion should be found"
+        assert rx_completion.insert_text == "rx", (
+            f"Expected 'rx', got '{rx_completion.insert_text}'"
         )
 
-        # Test case 2: Parentheses already present - should exclude them
-        line = "result = obj.param.x.rx()"
+        # Test case 2: Property already completed
+        line = "result = obj.param.x.rx"
         character = len(line)
 
         completions = server._get_param_object_attribute_completions(uri, line, character)
@@ -244,7 +244,7 @@ obj = MyClass()
         server._analyze_document(uri, test_content)
 
         # Test case 1: No parentheses present - should include them
-        line = "result = obj.param.x.rx().and"
+        line = "result = obj.param.x.rx.and"
         character = len(line)
 
         completions = server._get_reactive_expression_completions(uri, line, character)
@@ -262,7 +262,7 @@ obj = MyClass()
         assert and_completion.label == "and_()", "Label should show parentheses"
 
         # Test case 2: Parentheses already present - should exclude them
-        line = "result = obj.param.x.rx().and_()"
+        line = "result = obj.param.x.rx.and_()"
         character = len(line)
 
         completions = server._get_reactive_expression_completions(uri, line, character)
@@ -297,7 +297,7 @@ obj = MyClass()
         server._analyze_document(uri, test_content)
 
         # Test clean case - should include parentheses
-        line = "result = obj.param.x.rx()."
+        line = "result = obj.param.x.rx."
         character = len(line)
 
         completions = server._get_reactive_expression_completions(uri, line, character)
@@ -320,7 +320,7 @@ obj = MyClass()
             )
 
         # Test case with existing parentheses - should exclude them
-        line = "result = obj.param.x.rx().and_()"
+        line = "result = obj.param.x.rx.and_()"
         character = len(line)
 
         completions = server._get_reactive_expression_completions(uri, line, character)
