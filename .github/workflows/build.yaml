@@ -56,9 +56,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 100
-      - name: Set output
+      - name: Fetching tags
         id: vars
-        run: echo "tag=${{ needs.docs_build.outputs.tag }}" >> $GITHUB_OUTPUT
+        run: |
+          echo "::group::Fetching tags"
+          git fetch --prune --tags -f
+          echo "tag=${{ needs.docs_build.outputs.tag }}" >> $GITHUB_OUTPUT
+          echo "::endgroup::"
       - name: Ready
         run: |
           cd vscode-extension
