@@ -751,6 +751,13 @@ class ParamLanguageServer(LanguageServer):
                 "returns": "Dict[str, Parameter] (parameter objects with metadata)",
                 "note": "Returns the Parameter objects themselves (with metadata), not the current parameter values",
             },
+            "update": {
+                "signature": "update(**params)",
+                "description": "Update multiple parameters at once by passing parameter names as keyword arguments.",
+                "example": "obj.param.update(x=10, y='new_value')\n# Updates multiple parameters simultaneously",
+                "returns": "None",
+                "note": "Efficiently updates multiple parameters with validation and triggers watchers",
+            },
         }
 
         if word in param_namespace_methods:

@@ -364,3 +364,33 @@ class TestClass(param.Parameterized):
         assert "Allowed types: int | float | None" in hover_info
         assert "Bounds: `[0, 10]`" in hover_info
         assert "Number with bounds that allows None" in hover_info
+
+    def test_param_update_method_hover(self, lsp_server):
+        """Test hover information for obj.param.update() method."""
+        code_py = """\
+import param
+
+class TestClass(param.Parameterized):
+    x = param.Integer(default=5, doc="An integer parameter")
+    y = param.String(default="hello", doc="A string parameter")
+
+# Test obj.param.update() hover
+obj = TestClass()
+obj.param.update(x=10, y="world")
+"""
+
+        uri = "file:///test.py"
+        lsp_server._analyze_document(uri, code_py)
+
+        # Test hover for the "update" word in obj.param.update() context
+        line_with_update = 'obj.param.update(x=10, y="world")'
+        hover_info = lsp_server._get_hover_info(uri, line_with_update, "update")
+
+        assert hover_info is not None
+        assert "obj.param.update(**params)" in hover_info
+        assert "Update multiple parameters at once" in hover_info
+        assert "keyword arguments" in hover_info
+        assert "Returns**: `None`" in hover_info
+        assert "Example" in hover_info
+        assert "obj.param.update(x=10, y='new_value')" in hover_info
+        assert "Efficiently updates multiple parameters" in hover_info
