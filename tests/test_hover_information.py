@@ -256,8 +256,9 @@ class TestClass(param.Parameterized):
         assert hover_info is not None
         assert "String Parameter 'undocumented'" in hover_info
         assert "Allowed types: str" in hover_info
-        # Should not have documentation section
-        assert hover_info.count("\n\n") <= 2  # Just header and type info
+        # Should include source location but not documentation section
+        assert "Definition (line 4):" in hover_info
+        assert hover_info.count("\n\n") <= 4  # Header, type info, separator, and source location
 
         # Test hover for parameter with bounds but no doc
         hover_info = lsp_server._get_hover_info(uri, "with_bounds", "with_bounds")

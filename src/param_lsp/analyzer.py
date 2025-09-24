@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import importlib
 import importlib.util
+import inspect
 import logging
 from pathlib import Path
 from typing import Any
@@ -44,7 +45,11 @@ class ParamAnalyzer:
         self.param_parameter_allow_none: dict[str, dict[str, bool]] = {}
         # class_name -> {param_name: default_value}
         self.param_parameter_defaults: dict[str, dict[str, str]] = {}
+        # class_name -> {param_name: {'line': line_no, 'source': source_line}}
+        self.param_parameter_locations: dict[str, dict[str, dict[str, Any]]] = {}
         self.imports: dict[str, str] = {}
+        # Store file content for source line lookup
+        self._current_file_content: str | None = None
         self.type_errors: list[dict[str, Any]] = []
         self.param_type_map = {
             "Number": (int, float),
@@ -84,6 +89,7 @@ class ParamAnalyzer:
             tree = ast.parse(content)
             self._reset_analysis()
             self._current_file_path = file_path
+            self._current_file_content = content
         except SyntaxError:
             # Try to handle incomplete code (e.g., unclosed parentheses during typing)
             lines = content.split("\n")
@@ -188,6 +194,7 @@ class ParamAnalyzer:
             "param_parameter_docs": self.param_parameter_docs,
             "param_parameter_allow_none": self.param_parameter_allow_none,
             "param_parameter_defaults": self.param_parameter_defaults,
+            "param_parameter_locations": self.param_parameter_locations,
             "imports": self.imports,
             "type_errors": self.type_errors,
         }
@@ -201,6 +208,7 @@ class ParamAnalyzer:
         self.param_parameter_docs.clear()
         self.param_parameter_allow_none.clear()
         self.param_parameter_defaults.clear()
+        self.param_parameter_locations.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -235,6 +243,7 @@ class ParamAnalyzer:
                 parameter_docs,
                 parameter_allow_none,
                 parameter_defaults,
+                parameter_locations,
             ) = self._extract_parameters(node)
 
             # For inherited classes, we need to collect parameters from parent classes too
@@ -246,6 +255,7 @@ class ParamAnalyzer:
                 parent_parameter_docs,
                 parent_parameter_allow_none,
                 parent_parameter_defaults,
+                parent_parameter_locations,
             ) = self._collect_inherited_parameters(node, getattr(self, "_current_file_path", None))
 
             # Merge parent parameters with current class parameters
@@ -255,6 +265,7 @@ class ParamAnalyzer:
             all_parameter_docs = {**parent_parameter_docs, **parameter_docs}
             all_parameter_allow_none = {**parent_parameter_allow_none, **parameter_allow_none}
             all_parameter_defaults = {**parent_parameter_defaults, **parameter_defaults}
+            all_parameter_locations = {**parent_parameter_locations, **parameter_locations}
 
             # Create unique parameter list, with child parameters overriding parent ones
             all_parameters = []
@@ -278,6 +289,7 @@ class ParamAnalyzer:
             self.param_parameter_docs[node.name] = all_parameter_docs
             self.param_parameter_allow_none[node.name] = all_parameter_allow_none
             self.param_parameter_defaults[node.name] = all_parameter_defaults
+            self.param_parameter_locations[node.name] = all_parameter_locations
 
     def _format_base(self, base: ast.expr) -> str:
         """Format base class for debugging."""
@@ -335,6 +347,7 @@ class ParamAnalyzer:
         dict[str, str],
         dict[str, bool],
         dict[str, str],
+        dict[str, dict[str, Any]],
     ]:
         """Collect parameters from parent classes in inheritance hierarchy."""
         inherited_parameters = []
@@ -343,6 +356,7 @@ class ParamAnalyzer:
         inherited_parameter_docs = {}
         inherited_parameter_allow_none = {}
         inherited_parameter_defaults = {}
+        inherited_parameter_locations = {}
 
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -357,6 +371,7 @@ class ParamAnalyzer:
                     parent_docs = self.param_parameter_docs.get(parent_class_name, {})
                     parent_allow_none = self.param_parameter_allow_none.get(parent_class_name, {})
                     parent_defaults = self.param_parameter_defaults.get(parent_class_name, {})
+                    parent_locations = self.param_parameter_locations.get(parent_class_name, {})
 
                     # Add parent parameters (avoid duplicates)
                     for param in parent_params:
@@ -372,6 +387,8 @@ class ParamAnalyzer:
                             inherited_parameter_allow_none[param] = parent_allow_none[param]
                         if param in parent_defaults:
                             inherited_parameter_defaults[param] = parent_defaults[param]
+                        if param in parent_locations:
+                            inherited_parameter_locations[param] = parent_locations[param]
 
                 # If not found locally, check if it's an imported class
                 else:
@@ -387,6 +404,7 @@ class ParamAnalyzer:
                         parent_docs = imported_class_info.get("parameter_docs", {})
                         parent_allow_none = imported_class_info.get("parameter_allow_none", {})
                         parent_defaults = imported_class_info.get("parameter_defaults", {})
+                        parent_locations = imported_class_info.get("parameter_locations", {})
 
                         # Add parent parameters (avoid duplicates)
                         for param in parent_params:
@@ -402,6 +420,8 @@ class ParamAnalyzer:
                                 inherited_parameter_allow_none[param] = parent_allow_none[param]
                             if param in parent_defaults:
                                 inherited_parameter_defaults[param] = parent_defaults[param]
+                            if param in parent_locations:
+                                inherited_parameter_locations[param] = parent_locations[param]
 
             elif isinstance(base, ast.Attribute):
                 # Handle complex attribute access like pn.widgets.IntSlider
@@ -416,6 +436,7 @@ class ParamAnalyzer:
                         parent_docs = class_info.get("parameter_docs", {})
                         parent_allow_none = class_info.get("parameter_allow_none", {})
                         parent_defaults = class_info.get("parameter_defaults", {})
+                        parent_locations = class_info.get("parameter_locations", {})
 
                         # Add parent parameters (avoid duplicates)
                         for param in parent_params:
@@ -431,6 +452,8 @@ class ParamAnalyzer:
                                 inherited_parameter_allow_none[param] = parent_allow_none[param]
                             if param in parent_defaults:
                                 inherited_parameter_defaults[param] = parent_defaults[param]
+                            if param in parent_locations:
+                                inherited_parameter_locations[param] = parent_locations[param]
 
         return (
             inherited_parameters,
@@ -439,6 +462,7 @@ class ParamAnalyzer:
             inherited_parameter_docs,
             inherited_parameter_allow_none,
             inherited_parameter_defaults,
+            inherited_parameter_locations,
         )
 
     def _extract_parameters(
@@ -450,6 +474,7 @@ class ParamAnalyzer:
         dict[str, str],
         dict[str, bool],
         dict[str, str],
+        dict[str, dict[str, Any]],
     ]:
         """Extract parameter definitions from a Param class."""
         parameters = []
@@ -458,12 +483,33 @@ class ParamAnalyzer:
         parameter_docs = {}
         parameter_allow_none = {}
         parameter_defaults = {}
+        parameter_locations = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
                     if isinstance(target, ast.Name) and self._is_parameter_assignment(item.value):
                         param_name = target.id
                         parameters.append(param_name)
+
+                        # Capture complete source definition information
+                        if hasattr(item, "lineno") and self._current_file_content:
+                            lines = self._current_file_content.split("\n")
+                            # Try to get complete parameter definition
+                            complete_definition = self._extract_complete_parameter_definition(
+                                lines, param_name
+                            )
+                            if complete_definition:
+                                parameter_locations[param_name] = {
+                                    "line": item.lineno,
+                                    "source": complete_definition,
+                                }
+                            elif 0 <= item.lineno - 1 < len(lines):
+                                # Fallback to single line if complete definition extraction fails
+                                source_line = lines[item.lineno - 1]
+                                parameter_locations[param_name] = {
+                                    "line": item.lineno,
+                                    "source": source_line.strip(),
+                                }
 
                         # Get parameter type
                         if isinstance(item.value, ast.Call):
@@ -505,6 +551,7 @@ class ParamAnalyzer:
             parameter_docs,
             parameter_allow_none,
             parameter_defaults,
+            parameter_locations,
         )
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
@@ -1488,6 +1535,9 @@ class ParamAnalyzer:
             "parameter_defaults": module_analysis.get("param_parameter_defaults", {}).get(
                 imported_class_name, {}
             ),
+            "parameter_locations": module_analysis.get("param_parameter_locations", {}).get(
+                imported_class_name, {}
+            ),
         }
 
     def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
@@ -1595,6 +1645,7 @@ class ParamAnalyzer:
             parameter_docs = {}
             parameter_allow_none = {}
             parameter_defaults = {}
+            parameter_locations = {}
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
@@ -1630,6 +1681,17 @@ class ParamAnalyzer:
                         if hasattr(param_obj, "default"):
                             parameter_defaults[param_name] = str(param_obj.default)
 
+                        # Try to get source file location for the parameter
+                        try:
+                            source_location = self._get_parameter_source_location(
+                                param_obj, cls, param_name
+                            )
+                            if source_location:
+                                parameter_locations[param_name] = source_location
+                        except Exception as e:
+                            # If we can't get source location, just continue without it
+                            logger.debug(f"Could not get source location for {param_name}: {e}")
+
             result = {
                 "parameters": parameters,
                 "parameter_types": parameter_types,
@@ -1637,6 +1699,7 @@ class ParamAnalyzer:
                 "parameter_docs": parameter_docs,
                 "parameter_allow_none": parameter_allow_none,
                 "parameter_defaults": parameter_defaults,
+                "parameter_locations": parameter_locations,
             }
 
             # Cache the result for future use
@@ -1648,6 +1711,175 @@ class ParamAnalyzer:
         except Exception as e:
             logger.debug(f"Failed to introspect external class {full_class_path}: {e}")
             return None
+
+    def _get_parameter_source_location(
+        self, param_obj: Any, cls: type, param_name: str
+    ) -> dict[str, Any] | None:
+        """Get source location information for an external parameter."""
+        try:
+            # Try to find the class where this parameter is actually defined
+            defining_class = self._find_parameter_defining_class(cls, param_name)
+            if not defining_class:
+                return None
+
+            # Try to get the complete parameter definition
+            source_definition = None
+            try:
+                # Try to get the source lines and find parameter definition
+                source_lines, _start_line = inspect.getsourcelines(defining_class)
+                source_definition = self._extract_complete_parameter_definition(
+                    source_lines, param_name
+                )
+            except (OSError, TypeError):
+                # Can't get source lines
+                pass
+
+            # Return the complete parameter definition
+            if source_definition:
+                return {
+                    "source": source_definition,
+                }
+            else:
+                # No source available
+                return None
+
+        except Exception:
+            # If anything goes wrong, return None
+            return None
+
+    def _find_parameter_defining_class(self, cls: type, param_name: str) -> type | None:
+        """Find the class in the MRO where a parameter is actually defined."""
+        # Walk up the MRO to find where this parameter was first defined
+        for base_cls in cls.__mro__:
+            if hasattr(base_cls, "param") and hasattr(base_cls.param, param_name):
+                # Check if this class actually defines the parameter (not just inherits it)
+                if param_name in getattr(base_cls, "_param_names", []):
+                    return base_cls
+                # Fallback: check if the parameter object is defined in this class's dict
+                if hasattr(base_cls, "_param_watchers") or param_name in base_cls.__dict__:
+                    return base_cls
+
+        # If we can't find the defining class, return the original class
+        return cls
+
+    def _get_relative_library_path(self, source_file: str, module_name: str) -> str:
+        """Convert absolute source file path to a relative library path."""
+        path = Path(source_file)
+
+        # Try to find the library root by looking for the top-level package
+        module_parts = module_name.split(".")
+        library_name = module_parts[0]  # e.g., 'panel', 'holoviews', etc.
+
+        # Find the library root in the path
+        path_parts = path.parts
+        for i, part in enumerate(reversed(path_parts)):
+            if part == library_name:
+                # Found the library root, create relative path from there
+                lib_root_index = len(path_parts) - i - 1
+                relative_parts = path_parts[lib_root_index:]
+                return "/".join(relative_parts)
+
+        # Fallback: just use the filename with module info
+        return f"{library_name}/{path.name}"
+
+    def _extract_complete_parameter_definition(
+        self, source_lines: list[str], param_name: str
+    ) -> str | None:
+        """Extract the complete parameter definition including all lines until closing parenthesis."""
+        # Find the parameter line first using simple string matching (more reliable)
+        for i, line in enumerate(source_lines):
+            if (
+                (f"{param_name} =" in line or f"{param_name}=" in line)
+                and not line.strip().startswith("#")
+                and self._looks_like_parameter_assignment(line)
+            ):
+                # Extract the complete multiline definition
+                return self._extract_multiline_definition(source_lines, i)
+
+        return None
+
+    def _looks_like_parameter_assignment(self, line: str) -> bool:
+        """Check if a line looks like a parameter assignment."""
+        # Remove the assignment part and check if there's a function call
+        if "=" not in line:
+            return False
+
+        right_side = line.split("=", 1)[1].strip()
+
+        # Look for patterns that suggest this is a parameter:
+        # - Contains a function call with parentheses
+        # - Doesn't look like a simple value assignment
+        return (
+            "(" in right_side
+            and not right_side.startswith(("'", '"', "[", "{", "True", "False"))
+            and not right_side.replace(".", "").replace("_", "").isdigit()
+        )
+
+    def _extract_multiline_definition(self, source_lines: list[str], start_index: int) -> str:
+        """Extract a multiline parameter definition by finding matching parentheses."""
+        definition_lines = []
+        paren_count = 0
+        bracket_count = 0
+        brace_count = 0
+        in_string = False
+        string_char = None
+
+        for i in range(start_index, len(source_lines)):
+            line = source_lines[i]
+            definition_lines.append(line.rstrip())
+
+            # Parse character by character to handle nested structures properly
+            j = 0
+            while j < len(line):
+                char = line[j]
+
+                # Handle string literals
+                if char in ('"', "'") and (j == 0 or line[j - 1] != "\\"):
+                    if not in_string:
+                        in_string = True
+                        string_char = char
+                    elif char == string_char:
+                        in_string = False
+                        string_char = None
+
+                # Skip counting if we're inside a string
+                if not in_string:
+                    if char == "(":
+                        paren_count += 1
+                    elif char == ")":
+                        paren_count -= 1
+                    elif char == "[":
+                        bracket_count += 1
+                    elif char == "]":
+                        bracket_count -= 1
+                    elif char == "{":
+                        brace_count += 1
+                    elif char == "}":
+                        brace_count -= 1
+
+                j += 1
+
+            # Check if we've closed all parentheses/brackets/braces
+            if paren_count <= 0 and bracket_count <= 0 and brace_count <= 0:
+                break
+
+        # Join the lines and clean up the formatting
+        complete_definition = "\n".join(definition_lines)
+        return complete_definition.strip()
+
+    def _find_parameter_line_in_source(
+        self, source_lines: list[str], start_line: int, param_name: str
+    ) -> int | None:
+        """Find the line number where a parameter is defined in source code."""
+        # Use the same generic detection logic
+        for i, line in enumerate(source_lines):
+            if (
+                (f"{param_name} =" in line or f"{param_name}=" in line)
+                and not line.strip().startswith("#")
+                and self._looks_like_parameter_assignment(line)
+            ):
+                return start_line + i
+        return None
 
     def _extract_imports_from_ast(self, tree: ast.AST) -> dict[str, str]:
         """Extract import mappings from an AST."""

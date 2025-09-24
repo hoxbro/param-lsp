@@ -656,6 +656,7 @@ class ParamLanguageServer(LanguageServer):
             param_parameter_docs = analysis.get("param_parameter_docs", {})
             param_parameter_bounds = analysis.get("param_parameter_bounds", {})
             param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
+            param_parameter_locations = analysis.get("param_parameter_locations", {})
 
             for class_name, parameters in param_parameters.items():
                 if word in parameters:
@@ -666,6 +667,7 @@ class ParamLanguageServer(LanguageServer):
                         param_parameter_docs,
                         param_parameter_bounds,
                         param_parameter_allow_none,
+                        param_parameter_locations,
                     )
                     if hover_info:
                         return hover_info
@@ -850,6 +852,7 @@ class ParamLanguageServer(LanguageServer):
         param_parameter_docs: dict,
         param_parameter_bounds: dict,
         param_parameter_allow_none: dict | None = None,
+        param_parameter_locations: dict | None = None,
     ) -> str | None:
         """Build hover information for a local parameter."""
         param_type = param_parameter_types.get(class_name, {}).get(param_name)
@@ -878,12 +881,30 @@ class ParamLanguageServer(LanguageServer):
                 right_bracket = "]" if right_inclusive else ")"
                 hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
 
-        # Add documentation at the bottom with proper formatting
+        # Add documentation first with title and separator
         doc = param_parameter_docs.get(class_name, {}).get(param_name)
         if doc:
             # Clean and dedent the documentation
             clean_doc = textwrap.dedent(doc).strip()
-            hover_parts.append(f"---\n{clean_doc}")
+            hover_parts.append("---")
+            hover_parts.append("Description:")
+            hover_parts.append(clean_doc)
+
+        # Add source location information after documentation
+        if param_parameter_locations:
+            location_info = param_parameter_locations.get(class_name, {}).get(param_name)
+            if location_info and isinstance(location_info, dict):
+                source_line = location_info.get("source")
+                line_number = location_info.get("line")
+                if source_line:
+                    # Add separator line before definition
+                    hover_parts.append("---")
+                    # Show definition with or without line number
+                    if line_number:
+                        hover_parts.append(f"Definition (line {line_number}):")
+                    else:
+                        hover_parts.append("Definition:")
+                    hover_parts.append(f"```python\n{source_line}\n```")
 
         return "\n\n".join(hover_parts)
 
@@ -915,12 +936,26 @@ class ParamLanguageServer(LanguageServer):
                 right_bracket = "]" if right_inclusive else ")"
                 hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
 
-        # Add documentation at the bottom with proper formatting
+        # Add documentation first with title and separator
         doc = class_info.get("parameter_docs", {}).get(param_name)
         if doc:
             # Clean and dedent the documentation
             clean_doc = textwrap.dedent(doc).strip()
-            hover_parts.append(f"---\n{clean_doc}")
+            hover_parts.append("---")
+            hover_parts.append("Description:")
+            hover_parts.append(clean_doc)
+
+        # Add source location information after documentation
+        parameter_locations = class_info.get("parameter_locations", {})
+        if parameter_locations:
+            location_info = parameter_locations.get(param_name)
+            if location_info and isinstance(location_info, dict):
+                source_line = location_info.get("source")
+                if source_line:
+                    # Add separator line before definition
+                    hover_parts.append("---")
+                    hover_parts.append("Definition:")
+                    hover_parts.append(f"```python\n{source_line}\n```")
 
         return "\n\n".join(hover_parts)
 
