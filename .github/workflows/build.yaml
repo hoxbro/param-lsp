@@ -61,7 +61,7 @@ jobs:
         run: |
           echo "::group::Fetching tags"
           git fetch --prune --tags -f
-          echo "tag=${{ needs.docs_build.outputs.tag }}" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
           echo "::endgroup::"
       - name: Ready
         run: |
