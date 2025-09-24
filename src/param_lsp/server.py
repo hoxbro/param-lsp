@@ -48,6 +48,12 @@ PARAM_ASSIGNMENT_PATTERN = re.compile(r"^([^#]*?)(\w+)\s*=", re.MULTILINE)
 CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN = re.compile(r"\b(\w+)\s*=")
 CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
 QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
+PARAM_ATTR_ACCESS_PATTERN = re.compile(
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\..*$", re.MULTILINE
+)
+PARAM_OBJECT_ATTR_ACCESS_PATTERN = re.compile(
+    r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\..*$", re.MULTILINE
+)
 
 
 class ParamLanguageServer(LanguageServer):
@@ -955,6 +961,348 @@ class ParamLanguageServer(LanguageServer):
 
         return used_params
 
+    def _resolve_class_name_from_context(
+        self, uri: str, class_name: str, param_classes: set[str]
+    ) -> str | None:
+        """Resolve a class name from context, handling both direct class names and variable names."""
+        # If it's already a known param class, return it
+        if class_name in param_classes:
+            return class_name
+
+        # If it's a variable name, try to find its assignment in the document
+        if uri in self.document_cache:
+            content = self.document_cache[uri]["content"]
+
+            # Look for assignments like: variable_name = ClassName(...)
+            assignment_pattern = re.compile(
+                rf"^([^#]*?){re.escape(class_name)}\s*=\s*(\w+(?:\.\w+)*)\s*\(", re.MULTILINE
+            )
+
+            for match in assignment_pattern.finditer(content):
+                assigned_class = match.group(2)
+
+                # Check if the assigned class is a known param class
+                if assigned_class in param_classes:
+                    return assigned_class
+
+                # Check if it's an external class
+                analyzer = self.document_cache[uri]["analyzer"]
+                if "." in assigned_class:
+                    # Handle dotted names like hv.Curve
+                    parts = assigned_class.split(".")
+                    if len(parts) >= 2:
+                        alias = parts[0]
+                        class_part = ".".join(parts[1:])
+                        if alias in analyzer.imports:
+                            full_module = analyzer.imports[alias]
+                            full_class_path = f"{full_module}.{class_part}"
+                            external_class_info = analyzer.external_param_classes.get(
+                                full_class_path
+                            )
+                            if external_class_info is None:
+                                external_class_info = analyzer._analyze_external_class_ast(
+                                    full_class_path
+                                )
+                            if external_class_info:
+                                # Return the original dotted name for external class handling
+                                return assigned_class
+
+        return None
+
+    def _get_param_attribute_completions(
+        self, uri: str, line: str, character: int
+    ) -> list[CompletionItem]:
+        """Get parameter completions for param attribute access like P().param.x."""
+        completions = []
+
+        if uri not in self.document_cache:
+            return completions
+
+        # Check if we're in a param attribute access context
+        before_cursor = line[:character]
+        match = PARAM_ATTR_ACCESS_PATTERN.search(before_cursor)
+
+        if not match:
+            return completions
+
+        class_name = match.group(2)
+
+        # Get analyzer for external class resolution
+        analyzer = self.document_cache[uri]["analyzer"]
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = analysis.get("param_classes", set())
+        param_parameters = analysis.get("param_parameters", {})
+        param_parameter_types = analysis.get("param_parameter_types", {})
+        param_parameter_docs = analysis.get("param_parameter_docs", {})
+        param_parameter_bounds = analysis.get("param_parameter_bounds", {})
+        param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
+        param_parameter_defaults = analysis.get("param_parameter_defaults", {})
+
+        # Check if this is a known param class (local or external)
+        parameters = []
+        parameter_types = {}
+        parameter_docs = {}
+        parameter_bounds = {}
+        parameter_allow_none = {}
+        parameter_defaults = {}
+
+        # First, try to resolve the class name (could be a variable or class name)
+        resolved_class_name = self._resolve_class_name_from_context(uri, class_name, param_classes)
+
+        if resolved_class_name and resolved_class_name in param_classes:
+            # Local class
+            parameters = param_parameters.get(resolved_class_name, [])
+            parameter_types = param_parameter_types.get(resolved_class_name, {})
+            parameter_docs = param_parameter_docs.get(resolved_class_name, {})
+            parameter_bounds = param_parameter_bounds.get(resolved_class_name, {})
+            parameter_allow_none = param_parameter_allow_none.get(resolved_class_name, {})
+            parameter_defaults = param_parameter_defaults.get(resolved_class_name, {})
+        else:
+            # Check if it's an external param class or if resolved_class_name is external
+            # Use resolved_class_name if available, otherwise fall back to class_name
+            check_class_name = resolved_class_name if resolved_class_name else class_name
+            full_class_path = None
+
+            if "." in check_class_name:
+                # Handle dotted names like hv.Curve
+                parts = check_class_name.split(".")
+                if len(parts) >= 2:
+                    alias = parts[0]
+                    class_part = ".".join(parts[1:])
+                    if alias in analyzer.imports:
+                        full_module = analyzer.imports[alias]
+                        full_class_path = f"{full_module}.{class_part}"
+                    else:
+                        full_class_path = check_class_name
+            else:
+                # Simple class name - check if it's in external classes directly
+                full_class_path = check_class_name
+
+            # Check if this resolved class is in external_param_classes
+            external_class_info = analyzer.external_param_classes.get(full_class_path)
+            if external_class_info is None and full_class_path:
+                external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+            if external_class_info:
+                parameters = external_class_info.get("parameters", [])
+                parameter_types = external_class_info.get("parameter_types", {})
+                parameter_docs = external_class_info.get("parameter_docs", {})
+                parameter_bounds = external_class_info.get("parameter_bounds", {})
+                parameter_allow_none = external_class_info.get("parameter_allow_none", {})
+                parameter_defaults = external_class_info.get("parameter_defaults", {})
+
+        # If we don't have any parameters, no completions
+        if not parameters:
+            return completions
+
+        # Extract partial text being typed after ".param."
+        partial_text = ""
+        param_dot_match = re.search(r"\.param\.(\w*)$", before_cursor)
+        if param_dot_match:
+            partial_text = param_dot_match.group(1)
+
+        # Create completion items for each parameter
+        for param_name in parameters:
+            # Filter based on partial text being typed
+            if partial_text and not param_name.startswith(partial_text):
+                continue
+
+            # Build documentation for the parameter
+            doc_parts = []
+
+            # Add parameter type info
+            param_type = parameter_types.get(param_name)
+            if param_type:
+                python_type = self._get_python_type_name(param_type)
+                doc_parts.append(f"Type: {param_type} ({python_type})")
+
+            # Add bounds info
+            bounds = parameter_bounds.get(param_name)
+            if bounds:
+                if len(bounds) == 2:
+                    min_val, max_val = bounds
+                    doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
+                elif len(bounds) == 4:
+                    min_val, max_val, left_inclusive, right_inclusive = bounds
+                    left_bracket = "[" if left_inclusive else "("
+                    right_bracket = "]" if right_inclusive else ")"
+                    doc_parts.append(f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}")
+
+            # Add allow_None info
+            allow_none = parameter_allow_none.get(param_name, False)
+            if allow_none:
+                doc_parts.append("Allows None")
+
+            # Add parameter-specific documentation
+            param_doc = parameter_docs.get(param_name)
+            if param_doc:
+                doc_parts.append(f"Description: {param_doc}")
+
+            # Add default value info
+            default_value = parameter_defaults.get(param_name)
+            if default_value:
+                doc_parts.append(f"Default: {default_value}")
+
+            documentation = "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
+
+            completions.append(
+                CompletionItem(
+                    label=param_name,
+                    kind=CompletionItemKind.Property,
+                    detail=f"Parameter of {class_name}",
+                    documentation=documentation,
+                    insert_text=param_name,
+                    filter_text=param_name,
+                    sort_text=f"{param_name:0>3}",
+                )
+            )
+
+        return completions
+
+    def _get_param_object_attribute_completions(
+        self, uri: str, line: str, character: int
+    ) -> list[CompletionItem]:
+        """Get attribute completions for Parameter objects like P().param.x.default."""
+        completions = []
+
+        if uri not in self.document_cache:
+            return completions
+
+        # Check if we're in a Parameter object attribute access context
+        before_cursor = line[:character]
+        match = PARAM_OBJECT_ATTR_ACCESS_PATTERN.search(before_cursor)
+
+        if not match:
+            return completions
+
+        class_name = match.group(2)
+        param_name = match.group(3)
+
+        # Resolve the class name (could be a variable or class name)
+        analyzer = self.document_cache[uri]["analyzer"]
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = analysis.get("param_classes", set())
+        param_parameters = analysis.get("param_parameters", {})
+        param_parameter_types = analysis.get("param_parameter_types", {})
+
+        resolved_class_name = self._resolve_class_name_from_context(uri, class_name, param_classes)
+
+        # Check if this is a valid parameter of a known class
+        parameters = []
+        parameter_types = {}
+
+        if resolved_class_name and resolved_class_name in param_classes:
+            # Local class
+            parameters = param_parameters.get(resolved_class_name, [])
+            parameter_types = param_parameter_types.get(resolved_class_name, {})
+        else:
+            # Check if it's an external param class
+            check_class_name = resolved_class_name if resolved_class_name else class_name
+            full_class_path = None
+
+            if "." in check_class_name:
+                # Handle dotted names like hv.Curve
+                parts = check_class_name.split(".")
+                if len(parts) >= 2:
+                    alias = parts[0]
+                    class_part = ".".join(parts[1:])
+                    if alias in analyzer.imports:
+                        full_module = analyzer.imports[alias]
+                        full_class_path = f"{full_module}.{class_part}"
+                    else:
+                        full_class_path = check_class_name
+            else:
+                # Simple class name
+                full_class_path = check_class_name
+
+            external_class_info = analyzer.external_param_classes.get(full_class_path)
+            if external_class_info is None and full_class_path:
+                external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+            if external_class_info:
+                parameters = external_class_info.get("parameters", [])
+                parameter_types = external_class_info.get("parameter_types", {})
+
+        # Check if param_name is a valid parameter
+        if param_name not in parameters:
+            return completions
+
+        # Get the parameter type to provide appropriate completions
+        param_type = parameter_types.get(param_name, "Parameter")
+
+        # Extract partial text being typed after the parameter name
+        partial_text = ""
+        param_attr_match = re.search(rf"\.{re.escape(param_name)}\.(\w*)$", before_cursor)
+        if param_attr_match:
+            partial_text = param_attr_match.group(1)
+
+        # Common Parameter attributes (available on all parameter types)
+        common_attributes = {
+            "default": "Default value of the parameter",
+            "doc": "Documentation string for the parameter",
+            "name": "Name of the parameter",
+            "label": "Human-readable label for the parameter",
+            "owner": "The Parameterized class that owns this parameter",
+            "allow_None": "Whether the parameter allows None values",
+            "readonly": "Whether the parameter is read-only",
+            "constant": "Whether the parameter is constant",
+            "instantiate": "Whether to instantiate the default value",
+            "per_instance": "Whether the parameter is per-instance",
+            "precedence": "Precedence level for GUI ordering",
+            "watchers": "Dictionary of parameter watchers",
+        }
+
+        # Type-specific attributes
+        type_specific_attributes = {}
+
+        if param_type in ["Integer", "Number", "Float"]:
+            type_specific_attributes.update(
+                {
+                    "bounds": "Valid range for numeric values (min, max)",
+                    "inclusive_bounds": "Whether bounds are inclusive (bool, bool)",
+                    "softbounds": "Soft bounds for validation",
+                    "step": "Step size for numeric input",
+                }
+            )
+
+        if param_type == "String":
+            type_specific_attributes.update(
+                {
+                    "regex": "Regular expression pattern for validation",
+                }
+            )
+
+        if param_type in ["List", "Tuple"]:
+            type_specific_attributes.update(
+                {
+                    "item_type": "Type of items in the container",
+                    "bounds": "Length bounds (min, max)",
+                }
+            )
+
+        # Combine all available attributes
+        all_attributes = {**common_attributes, **type_specific_attributes}
+
+        # Create completion items for matching attributes
+        for attr_name, attr_doc in all_attributes.items():
+            # Filter based on partial text being typed
+            if partial_text and not attr_name.startswith(partial_text):
+                continue
+
+            completions.append(
+                CompletionItem(
+                    label=attr_name,
+                    kind=CompletionItemKind.Property,
+                    detail=f"Parameter.{attr_name}",
+                    documentation=f"{attr_doc}\n\nParameter type: {param_type}",
+                    insert_text=attr_name,
+                    filter_text=attr_name,
+                    sort_text=f"{attr_name:0>3}",
+                )
+            )
+
+        return completions
+
 
 server = ParamLanguageServer("param-lsp", __version__)
 
@@ -1074,6 +1422,20 @@ def completion(params: CompletionParams) -> CompletionList:
     depends_completions = server._get_param_depends_completions(uri, lines, position)
     if depends_completions:
         return CompletionList(is_incomplete=False, items=depends_completions)
+
+    # Check if we're in a Parameter object attribute access context (e.g., P().param.x.default)
+    param_obj_attr_completions = server._get_param_object_attribute_completions(
+        uri, current_line, position.character
+    )
+    if param_obj_attr_completions:
+        return CompletionList(is_incomplete=False, items=param_obj_attr_completions)
+
+    # Check if we're in a param attribute access context (e.g., P().param.x)
+    param_attr_completions = server._get_param_attribute_completions(
+        uri, current_line, position.character
+    )
+    if param_attr_completions:
+        return CompletionList(is_incomplete=False, items=param_attr_completions)
 
     # Check if we're in a constructor call context (e.g., P(...) )
     constructor_completions = server._get_constructor_parameter_completions(
