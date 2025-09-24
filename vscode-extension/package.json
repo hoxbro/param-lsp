@@ -2,7 +2,7 @@
   "name": "param-lsp-vscode",
   "displayName": "Param LSP",
   "description": "Language Server Protocol support for HoloViz Param library",
-  "version": "0.0.1-alpha.0",
+  "version": "2025.1.0",
   "publisher": "param-lsp",
   "icon": "param-logo.png",
   "readme": "README.md",
@@ -59,12 +59,13 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
+    "package-pre": "vsce package --pre-release",
     "install-ext": "code --install-extension *.vsix",
-    "sync-version": "python ../scripts/sync_versions.py"
+    "publish": "vsce publish",
+    "publish-pre": "vsce publish --pre-release"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
@@ -73,6 +74,6 @@
     "@types/node": "18.x",
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.0.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.9.2"
   }
 }
