@@ -624,6 +624,11 @@ class ParamLanguageServer(LanguageServer):
             if word == "rx" and self._is_rx_method_context(line):
                 return self._build_rx_method_hover_info()
 
+            # Check if it's a param namespace method (values, objects)
+            param_namespace_method_info = self._get_param_namespace_method_hover_info(line, word)
+            if param_namespace_method_info:
+                return param_namespace_method_info
+
             # Check if it's a reactive expression method
             rx_method_info = self._get_reactive_expression_method_hover_info(line, word)
             if rx_method_info:
@@ -683,6 +688,56 @@ class ParamLanguageServer(LanguageServer):
             "**Documentation**: [Reactive Expressions Guide](https://param.holoviz.org/user_guide/Reactive_Expressions.html)",
         ]
         return "\n".join(hover_parts)
+
+    def _get_param_namespace_method_hover_info(self, line: str, word: str) -> str | None:
+        """Get hover information for param namespace methods like obj.param.values()."""
+        # Check if we're in a param namespace method context
+        if not re.search(r"\.param\.\w+\(", line):
+            return None
+
+        # Define param namespace methods with their documentation
+        param_namespace_methods = {
+            "values": {
+                "signature": "values()",
+                "description": "Returns a dictionary mapping parameter names to their current values for all parameters of this Parameterized object.",
+                "example": "obj.param.values()\n# Output: {'x': 5, 'y': 'hello', 'z': True}",
+                "returns": "Dict[str, Any] (actual parameter values)",
+                "note": "Returns the actual current parameter values, not parameter names or objects",
+            },
+            "objects": {
+                "signature": "objects()",
+                "description": "Returns a dictionary mapping parameter names to their Parameter objects for all parameters of this Parameterized object.",
+                "example": "obj.param.objects()\n# Output: {'x': Integer(default=5), 'y': String(default='hello'), 'z': Boolean(default=True)}",
+                "returns": "Dict[str, Parameter] (parameter objects with metadata)",
+                "note": "Returns the Parameter objects themselves (with metadata), not the current parameter values",
+            },
+        }
+
+        if word in param_namespace_methods:
+            method_info = param_namespace_methods[word]
+            hover_parts = [
+                f"**obj.param.{method_info['signature']}**",
+                "",
+                method_info["description"],
+                "",
+                f"**Returns**: `{method_info['returns']}`",
+            ]
+
+            hover_parts.extend(
+                [
+                    "",
+                    "**Example**:",
+                    "```python",
+                    f"{method_info['example']}",
+                    "```",
+                ]
+            )
+            # Add note if present
+            if "note" in method_info:
+                hover_parts.extend(["", f"**Note**: {method_info['note']}"])
+            return "\n".join(hover_parts)
+
+        return None
 
     def _get_reactive_expression_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for reactive expression methods."""
@@ -772,8 +827,6 @@ class ParamLanguageServer(LanguageServer):
                 method_info["description"],
                 "",
                 f"**Example**: `{method_info['example']}`",
-                "",
-                "Part of HoloViz Param reactive expressions system.",
             ]
             return "\n".join(hover_parts)
 
