@@ -1,26 +1,33 @@
-import * as vscode from 'vscode';
-import {
+const vscode = require('vscode');
+const {
     LanguageClient,
-    LanguageClientOptions,
-    ServerOptions,
     TransportKind
-} from 'vscode-languageclient/node';
+} = require('vscode-languageclient/node');
 
-let client: LanguageClient;
+/**
+ * @type {LanguageClient}
+ */
+let client;
 
-export function activate(context: vscode.ExtensionContext) {
+/**
+ * Activates the extension
+ * @param {vscode.ExtensionContext} context - The extension context
+ */
+function activate(context) {
     const config = vscode.workspace.getConfiguration('param-lsp');
 
     if (!config.get('enable', true)) {
         return;
     }
 
-    const serverOptions: ServerOptions = {
+    /** @type {import('vscode-languageclient/node').ServerOptions} */
+    const serverOptions = {
         command: 'param-lsp',
         transport: TransportKind.stdio
     };
 
-    const clientOptions: LanguageClientOptions = {
+    /** @type {import('vscode-languageclient/node').LanguageClientOptions} */
+    const clientOptions = {
         documentSelector: [{ scheme: 'file', language: 'python' }],
         synchronize: {
             fileEvents: vscode.workspace.createFileSystemWatcher('**/.clientrc')
@@ -38,9 +45,18 @@ export function activate(context: vscode.ExtensionContext) {
     client.start();
 }
 
-export function deactivate(): Thenable<void> | undefined {
+/**
+ * Deactivates the extension
+ * @returns {Promise<void> | undefined}
+ */
+function deactivate() {
     if (!client) {
         return undefined;
     }
     return client.stop();
 }
+
+module.exports = {
+    activate,
+    deactivate
+};

@@ -8,7 +8,7 @@
   "readme": "README.md",
   "repository": {
     "type": "git",
-    "url": "https://github.com/holoviz-dev/param-lsp"
+    "url": "https://github.com/hoxbro/param-lsp"
   },
   "engines": {
     "vscode": "^1.75.0"
@@ -27,7 +27,7 @@
   "activationEvents": [
     "onLanguage:python"
   ],
-  "main": "./out/extension.js",
+  "main": "./src/extension.js",
   "contributes": {
     "languages": [
       {
@@ -59,8 +59,6 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "package-pre": "vsce package --pre-release",
     "install-ext": "code --install-extension *.vsix",
@@ -71,9 +69,6 @@
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "18.x",
-    "@types/vscode": "^1.75.0",
-    "@vscode/vsce": "^3.0.0",
-    "typescript": "^5.9.2"
+    "@vscode/vsce": "^3.0.0"
   }
 }

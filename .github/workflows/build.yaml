@@ -68,7 +68,6 @@ jobs:
         run: |
           cd vscode-extension
           npm install
-          npm run compile
       - name: Pre-release
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'dev') ||
