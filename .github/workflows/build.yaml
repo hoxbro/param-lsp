@@ -52,6 +52,7 @@ jobs:
       id-token: write
     environment:
       name: publish
+      url: https://marketplace.visualstudio.com/items?itemName=hoxbro.param-lsp
     steps:
       - uses: actions/checkout@v4
         with:

@@ -1,9 +1,9 @@
 {
-  "name": "param-lsp-vscode",
+  "name": "param-lsp",
   "displayName": "Param LSP",
   "description": "Language Server Protocol support for HoloViz Param library",
   "version": "2025.1.0",
-  "publisher": "param-lsp",
+  "publisher": "hoxbro",
   "icon": "param-logo.png",
   "readme": "README.md",
   "repository": {
