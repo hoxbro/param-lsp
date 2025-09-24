@@ -35,6 +35,7 @@ from pygls.server import LanguageServer
 
 from . import __version__
 from .analyzer import ParamAnalyzer
+from .mixins import CompletionMixin, HoverMixin, ParamUtilsMixin, ValidationMixin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,7 +64,9 @@ PARAM_UPDATE_PATTERN = re.compile(
 )
 
 
-class ParamLanguageServer(LanguageServer):
+class ParamLanguageServer(
+    ParamUtilsMixin, ValidationMixin, HoverMixin, CompletionMixin, LanguageServer
+):
     """Language Server for HoloViz Param."""
 
     def __init__(self, *args, **kwargs):
