@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from lsprotocol.types import Position
+from lsprotocol.types import CompletionItemKind, Position
 
 from src.param_lsp.server import ParamLanguageServer
 
@@ -34,12 +34,16 @@ P().param."""
             "file:///test.py", "P().param.", position.character
         )
 
-        # Should have completions for both x and y parameters
-        assert len(completions) == 2, f"Expected 2 completions, got {len(completions)}"
+        # Should have completions for both parameters and methods
+        assert len(completions) == 4, (
+            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        )
 
         completion_labels = [item.label for item in completions]
         assert "x" in completion_labels, "Should suggest 'x' parameter"
         assert "y" in completion_labels, "Should suggest 'y' parameter"
+        assert "objects()" in completion_labels, "Should suggest 'objects()' method"
+        assert "values()" in completion_labels, "Should suggest 'values()' method"
 
         # Check that documentation includes type information
         x_completion = next((c for c in completions if c.label == "x"), None)
@@ -106,12 +110,16 @@ Child().param."""
             "file:///test.py", "Child().param.", position.character
         )
 
-        # Should suggest both inherited and own parameters
-        assert len(completions) == 2, f"Expected 2 completions, got {len(completions)}"
+        # Should suggest both inherited and own parameters plus methods
+        assert len(completions) == 4, (
+            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        )
 
         completion_labels = [item.label for item in completions]
         assert "base_param" in completion_labels, "Should suggest inherited parameter"
         assert "child_param" in completion_labels, "Should suggest own parameter"
+        assert "objects()" in completion_labels, "Should suggest 'objects()' method"
+        assert "values()" in completion_labels, "Should suggest 'values()' method"
 
     def test_param_attribute_completion_constructor_call(self):
         """Test param attribute completion on constructor call result."""
@@ -136,12 +144,16 @@ P().param."""
             "file:///test.py", "P().param.", position.character
         )
 
-        # Should have completions for parameters
-        assert len(completions) == 2, f"Expected 2 completions, got {len(completions)}"
+        # Should have completions for parameters and methods
+        assert len(completions) == 4, (
+            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        )
 
         completion_labels = [item.label for item in completions]
         assert "x" in completion_labels, "Should suggest 'x' parameter"
         assert "y" in completion_labels, "Should suggest 'y' parameter"
+        assert "objects()" in completion_labels, "Should suggest 'objects()' method"
+        assert "values()" in completion_labels, "Should suggest 'values()' method"
 
         # Check that documentation includes bounds for x
         x_completion = next((c for c in completions if c.label == "x"), None)
@@ -172,12 +184,16 @@ P(x=5).param."""
             "file:///test.py", "P(x=5).param.", position.character
         )
 
-        # Should have completions for all parameters
-        assert len(completions) == 2, f"Expected 2 completions, got {len(completions)}"
+        # Should have completions for all parameters and methods
+        assert len(completions) == 4, (
+            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        )
 
         completion_labels = [item.label for item in completions]
         assert "x" in completion_labels, "Should suggest 'x' parameter"
         assert "y" in completion_labels, "Should suggest 'y' parameter"
+        assert "objects()" in completion_labels, "Should suggest 'objects()' method"
+        assert "values()" in completion_labels, "Should suggest 'values()' method"
 
     def test_param_attribute_completion_external_class(self):
         """Test param attribute completion for external classes."""
@@ -279,8 +295,10 @@ P().param."""
             "file:///test.py", "P().param.", position.character
         )
 
-        # Should have completions for all parameters
-        assert len(completions) == 3, f"Expected 3 completions, got {len(completions)}"
+        # Should have completions for all parameters and methods
+        assert len(completions) == 5, (
+            f"Expected 5 completions (2 methods + 3 parameters), got {len(completions)}"
+        )
 
         # Check specific parameter documentation
         x_completion = next((c for c in completions if c.label == "x"), None)
@@ -313,3 +331,113 @@ P().param."""
         assert "A string parameter" in z_completion.documentation, (
             "Should include description for z"
         )
+
+    def test_param_attribute_completion_methods(self):
+        """Test param attribute completion includes objects() and values() methods."""
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        code_py = """\
+import param
+
+class P(param.Parameterized):
+    x = param.Integer(default=1)
+    y = param.String(default="hello")
+
+# Test param method completion
+P().param."""
+
+        # Simulate document analysis
+        server._analyze_document("file:///test.py", code_py)
+
+        # Test completion at end of P().param.
+        position = Position(line=7, character=10)  # After "P().param."
+        completions = server._get_param_attribute_completions(
+            "file:///test.py", "P().param.", position.character
+        )
+
+        # Should have completions for both parameters and methods
+        assert len(completions) == 4, (
+            f"Expected 4 completions (2 methods + 2 parameters), got {len(completions)}"
+        )
+
+        completion_labels = [item.label for item in completions]
+
+        # Check that methods are included
+        assert "objects()" in completion_labels, "Should suggest 'objects()' method"
+        assert "values()" in completion_labels, "Should suggest 'values()' method"
+
+        # Check that parameters are still included
+        assert "x" in completion_labels, "Should suggest 'x' parameter"
+        assert "y" in completion_labels, "Should suggest 'y' parameter"
+
+        # Check method completions details
+        objects_completion = next((c for c in completions if c.label == "objects()"), None)
+        values_completion = next((c for c in completions if c.label == "values()"), None)
+
+        assert objects_completion is not None, "Should have completion for objects()"
+        assert values_completion is not None, "Should have completion for values()"
+
+        assert objects_completion.kind == CompletionItemKind.Method, "objects() should be a method"
+        assert values_completion.kind == CompletionItemKind.Method, "values() should be a method"
+
+        assert isinstance(objects_completion.documentation, str), (
+            "Documentation should be a string"
+        )
+        assert isinstance(values_completion.documentation, str), "Documentation should be a string"
+
+        assert (
+            "dictionary of (parameter_name, parameter_object)" in objects_completion.documentation
+        )
+        assert "iterator of parameter values" in values_completion.documentation
+
+    def test_param_attribute_completion_method_filtering(self):
+        """Test that method completions are filtered based on partial text."""
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        code_py = """\
+import param
+
+class P(param.Parameterized):
+    x = param.Integer(default=1)
+
+# Test partial method completion
+P().param.o"""
+
+        # Simulate document analysis
+        server._analyze_document("file:///test.py", code_py)
+
+        # Test completion after partial typing "o"
+        position = Position(line=6, character=11)  # After "P().param.o"
+        completions = server._get_param_attribute_completions(
+            "file:///test.py", "P().param.o", position.character
+        )
+
+        # Should only suggest objects() method (starts with "o")
+        assert len(completions) == 1, f"Expected 1 completion, got {len(completions)}"
+        assert completions[0].label == "objects()", "Should suggest 'objects()' method"
+
+    def test_param_attribute_completion_values_filtering(self):
+        """Test that values() method completion is filtered based on partial text."""
+        server = ParamLanguageServer("test-server", "1.0.0")
+
+        code_py = """\
+import param
+
+class P(param.Parameterized):
+    x = param.Integer(default=1)
+
+# Test partial method completion
+P().param.v"""
+
+        # Simulate document analysis
+        server._analyze_document("file:///test.py", code_py)
+
+        # Test completion after partial typing "v"
+        position = Position(line=6, character=11)  # After "P().param.v"
+        completions = server._get_param_attribute_completions(
+            "file:///test.py", "P().param.v", position.character
+        )
+
+        # Should only suggest values() method (starts with "v")
+        assert len(completions) == 1, f"Expected 1 completion, got {len(completions)}"
+        assert completions[0].label == "values()", "Should suggest 'values()' method"

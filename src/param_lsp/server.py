@@ -1101,6 +1101,40 @@ class ParamLanguageServer(LanguageServer):
         if param_dot_match:
             partial_text = param_dot_match.group(1)
 
+        # Add param namespace method completions (objects, values)
+        param_methods = [
+            {
+                "name": "objects",
+                "insert_text": "objects()",
+                "documentation": "Returns a dictionary of (parameter_name, parameter_object) pairs for all parameters of this Parameterized object.",
+                "detail": "param.objects() method",
+            },
+            {
+                "name": "values",
+                "insert_text": "values()",
+                "documentation": "Returns an iterator of parameter values for all parameters of this Parameterized object.",
+                "detail": "param.values() method",
+            },
+        ]
+
+        for method in param_methods:
+            method_name = method["name"]
+            # Filter based on partial text being typed
+            if partial_text and not method_name.startswith(partial_text):
+                continue
+
+            completions.append(
+                CompletionItem(
+                    label=method_name + "()",
+                    kind=CompletionItemKind.Method,
+                    detail=method["detail"],
+                    documentation=method["documentation"],
+                    insert_text=method["insert_text"],
+                    filter_text=method_name,
+                    sort_text=f"0_{method_name}",  # Sort methods before parameters
+                )
+            )
+
         # Create completion items for each parameter
         for param_name in parameters:
             # Filter based on partial text being typed
