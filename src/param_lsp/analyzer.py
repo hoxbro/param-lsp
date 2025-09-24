@@ -11,6 +11,7 @@ import importlib
 import importlib.util
 import inspect
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -2087,3 +2088,46 @@ class ParamAnalyzer:
 
         except Exception:
             return None
+
+    def resolve_class_name_from_context(
+        self, class_name: str, param_classes: set[str], document_content: str
+    ) -> str | None:
+        """Resolve a class name from context, handling both direct class names and variable names."""
+        # If it's already a known param class, return it
+        if class_name in param_classes:
+            return class_name
+
+        # If it's a variable name, try to find its assignment in the document
+        if document_content:
+            # Look for assignments like: variable_name = ClassName(...)
+            assignment_pattern = re.compile(
+                rf"^([^#]*?){re.escape(class_name)}\s*=\s*(\w+(?:\.\w+)*)\s*\(", re.MULTILINE
+            )
+
+            for match in assignment_pattern.finditer(document_content):
+                assigned_class = match.group(2)
+
+                # Check if the assigned class is a known param class
+                if assigned_class in param_classes:
+                    return assigned_class
+
+                # Check if it's an external class
+                if "." in assigned_class:
+                    # Handle dotted names like hv.Curve
+                    parts = assigned_class.split(".")
+                    if len(parts) >= 2:
+                        alias = parts[0]
+                        class_part = ".".join(parts[1:])
+                        if alias in self.imports:
+                            full_module = self.imports[alias]
+                            full_class_path = f"{full_module}.{class_part}"
+                            external_class_info = self.external_param_classes.get(full_class_path)
+                            if external_class_info is None:
+                                external_class_info = self._analyze_external_class_ast(
+                                    full_class_path
+                                )
+                            if external_class_info:
+                                # Return the original dotted name for external class handling
+                                return assigned_class
+
+        return None
