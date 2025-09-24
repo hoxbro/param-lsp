@@ -1186,6 +1186,24 @@ class ParamLanguageServer(LanguageServer):
 
         return None
 
+    def _should_include_parentheses_in_insert_text(
+        self, line: str, character: int, method_name: str
+    ) -> bool:
+        """Determine if parentheses should be included in insert_text for method completions.
+
+        Returns False if:
+        - The method is already followed by parentheses (e.g., obj.param.objects()CURSOR)
+        - There are already parentheses after the cursor position
+        """
+        # Check if the method name with parentheses appears before the cursor
+        before_cursor = line[:character]
+        if f"{method_name}()" in before_cursor:
+            return False
+
+        # Check if there are parentheses immediately after the cursor
+        after_cursor = line[character:].lstrip()
+        return not after_cursor.startswith("()")
+
     def _get_param_attribute_completions(
         self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
@@ -1300,13 +1318,19 @@ class ParamLanguageServer(LanguageServer):
             if partial_text and not method_name.startswith(partial_text):
                 continue
 
+            # Determine if parentheses should be included in insert_text
+            if self._should_include_parentheses_in_insert_text(line, character, method_name):
+                insert_text = method["insert_text"]  # includes ()
+            else:
+                insert_text = method_name  # just the method name
+
             completions.append(
                 CompletionItem(
                     label=method_name + "()",
                     kind=CompletionItemKind.Method,
                     detail=method["detail"],
                     documentation=method["documentation"],
-                    insert_text=method["insert_text"],
+                    insert_text=insert_text,
                     filter_text=method_name,
                     sort_text=f"0_{method_name}",  # Sort methods before parameters
                 )
@@ -1505,13 +1529,19 @@ class ParamLanguageServer(LanguageServer):
             if partial_text and not method_name.startswith(partial_text):
                 continue
 
+            # Determine if parentheses should be included in insert_text
+            if self._should_include_parentheses_in_insert_text(line, character, method_name):
+                insert_text = f"{method_name}()"
+            else:
+                insert_text = method_name
+
             completions.append(
                 CompletionItem(
                     label=f"{method_name}()",
                     kind=CompletionItemKind.Method,
                     detail=f"Parameter.{method_name}()",
                     documentation=f"{method_doc}\n\nParameter type: {param_type}",
-                    insert_text=f"{method_name}()",
+                    insert_text=insert_text,
                     filter_text=method_name,
                     sort_text=f"0_{method_name}",  # Sort methods before properties
                 )
@@ -1635,28 +1665,15 @@ class ParamLanguageServer(LanguageServer):
             if partial_text and not method_name.startswith(partial_text):
                 continue
 
-            # Determine if method takes arguments
-            if method_name in [
-                "and_",
-                "in_",
-                "is_",
-                "is_not",
-                "or_",
-                "map",
-                "pipe",
-                "when",
-                "where",
-                "watch",
-            ]:
+            # Determine if parentheses should be included in insert_text
+            if self._should_include_parentheses_in_insert_text(line, character, method_name):
                 insert_text = f"{method_name}()"
-                label = f"{method_name}()"
             else:
-                insert_text = f"{method_name}()"
-                label = f"{method_name}()"
+                insert_text = method_name
 
             completions.append(
                 CompletionItem(
-                    label=label,
+                    label=f"{method_name}()",
                     kind=CompletionItemKind.Method,
                     detail=f"rx.{method_name}",
                     documentation=f"{method_doc}\n\nReactive expression method for parameter '{param_name}'",
