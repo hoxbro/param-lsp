@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 100
       - name: Set output
         id: vars
         run: echo "tag=${{ needs.docs_build.outputs.tag }}" >> $GITHUB_OUTPUT
