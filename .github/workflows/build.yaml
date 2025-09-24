@@ -73,7 +73,7 @@ jobs:
           (github.event_name == 'push' && (contains(steps.vars.outputs.tag, 'a') || contains(steps.vars.outputs.tag, 'b') || contains(steps.vars.outputs.tag, 'rc')))
         run: |
           cd vscode-extension
-          npm run publish-dev
+          npm run publish-pre
       - name: Release
         if: |
           (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'main') ||
