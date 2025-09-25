@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-# Test uses new format directly
-
 
 class TestBoundsValidation:
     """Test bounds validation in parameter definitions."""

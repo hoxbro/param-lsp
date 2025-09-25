@@ -130,7 +130,7 @@ class ExternalClassInfo:
 
 
 def convert_to_legacy_format(result):
-    """Convert new dataclass format to legacy dict format for tests."""
+    """Convert dataclass format to legacy dict format for tests."""
     param_classes_dict = result["param_classes"]
 
     return {

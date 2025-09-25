@@ -10,7 +10,6 @@ import param
 
 from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
 
-# Server code now uses new format directly
 from .base import LSPServerBase
 
 # Compiled regex patterns for performance
@@ -69,7 +68,6 @@ class HoverMixin(LSPServerBase):
             analyzer = self.document_cache[uri]["analyzer"]
             for class_name, class_info in analyzer.external_param_classes.items():
                 if class_info and word in class_info.parameters:
-                    # Use the new format method for ExternalClassInfo objects
                     param_info = class_info.get_parameter(word)
                     if param_info:
                         hover_info = self._build_parameter_hover_info_new(param_info, class_name)
@@ -79,7 +77,7 @@ class HoverMixin(LSPServerBase):
         return None
 
     def _build_parameter_hover_info_new(self, param_info, class_name: str) -> str | None:
-        """Build hover information for a parameter using new dataclass format."""
+        """Build hover information for a parameter using dataclass format."""
         if not param_info:
             return None
 

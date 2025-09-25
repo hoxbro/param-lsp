@@ -9,7 +9,6 @@ from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
 from param_lsp.analyzer import ParamAnalyzer
 
-# Server now uses new format directly
 from .base import LSPServerBase
 
 if TYPE_CHECKING:

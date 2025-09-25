@@ -633,7 +633,7 @@ class ParamAnalyzer:
         if assigned_numeric is None:
             return
 
-        # Handle both old format (min, max) and new format (min, max, left_inclusive, right_inclusive)
+        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
         if len(bounds) == 2:
             min_val, max_val = bounds
             left_inclusive, right_inclusive = True, True  # Default to inclusive
@@ -880,7 +880,7 @@ class ParamAnalyzer:
         if assigned_numeric is None:
             return
 
-        # Handle both old format (min, max) and new format (min, max, left_inclusive, right_inclusive)
+        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
         if len(bounds) == 2:
             min_val, max_val = bounds
             left_inclusive, right_inclusive = True, True  # Default to inclusive
@@ -1306,10 +1306,8 @@ class ParamAnalyzer:
         if not module_analysis:
             return None
 
-        # Check if the class exists in the imported module - use the new format
+        # Check if the class exists in the imported module
         param_classes_dict = module_analysis.get("param_classes", {})
-
-        # Only use the new dict format (ParamClassInfo objects)
         if isinstance(param_classes_dict, dict) and imported_class_name in param_classes_dict:
             class_info = param_classes_dict[imported_class_name]
             # If it's a ParamClassInfo object, return it
