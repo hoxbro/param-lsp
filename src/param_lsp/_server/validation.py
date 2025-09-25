@@ -10,18 +10,18 @@ from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
 from param_lsp.analyzer import ParamAnalyzer
 
+from .base import LSPServerBase
+
 if TYPE_CHECKING:
     from typing import Any
-
-    from .protocol import LSPServerProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class ValidationMixin:
+class ValidationMixin(LSPServerBase):
     """Provides validation and diagnostic functionality for the LSP server."""
 
-    def _analyze_document(self: LSPServerProtocol, uri: str, content: str):
+    def _analyze_document(self, uri: str, content: str):
         """Analyze a document and cache the results."""
         file_path = urlparse(uri).path
 
@@ -51,7 +51,7 @@ class ValidationMixin:
         # Publish diagnostics for type errors
         self._publish_diagnostics(uri, analysis.get("type_errors", []))
 
-    def _publish_diagnostics(self: LSPServerProtocol, uri: str, type_errors: list[dict[str, Any]]):
+    def _publish_diagnostics(self, uri: str, type_errors: list[dict[str, Any]]):
         """Publish diagnostics for type errors."""
         diagnostics = []
 

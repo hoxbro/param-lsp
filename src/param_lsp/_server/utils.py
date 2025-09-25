@@ -4,18 +4,14 @@ from __future__ import annotations
 
 import re
 import textwrap
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from .protocol import LSPServerProtocol
+from .base import LSPServerBase
 
 
-class ParamUtilsMixin:
+class ParamUtilsMixin(LSPServerBase):
     """Provides shared utility methods for parameter handling across LSP features."""
 
-    def _get_python_type_name(
-        self: LSPServerProtocol, param_type: str, allow_none: bool = False
-    ) -> str:
+    def _get_python_type_name(self, param_type: str, allow_none: bool = False) -> str:
         """Map param type to Python type name for display using existing param_type_map."""
         if hasattr(self, "analyzer") and param_type in self.analyzer.param_type_map:
             python_types = self.analyzer.param_type_map[param_type]
@@ -37,7 +33,7 @@ class ParamUtilsMixin:
         return f"{base_type} | None" if allow_none else base_type
 
     def _format_default_for_display(
-        self: LSPServerProtocol, default_value: str, param_type: str | None = None
+        self, default_value: str, param_type: str | None = None
     ) -> str:
         """Format default value for autocomplete display."""
         # Check if the default value is a string literal (regardless of parameter type)
@@ -100,9 +96,7 @@ class ParamUtilsMixin:
         else:
             return default_value  # Return as-is for numbers, booleans, etc.
 
-    def _find_containing_class(
-        self: LSPServerProtocol, lines: list[str], current_line: int
-    ) -> str | None:
+    def _find_containing_class(self, lines: list[str], current_line: int) -> str | None:
         """Find the class that contains the current line."""
         # Compiled regex patterns for performance
         CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
@@ -122,7 +116,7 @@ class ParamUtilsMixin:
         return None
 
     def _resolve_class_name_from_context(
-        self: LSPServerProtocol, uri: str, class_name: str, param_classes: set[str]
+        self, uri: str, class_name: str, param_classes: set[str]
     ) -> str | None:
         """Resolve a class name from context, handling both direct class names and variable names."""
         # If it's already a known param class, return it
@@ -140,7 +134,7 @@ class ParamUtilsMixin:
         return None
 
     def _should_include_parentheses_in_insert_text(
-        self: LSPServerProtocol, line: str, character: int, method_name: str
+        self, line: str, character: int, method_name: str
     ) -> bool:
         """Determine if parentheses should be included in insert_text for method completions.
 
@@ -158,7 +152,7 @@ class ParamUtilsMixin:
         return not after_cursor.startswith("()")
 
     def _build_parameter_documentation(
-        self: LSPServerProtocol,
+        self,
         param_name: str,
         class_name: str,
         parameter_types: dict[str, str],
@@ -207,7 +201,7 @@ class ParamUtilsMixin:
 
         return "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
 
-    def _clean_and_format_documentation(self: LSPServerProtocol, doc: str) -> str:
+    def _clean_and_format_documentation(self, doc: str) -> str:
         """Clean and format documentation text."""
         if not doc:
             return doc

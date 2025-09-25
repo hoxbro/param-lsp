@@ -24,11 +24,11 @@ from lsprotocol.types import (
     ServerCapabilities,
     TextDocumentSyncKind,
 )
-from pygls.server import LanguageServer
 
 from param_lsp import __version__
 from param_lsp.analyzer import ParamAnalyzer
 
+from .base import LSPServerBase
 from .completion import CompletionMixin
 from .hover import HoverMixin
 from .utils import ParamUtilsMixin
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 class ParamLanguageServer(
-    ParamUtilsMixin, ValidationMixin, HoverMixin, CompletionMixin, LanguageServer
+    ParamUtilsMixin, ValidationMixin, HoverMixin, CompletionMixin, LSPServerBase
 ):
     """Language Server for HoloViz Param."""
 

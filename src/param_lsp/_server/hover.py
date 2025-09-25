@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING
 
 import param
 
+from .base import LSPServerBase
+
 if TYPE_CHECKING:
     from typing import Any
 
-    from .protocol import LSPServerProtocol
 
-
-class HoverMixin:
+class HoverMixin(LSPServerBase):
     """Provides hover information functionality for the LSP server."""
 
-    def _get_hover_info(self: LSPServerProtocol, uri: str, line: str, word: str) -> str | None:
+    def _get_hover_info(self, uri: str, line: str, word: str) -> str | None:
         """Get hover information for a word."""
         if uri in self.document_cache:
             analysis = self.document_cache[uri]["analysis"]
@@ -77,12 +77,12 @@ class HoverMixin:
 
         return None
 
-    def _is_rx_method_context(self: LSPServerProtocol, line: str) -> bool:
+    def _is_rx_method_context(self, line: str) -> bool:
         """Check if the rx word is in a parameter context like obj.param.x.rx."""
         # Check if line contains pattern like .param.something.rx
         return bool(re.search(r"\.param\.\w+\.rx\b", line))
 
-    def _build_rx_method_hover_info(self: LSPServerProtocol) -> str:
+    def _build_rx_method_hover_info(self) -> str:
         """Build hover information for the rx property."""
         hover_parts = [
             "**rx Property**",
@@ -94,9 +94,7 @@ class HoverMixin:
         ]
         return "\n".join(hover_parts)
 
-    def _get_param_namespace_method_hover_info(
-        self: LSPServerProtocol, line: str, word: str
-    ) -> str | None:
+    def _get_param_namespace_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for param namespace methods like obj.param.values()."""
         # Check if we're in a param namespace method context
         if not re.search(r"\.param\.\w+\(", line):
@@ -153,9 +151,7 @@ class HoverMixin:
 
         return None
 
-    def _get_reactive_expression_method_hover_info(
-        self: LSPServerProtocol, line: str, word: str
-    ) -> str | None:
+    def _get_reactive_expression_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for reactive expression methods."""
         # Check if we're in a reactive expression context
         if not re.search(r"\.param\.\w+\.rx\.", line):
@@ -249,7 +245,7 @@ class HoverMixin:
         return None
 
     def _build_parameter_hover_info(
-        self: LSPServerProtocol,
+        self,
         param_name: str,
         class_name: str,
         param_parameter_types: dict[str, dict[str, str]],
@@ -313,7 +309,7 @@ class HoverMixin:
         return "\n\n".join(hover_parts)
 
     def _build_external_parameter_hover_info(
-        self: LSPServerProtocol, param_name: str, class_name: str, class_info: dict[str, Any]
+        self, param_name: str, class_name: str, class_info: dict[str, Any]
     ) -> str | None:
         """Build hover information for an external parameter."""
         param_type = class_info.get("parameter_types", {}).get(param_name)

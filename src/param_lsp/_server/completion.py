@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 import param
 from lsprotocol.types import CompletionItem, CompletionItemKind, InsertTextFormat
 
+from .base import LSPServerBase
+
 if TYPE_CHECKING:
     from lsprotocol.types import Position
-
-    from .protocol import LSPServerProtocol
 
 # Compiled regex patterns for performance
 PARAM_DEPENDS_PATTERN = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)
@@ -35,12 +35,10 @@ PARAM_UPDATE_PATTERN = re.compile(
 )
 
 
-class CompletionMixin:
+class CompletionMixin(LSPServerBase):
     """Provides autocompletion functionality for the LSP server."""
 
-    def _is_in_param_definition_context(
-        self: LSPServerProtocol, line: str, character: int
-    ) -> bool:
+    def _is_in_param_definition_context(self, line: str, character: int) -> bool:
         """Check if we're in a parameter definition context like param.String("""
         before_cursor = line[:character]
 
@@ -55,9 +53,7 @@ class CompletionMixin:
 
         return False
 
-    def _get_completions_for_param_class(
-        self: LSPServerProtocol, line: str, character: int
-    ) -> list[CompletionItem]:
+    def _get_completions_for_param_class(self, line: str, character: int) -> list[CompletionItem]:
         """Get completions for param class attributes and methods."""
 
         # Only show param types when typing after "param."
@@ -119,9 +115,7 @@ class CompletionMixin:
         # Don't show any generic completions in other contexts
         return []
 
-    def _is_in_constructor_context(
-        self: LSPServerProtocol, uri: str, line: str, character: int
-    ) -> bool:
+    def _is_in_constructor_context(self, uri: str, line: str, character: int) -> bool:
         """Check if the cursor is in a param class constructor context."""
         if uri not in self.document_cache:
             return False
@@ -175,7 +169,7 @@ class CompletionMixin:
         return False
 
     def _get_constructor_parameter_completions(
-        self: LSPServerProtocol, uri: str, line: str, character: int
+        self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
         """Get parameter completions for param class constructors like P(...)."""
         completions = []
@@ -372,9 +366,7 @@ class CompletionMixin:
 
         return completions
 
-    def _resolve_external_class_path(
-        self: LSPServerProtocol, class_name: str, analyzer
-    ) -> str | None:
+    def _resolve_external_class_path(self, class_name: str, analyzer) -> str | None:
         """Resolve external class path using import aliases."""
         if "." in class_name:
             # Handle dotted names like hv.Curve
@@ -392,7 +384,7 @@ class CompletionMixin:
             return class_name
 
     def _get_param_depends_completions(
-        self: LSPServerProtocol, uri: str, lines: list[str], position: Position
+        self, uri: str, lines: list[str], position: Position
     ) -> list[CompletionItem]:
         """Get parameter completions for param.depends decorator."""
         if uri not in self.document_cache:
@@ -464,9 +456,7 @@ class CompletionMixin:
 
         return completions
 
-    def _is_in_param_depends_decorator(
-        self: LSPServerProtocol, lines: list[str], position: Position
-    ) -> bool:
+    def _is_in_param_depends_decorator(self, lines: list[str], position: Position) -> bool:
         """Check if the current position is inside a param.depends decorator."""
         # Look for @param.depends( pattern in current line or previous lines
         for line_idx in range(max(0, position.line - 5), position.line + 1):
@@ -509,9 +499,7 @@ class CompletionMixin:
 
         return False
 
-    def _extract_partial_parameter_text(
-        self: LSPServerProtocol, lines: list[str], position: Position
-    ) -> str:
+    def _extract_partial_parameter_text(self, lines: list[str], position: Position) -> str:
         """Extract the partial parameter text being typed."""
         if position.line >= len(lines):
             return ""
@@ -536,7 +524,7 @@ class CompletionMixin:
         return ""
 
     def _extract_used_depends_parameters_multiline(
-        self: LSPServerProtocol, lines: list[str], position: Position
+        self, lines: list[str], position: Position
     ) -> set[str]:
         """Extract parameter names already used in the param.depends decorator across multiple lines."""
         used_params = set()
@@ -573,9 +561,7 @@ class CompletionMixin:
 
         return used_params
 
-    def _extract_used_depends_parameters(
-        self: LSPServerProtocol, line: str, character: int
-    ) -> set[str]:
+    def _extract_used_depends_parameters(self, line: str, character: int) -> set[str]:
         """Extract parameter names already used in the param.depends decorator."""
         used_params = set()
 
@@ -592,7 +578,7 @@ class CompletionMixin:
         return used_params
 
     def _get_param_attribute_completions(
-        self: LSPServerProtocol, uri: str, line: str, character: int
+        self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
         """Get parameter completions for param attribute access like P().param.x."""
         completions = []
@@ -794,7 +780,7 @@ class CompletionMixin:
         return completions
 
     def _get_param_object_attribute_completions(
-        self: LSPServerProtocol, uri: str, line: str, character: int
+        self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
         """Get attribute completions for Parameter objects like P().param.x.default."""
         completions = []
@@ -966,7 +952,7 @@ class CompletionMixin:
         return completions
 
     def _get_reactive_expression_completions(
-        self: LSPServerProtocol, uri: str, line: str, character: int
+        self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
         """Get method completions for reactive expressions like P().param.x.rx.method."""
         completions = []
@@ -1102,7 +1088,7 @@ class CompletionMixin:
         return completions
 
     def _get_param_update_completions(
-        self: LSPServerProtocol, uri: str, line: str, character: int
+        self, uri: str, line: str, character: int
     ) -> list[CompletionItem]:
         """Get parameter completions for obj.param.update() keyword arguments."""
         completions = []
