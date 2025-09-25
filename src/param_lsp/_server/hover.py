@@ -261,50 +261,55 @@ class HoverMixin(LSPServerBase):
         """Build hover information for an external parameter."""
         param_type = class_info.get("parameter_types", {}).get(param_name)
 
+        # Build header section with type info
         if param_type:
-            hover_parts = [f"**{param_type} Parameter '{param_name}' (from {class_name})**"]
+            header_parts = [f"**{param_type} Parameter '{param_name}' (from {class_name})**"]
             # Check if None is allowed for this parameter
             allow_none = class_info.get("parameter_allow_none", {}).get(param_name, False)
             # Map param types to Python types, including None if allowed
             python_type = self._get_python_type_name(param_type, allow_none)
-            hover_parts.append(f"Allowed types: {python_type}")
+            header_parts.append(f"Allowed types: {python_type}")
         else:
-            hover_parts = [f"**Parameter '{param_name}' in external class '{class_name}'**"]
+            header_parts = [f"**Parameter '{param_name}' in external class '{class_name}'**"]
 
-        # Add bounds information
+        # Add bounds information to header section
         bounds = class_info.get("parameter_bounds", {}).get(param_name)
         if bounds:
             if len(bounds) == 2:
                 min_val, max_val = bounds
-                hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
+                header_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
             elif len(bounds) == 4:
                 min_val, max_val, left_inclusive, right_inclusive = bounds
                 left_bracket = "[" if left_inclusive else "("
                 right_bracket = "]" if right_inclusive else ")"
-                hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+                header_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
 
-        # Add documentation first with title and separator
+        hover_sections = ["\n".join(header_parts)]
+
+        # Add documentation section
         doc = class_info.get("parameter_docs", {}).get(param_name)
         if doc:
             # Clean and dedent the documentation
             clean_doc = self._clean_and_format_documentation(doc)
-            hover_parts.append("---")
-            hover_parts.append("Description:")
-            hover_parts.append(clean_doc)
+            doc_section = "---\nDescription:\n" + clean_doc
+            hover_sections.append(doc_section)
 
-        # Add source location information after documentation
+        # Add source location section
         parameter_locations = class_info.get("parameter_locations", {})
         if parameter_locations:
             location_info = parameter_locations.get(param_name)
             if location_info and isinstance(location_info, dict):
                 source_line = location_info.get("source")
+                line_number = location_info.get("line")
                 if source_line:
-                    # Add separator line before definition
-                    hover_parts.append("---")
-                    hover_parts.append("Definition:")
-                    hover_parts.append(f"```python\n{source_line}\n```")
+                    if line_number:
+                        definition_header = f"Definition (line {line_number}):"
+                    else:
+                        definition_header = "Definition:"
+                    source_section = f"---\n{definition_header}\n```python\n{source_line}\n```"
+                    hover_sections.append(source_section)
 
-        return "\n\n".join(hover_parts)
+        return "\n\n".join(hover_sections)
 
     def _clean_and_format_documentation(self, doc: str) -> str:
         """Clean and format documentation text."""
