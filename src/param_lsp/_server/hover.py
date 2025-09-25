@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import param
 
 from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
+from param_lsp.models import convert_to_legacy_format
 
 from .base import LSPServerBase
 
@@ -27,7 +28,7 @@ class HoverMixin(LSPServerBase):
     def _get_hover_info(self, uri: str, line: str, word: str) -> str | None:
         """Get hover information for a word."""
         if uri in self.document_cache:
-            analysis = self.document_cache[uri]["analysis"]
+            analysis = convert_to_legacy_format(self.document_cache[uri]["analysis"])
 
             # Check if it's the rx method in parameter context
             if word == "rx" and self._is_rx_method_context(line):
@@ -76,7 +77,7 @@ class HoverMixin(LSPServerBase):
             # Check if it's a parameter in an external class
             analyzer = self.document_cache[uri]["analyzer"]
             for class_name, class_info in analyzer.external_param_classes.items():
-                if class_info and word in class_info.get("parameters", []):
+                if class_info and word in class_info.parameters:
                     hover_info = self._build_external_parameter_hover_info(
                         word, class_name, class_info
                     )
