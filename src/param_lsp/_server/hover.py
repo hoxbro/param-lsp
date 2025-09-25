@@ -107,7 +107,7 @@ class HoverMixin(LSPServerBase):
         # Add documentation section
         if param_info.doc:
             clean_doc = self._clean_and_format_documentation(param_info.doc)
-            doc_section = "---\nDescription:\n" + clean_doc
+            doc_section = "---\nDescription:\n\n" + clean_doc
             hover_sections.append(doc_section)
 
         # Add source location section
