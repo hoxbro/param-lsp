@@ -21,7 +21,7 @@ from param_lsp.constants import (
 )
 
 # convert_to_legacy_format no longer needed in server code
-from param_lsp.models import wrap_external_class
+from param_lsp.models import ExternalClassInfo
 
 from .base import LSPServerBase
 
@@ -344,20 +344,16 @@ class CompletionMixin(LSPServerBase):
                     external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
                 if external_class_info:
-                    # Use wrapper for clean external class handling
-                    wrapped = wrap_external_class(external_class_info)
-                    parameters = wrapped.get_parameter_names()
-                    parameter_types = {p.name: p.param_type for p in wrapped.parameters.values()}
-                    parameter_docs = {p.name: p.doc for p in wrapped.parameters.values() if p.doc}
-                    parameter_bounds = {
-                        p.name: p.bounds for p in wrapped.parameters.values() if p.bounds
-                    }
-                    parameter_allow_none = {
-                        p.name: p.allow_none for p in wrapped.parameters.values()
-                    }
-                    parameter_defaults = {
-                        p.name: p.default for p in wrapped.parameters.values() if p.default
-                    }
+                    # Use classmethod for clean external class handling
+                    wrapped = ExternalClassInfo.from_param_class_info(external_class_info)
+                    legacy_format = wrapped.to_legacy_dict()
+
+                    parameters = legacy_format["parameters"]
+                    parameter_types = legacy_format["parameter_types"]
+                    parameter_docs = legacy_format["parameter_docs"]
+                    parameter_bounds = legacy_format["parameter_bounds"]
+                    parameter_allow_none = legacy_format["parameter_allow_none"]
+                    parameter_defaults = legacy_format["parameter_defaults"]
 
                     used_params = set()
                     used_matches = _re_constructor_param_assignment.findall(before_cursor)
@@ -694,22 +690,16 @@ class CompletionMixin(LSPServerBase):
                 external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if external_class_info:
-                parameters = external_class_info.get_parameter_names()
-                parameter_types = {
-                    p.name: p.param_type for p in external_class_info.parameters.values()
-                }
-                parameter_docs = {
-                    p.name: p.doc for p in external_class_info.parameters.values() if p.doc
-                }
-                parameter_bounds = {
-                    p.name: p.bounds for p in external_class_info.parameters.values() if p.bounds
-                }
-                parameter_allow_none = {
-                    p.name: p.allow_none for p in external_class_info.parameters.values()
-                }
-                parameter_defaults = {
-                    p.name: p.default for p in external_class_info.parameters.values() if p.default
-                }
+                # Use classmethod for clean external class handling
+                wrapped = ExternalClassInfo.from_param_class_info(external_class_info)
+                legacy_format = wrapped.to_legacy_dict()
+
+                parameters = legacy_format["parameters"]
+                parameter_types = legacy_format["parameter_types"]
+                parameter_docs = legacy_format["parameter_docs"]
+                parameter_bounds = legacy_format["parameter_bounds"]
+                parameter_allow_none = legacy_format["parameter_allow_none"]
+                parameter_defaults = legacy_format["parameter_defaults"]
 
         # If we don't have any parameters, no completions
         if not parameters:
@@ -1137,22 +1127,16 @@ class CompletionMixin(LSPServerBase):
                 external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if external_class_info:
-                parameters = external_class_info.get_parameter_names()
-                parameter_types = {
-                    p.name: p.param_type for p in external_class_info.parameters.values()
-                }
-                parameter_docs = {
-                    p.name: p.doc for p in external_class_info.parameters.values() if p.doc
-                }
-                parameter_bounds = {
-                    p.name: p.bounds for p in external_class_info.parameters.values() if p.bounds
-                }
-                parameter_allow_none = {
-                    p.name: p.allow_none for p in external_class_info.parameters.values()
-                }
-                parameter_defaults = {
-                    p.name: p.default for p in external_class_info.parameters.values() if p.default
-                }
+                # Use classmethod for clean external class handling
+                wrapped = ExternalClassInfo.from_param_class_info(external_class_info)
+                legacy_format = wrapped.to_legacy_dict()
+
+                parameters = legacy_format["parameters"]
+                parameter_types = legacy_format["parameter_types"]
+                parameter_docs = legacy_format["parameter_docs"]
+                parameter_bounds = legacy_format["parameter_bounds"]
+                parameter_allow_none = legacy_format["parameter_allow_none"]
+                parameter_defaults = legacy_format["parameter_defaults"]
 
         # If we don't have any parameters, no completions
         if not parameters:
