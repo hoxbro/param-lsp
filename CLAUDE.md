@@ -15,6 +15,7 @@ The server analyzes Python AST to understand Param usage patterns and provides i
 - If you create a new file in `src/` or `tests/` use `git add --intent-to-add` for it. If you then remove the file remember to `git rm`
 - Use relative import for `param_lsp` and absolute imports for tests
 - If you are on a branch except `main`. Add and commit after each step is completed
+- If you are on a branch which is not `main`. Take a look at the commits since main, to understand what has happened.
 
 # New Feature
 
