@@ -147,7 +147,7 @@ import panel as pn
 
 w = pn.widgets.IntSlider()
 """
-        convert_to_legacy_format(analyzer.analyze_file(code_py))
+        analyzer.analyze_file(code_py)
 
         # Should have introspected the class
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -155,9 +155,9 @@ w = pn.widgets.IntSlider()
         assert class_info is not None
 
         # Should have parameter information
-        assert "value" in class_info["parameters"]
-        assert class_info["parameter_types"]["value"] == "Integer"
-        assert "value" in class_info["parameter_allow_none"]
+        assert "value" in class_info.parameters
+        assert class_info.parameters["value"].param_type == "Integer"
+        assert class_info.parameters["value"].allow_none is True
 
     def test_external_class_caching(self, analyzer):
         """Test that external class introspection is cached."""

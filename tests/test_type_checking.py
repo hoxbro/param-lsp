@@ -164,8 +164,8 @@ class ParamClass(param.Parameterized):
     param_attr = param.String(default="valid")
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert result["param_classes"] == {"ParamClass"}
+        assert set(result["param_classes"]) == {"ParamClass"}
         assert "RegularClass" not in result["param_classes"]
         assert len(result["type_errors"]) == 0
