@@ -26,26 +26,25 @@ if TYPE_CHECKING:
     from lsprotocol.types import Position
 
 # Compiled regex patterns for performance
-PARAM_DEPENDS_PATTERN = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)
-CONSTRUCTOR_CALL_PATTERN = re.compile(r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*$", re.MULTILINE)
-CONSTRUCTOR_CALL_INSIDE_PATTERN = re.compile(
-    r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*\w*$", re.MULTILINE
-)
-CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN = re.compile(r"\b(\w+)\s*=")
-QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']+)["\']')
-PARAM_ATTR_ACCESS_PATTERN = re.compile(
+_re_param_depends = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)
+_re_constructor_call = re.compile(r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*$", re.MULTILINE)
+_re_constructor_call_inside = re.compile(r"^([^#]*?)(\w+(?:\.\w+)*)\s*\([^)]*\w*$", re.MULTILINE)
+_re_constructor_param_assignment = re.compile(r"\b(\w+)\s*=")
+_re_quoted_string = re.compile(r'["\']([^"\']+)["\']')
+_re_param_attr_access = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.?.*$", re.MULTILINE
 )
-PARAM_OBJECT_ATTR_ACCESS_PATTERN = re.compile(
+_re_param_object_attr_access = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\..*$", re.MULTILINE
 )
-REACTIVE_EXPRESSION_PATTERN = re.compile(
+_re_reactive_expression = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.(\w+)\.rx\..*$", re.MULTILINE
 )
-PARAM_UPDATE_PATTERN = re.compile(
+_re_param_update = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.update\s*\([^)]*$", re.MULTILINE
 )
-CLASS_DEFINITION_PATTERN = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
+_re_class_definition = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
+_re_param_dot = re.compile(r"\.param\.(\w*)$")
 
 
 class CompletionMixin(LSPServerBase):
@@ -125,9 +124,9 @@ class CompletionMixin(LSPServerBase):
         before_cursor = line[:character]
 
         # Check both patterns for constructor detection
-        match = CONSTRUCTOR_CALL_PATTERN.search(before_cursor)
+        match = _re_constructor_call.search(before_cursor)
         if not match:
-            match = CONSTRUCTOR_CALL_INSIDE_PATTERN.search(before_cursor)
+            match = _re_constructor_call_inside.search(before_cursor)
 
         if match:
             class_name = match.group(2)
@@ -188,11 +187,11 @@ class CompletionMixin(LSPServerBase):
         before_cursor = line[:character]
 
         # Pattern: find word followed by opening parenthesis
-        match = CONSTRUCTOR_CALL_PATTERN.search(before_cursor)
+        match = _re_constructor_call.search(before_cursor)
 
         # Also check if we're inside parentheses after a class name
         if not match:
-            match = CONSTRUCTOR_CALL_INSIDE_PATTERN.search(before_cursor)
+            match = _re_constructor_call_inside.search(before_cursor)
 
         if match:
             class_name = match.group(2)
@@ -254,7 +253,7 @@ class CompletionMixin(LSPServerBase):
                 else:
                     # Normal case - suggest all unused parameters
                     used_params = set()
-                    used_matches = CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+                    used_matches = _re_constructor_param_assignment.findall(before_cursor)
                     used_params.update(used_matches)
 
                     for param_name in parameters:
@@ -318,7 +317,7 @@ class CompletionMixin(LSPServerBase):
                     parameter_defaults = external_class_info.get("parameter_defaults", {})
 
                     used_params = set()
-                    used_matches = CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+                    used_matches = _re_constructor_param_assignment.findall(before_cursor)
                     used_params.update(used_matches)
 
                     for param_name in parameters:
@@ -463,11 +462,11 @@ class CompletionMixin(LSPServerBase):
             line = lines[line_idx]
 
             # Check for @param.depends( pattern
-            if PARAM_DEPENDS_PATTERN.search(line):
+            if _re_param_depends.search(line):
                 # Check if we're still inside the parentheses
                 if line_idx == position.line:
                     # Same line - check if cursor is after the opening parenthesis
-                    match = PARAM_DEPENDS_PATTERN.search(line)
+                    match = _re_param_depends.search(line)
                     if match and position.character >= match.end():
                         # Check if parentheses are closed before cursor
                         text_before_cursor = line[: position.character]
@@ -533,7 +532,7 @@ class CompletionMixin(LSPServerBase):
             if line_idx >= len(lines):
                 continue
             line = lines[line_idx]
-            if PARAM_DEPENDS_PATTERN.search(line):
+            if _re_param_depends.search(line):
                 start_line = line_idx
                 break
 
@@ -552,7 +551,7 @@ class CompletionMixin(LSPServerBase):
             decorator_text += line + " "
 
         # Look for quoted strings that represent parameter names
-        matches = QUOTED_STRING_PATTERN.findall(decorator_text)
+        matches = _re_quoted_string.findall(decorator_text)
 
         for match in matches:
             used_params.add(match)
@@ -568,7 +567,7 @@ class CompletionMixin(LSPServerBase):
 
         # Look for quoted strings that represent parameter names
         # Pattern matches both single and double quoted strings
-        matches = QUOTED_STRING_PATTERN.findall(before_cursor)
+        matches = _re_quoted_string.findall(before_cursor)
 
         for match in matches:
             used_params.add(match)
@@ -586,7 +585,7 @@ class CompletionMixin(LSPServerBase):
 
         # Check if we're in a param attribute access context
         before_cursor = line[:character]
-        match = PARAM_ATTR_ACCESS_PATTERN.search(before_cursor)
+        match = _re_param_attr_access.search(before_cursor)
 
         if not match:
             return completions
@@ -663,7 +662,7 @@ class CompletionMixin(LSPServerBase):
 
         # Extract partial text being typed after ".param."
         partial_text = ""
-        param_dot_match = re.search(r"\.param\.(\w*)$", before_cursor)
+        param_dot_match = _re_param_dot.search(before_cursor)
         if param_dot_match:
             partial_text = param_dot_match.group(1)
 
@@ -767,7 +766,7 @@ class CompletionMixin(LSPServerBase):
 
         # Check if we're in a Parameter object attribute access context
         before_cursor = line[:character]
-        match = PARAM_OBJECT_ATTR_ACCESS_PATTERN.search(before_cursor)
+        match = _re_param_object_attr_access.search(before_cursor)
 
         if not match:
             return completions
@@ -903,7 +902,7 @@ class CompletionMixin(LSPServerBase):
 
         # Check if we're in a reactive expression context
         before_cursor = line[:character]
-        match = REACTIVE_EXPRESSION_PATTERN.search(before_cursor)
+        match = _re_reactive_expression.search(before_cursor)
 
         if not match:
             return completions
@@ -1017,7 +1016,7 @@ class CompletionMixin(LSPServerBase):
 
         # Check if we're in a param.update() context
         before_cursor = line[:character]
-        match = PARAM_UPDATE_PATTERN.search(before_cursor)
+        match = _re_param_update.search(before_cursor)
 
         if not match:
             return completions
@@ -1093,7 +1092,7 @@ class CompletionMixin(LSPServerBase):
 
         # Extract used parameters to avoid duplicates (similar to constructor completions)
         used_params = set()
-        used_matches = CONSTRUCTOR_PARAM_ASSIGNMENT_PATTERN.findall(before_cursor)
+        used_matches = _re_constructor_param_assignment.findall(before_cursor)
         used_params.update(used_matches)
 
         # Create completion items for each parameter as keyword arguments
@@ -1325,7 +1324,7 @@ class CompletionMixin(LSPServerBase):
             line = lines[line_idx].strip()
 
             # Look for class definition
-            match = CLASS_DEFINITION_PATTERN.match(line)
+            match = _re_class_definition.match(line)
             if match:
                 class_name = match.group(2)
                 return class_name

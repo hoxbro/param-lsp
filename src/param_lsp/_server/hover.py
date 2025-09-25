@@ -12,6 +12,11 @@ from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
 
 from .base import LSPServerBase
 
+# Compiled regex patterns for performance
+_re_param_rx_method = re.compile(r"\.param\.\w+\.rx\b")
+_re_param_namespace_method = re.compile(r"\.param\.\w+\(")
+_re_reactive_expression = re.compile(r"\.param\.\w+\.rx\.")
+
 if TYPE_CHECKING:
     from typing import Any
 
@@ -83,7 +88,7 @@ class HoverMixin(LSPServerBase):
     def _is_rx_method_context(self, line: str) -> bool:
         """Check if the rx word is in a parameter context like obj.param.x.rx."""
         # Check if line contains pattern like .param.something.rx
-        return bool(re.search(r"\.param\.\w+\.rx\b", line))
+        return bool(_re_param_rx_method.search(line))
 
     def _build_rx_method_hover_info(self) -> str:
         """Build hover information for the rx property."""
@@ -100,7 +105,7 @@ class HoverMixin(LSPServerBase):
     def _get_param_namespace_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for param namespace methods like obj.param.values()."""
         # Check if we're in a param namespace method context
-        if not re.search(r"\.param\.\w+\(", line):
+        if not _re_param_namespace_method.search(line):
             return None
 
         if word in PARAM_NAMESPACE_METHODS:
@@ -132,7 +137,7 @@ class HoverMixin(LSPServerBase):
     def _get_reactive_expression_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for reactive expression methods."""
         # Check if we're in a reactive expression context
-        if not re.search(r"\.param\.\w+\.rx\.", line):
+        if not _re_reactive_expression.search(line):
             return None
 
         if word in RX_METHODS_DOCS:

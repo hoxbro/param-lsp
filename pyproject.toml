@@ -50,6 +50,11 @@ addopts = ["--strict-config", "--strict-markers", "--color=yes"]
 minversion = "7"
 xfail_strict = true
 log_cli_level = "INFO"
+filterwarnings = [
+    "error",
+    "ignore:'_UnionGenericAlias' is deprecated and slated for removal in Python 3.17:DeprecationWarning",
+    "ignore:unclosed event loop:ResourceWarning",
+]
 
 [tool.ruff]
 line-length = 99

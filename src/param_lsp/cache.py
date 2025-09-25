@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 import logging
 import os
 import re
 import time
 from functools import cache
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,14 @@ _re_no = re.compile(r"\d+")
 def parse_version(version_str: str) -> tuple[int, ...]:
     """Parse a version string into a tuple of integers."""
     return tuple(map(int, _re_no.findall(version_str)[:3]))
+
+
+@cache
+def _get_version(library_name):
+    try:
+        return version(library_name)
+    except PackageNotFoundError:
+        return None
 
 
 class ExternalLibraryCache:
@@ -49,16 +57,7 @@ class ExternalLibraryCache:
 
     def _get_library_version(self, library_name: str) -> str | None:
         """Get the version of an installed library."""
-        try:
-            module = importlib.import_module(library_name)
-            # Try different common version attributes
-            for attr in ["__version__", "version", "VERSION"]:
-                if hasattr(module, attr):
-                    version = getattr(module, attr)
-                    return str(version) if version else None
-            return None
-        except ImportError:
-            return None
+        return _get_version(library_name)
 
     def get(self, library_name: str, class_path: str) -> dict[str, Any] | None:
         """Get cached introspection data for a library class."""
