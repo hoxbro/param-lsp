@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from param_lsp.models import convert_to_legacy_format
-
 
 class TestDocExtraction:
     """Test parameter documentation extraction and storage."""
@@ -27,19 +25,24 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "TestClass" in result["param_parameter_docs"]
-        docs = result["param_parameter_docs"]["TestClass"]
+        param_classes = result["param_classes"]
+        assert "TestClass" in param_classes
+        test_class = param_classes["TestClass"]
 
-        assert "documented_param" in docs
-        assert docs["documented_param"] == "This is a string parameter with documentation"
-
-        assert "undocumented_param" not in docs  # No doc parameter
-
-        assert "multiline_doc" in docs
+        assert "documented_param" in test_class.parameters
         assert (
-            docs["multiline_doc"]
+            test_class.parameters["documented_param"].doc
+            == "This is a string parameter with documentation"
+        )
+
+        assert "undocumented_param" in test_class.parameters
+        assert test_class.parameters["undocumented_param"].doc is None  # No doc parameter
+
+        assert "multiline_doc" in test_class.parameters
+        assert (
+            test_class.parameters["multiline_doc"].doc
             == "This is a boolean parameter with a longer documentation string"
         )
 
@@ -54,13 +57,13 @@ class TestClass(param.Parameterized):
     triple_quotes = param.String(default="test", doc="""Triple quoted documentation""")
 '''
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
-        assert docs["single_quotes"] == "Single quoted documentation"
-        assert docs["double_quotes"] == "Double quoted documentation"
-        assert docs["triple_quotes"] == "Triple quoted documentation"
+        assert test_class.parameters["single_quotes"].doc == "Single quoted documentation"
+        assert test_class.parameters["double_quotes"].doc == "Double quoted documentation"
+        assert test_class.parameters["triple_quotes"].doc == "Triple quoted documentation"
 
     def test_doc_with_special_characters(self, analyzer):
         """Test doc parameter extraction with special characters."""
@@ -79,15 +82,15 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
-        assert "special_chars" in docs
-        assert "!@#$%^&*()_+-=" in docs["special_chars"]
+        assert "special_chars" in test_class.parameters
+        assert "!@#$%^&*()_+-=" in test_class.parameters["special_chars"].doc
 
-        assert "unicode_chars" in docs
-        assert "café" in docs["unicode_chars"]
+        assert "unicode_chars" in test_class.parameters
+        assert "café" in test_class.parameters["unicode_chars"].doc
 
     def test_doc_parameter_order_independence(self, analyzer):
         """Test that doc parameter works regardless of parameter order."""
@@ -113,13 +116,13 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
-        assert docs["doc_first"] == "Documentation comes first"
-        assert docs["doc_middle"] == "Documentation in the middle"
-        assert docs["doc_last"] == "Documentation comes last"
+        assert test_class.parameters["doc_first"].doc == "Documentation comes first"
+        assert test_class.parameters["doc_middle"].doc == "Documentation in the middle"
+        assert test_class.parameters["doc_last"].doc == "Documentation comes last"
 
     def test_doc_with_bounds_and_other_parameters(self, analyzer):
         """Test doc extraction alongside other parameter attributes."""
@@ -137,22 +140,20 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Check that doc is extracted
-        docs = result["param_parameter_docs"]["TestClass"]
-        assert "comprehensive_param" in docs
+        test_class = result["param_classes"]["TestClass"]
+        assert "comprehensive_param" in test_class.parameters
         assert (
-            docs["comprehensive_param"]
+            test_class.parameters["comprehensive_param"].doc
             == "A comprehensive parameter with bounds and documentation"
         )
 
         # Check that other attributes are also extracted
-        bounds = result["param_parameter_bounds"]["TestClass"]
-        assert "comprehensive_param" in bounds
+        assert test_class.parameters["comprehensive_param"].bounds is not None
 
-        types = result["param_parameter_types"]["TestClass"]
-        assert types["comprehensive_param"] == "Number"
+        assert test_class.parameters["comprehensive_param"].param_type == "Number"
 
     def test_empty_doc_parameter(self, analyzer):
         """Test handling of empty doc parameters."""
@@ -164,16 +165,17 @@ class TestClass(param.Parameterized):
     none_doc = param.String(default="test", doc=None)  # This would be a runtime error, but test parsing
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
         # Empty string doc should still be recorded
-        assert "empty_doc" in docs
-        assert docs["empty_doc"] == ""
+        assert "empty_doc" in test_class.parameters
+        assert test_class.parameters["empty_doc"].doc == ""
 
         # None doc would not be extracted as it's not a string literal
-        assert "none_doc" not in docs
+        assert "none_doc" in test_class.parameters
+        assert test_class.parameters["none_doc"].doc is None
 
     def test_doc_with_different_import_styles(self, analyzer):
         """Test doc extraction with different import styles."""
@@ -187,17 +189,18 @@ class TestClass(p.Parameterized):
     no_doc = Integer(default=5)
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
-        assert "param_alias" in docs
-        assert docs["param_alias"] == "Using param alias"
+        assert "param_alias" in test_class.parameters
+        assert test_class.parameters["param_alias"].doc == "Using param alias"
 
-        assert "direct_import" in docs
-        assert docs["direct_import"] == "Using direct import"
+        assert "direct_import" in test_class.parameters
+        assert test_class.parameters["direct_import"].doc == "Using direct import"
 
-        assert "no_doc" not in docs
+        assert "no_doc" in test_class.parameters
+        assert test_class.parameters["no_doc"].doc is None
 
     def test_multiple_classes_doc_extraction(self, analyzer):
         """Test doc extraction across multiple param classes."""
@@ -214,18 +217,19 @@ class ClassC(param.Parameterized):
     param_c = param.Boolean(default=True)  # No doc
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]
+        param_classes = result["param_classes"]
 
-        assert "ClassA" in docs
-        assert docs["ClassA"]["param_a"] == "Documentation for class A"
+        assert "ClassA" in param_classes
+        assert param_classes["ClassA"].parameters["param_a"].doc == "Documentation for class A"
 
-        assert "ClassB" in docs
-        assert docs["ClassB"]["param_b"] == "Documentation for class B"
+        assert "ClassB" in param_classes
+        assert param_classes["ClassB"].parameters["param_b"].doc == "Documentation for class B"
 
-        assert "ClassC" in docs
-        assert len(docs["ClassC"]) == 0  # No documented parameters
+        assert "ClassC" in param_classes
+        class_c_docs = [p for p in param_classes["ClassC"].parameters.values() if p.doc]
+        assert len(class_c_docs) == 0  # No documented parameters
 
     def test_doc_parameter_with_complex_expressions(self, analyzer):
         """Test that only simple string literals are extracted for doc."""
@@ -243,18 +247,21 @@ class TestClass(param.Parameterized):
     method_doc = param.String(default="test", doc=str("method call"))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        docs = result["param_parameter_docs"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
         # Only simple string literal should be extracted
-        assert "simple_doc" in docs
-        assert docs["simple_doc"] == "Simple documentation"
+        assert "simple_doc" in test_class.parameters
+        assert test_class.parameters["simple_doc"].doc == "Simple documentation"
 
-        # Complex expressions should not be extracted
-        assert "variable_doc" not in docs
-        assert "expression_doc" not in docs
-        assert "method_doc" not in docs
+        # Complex expressions should not be extracted (doc should be None)
+        assert "variable_doc" in test_class.parameters
+        assert test_class.parameters["variable_doc"].doc is None
+        assert "expression_doc" in test_class.parameters
+        assert test_class.parameters["expression_doc"].doc is None
+        assert "method_doc" in test_class.parameters
+        assert test_class.parameters["method_doc"].doc is None
 
     def test_doc_storage_structure(self, analyzer):
         """Test the structure of doc storage in analysis results."""
@@ -266,19 +273,18 @@ class TestClass(param.Parameterized):
     param2 = param.Integer(default=5, doc="Doc 2")
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        # Check that param_parameter_docs is in the result
-        assert "param_parameter_docs" in result
+        # Check that param_classes is in the result
+        assert "param_classes" in result
 
-        # Check structure: class_name -> {param_name: doc_string}
-        docs = result["param_parameter_docs"]
-        assert isinstance(docs, dict)
-        assert "TestClass" in docs
-        assert isinstance(docs["TestClass"], dict)
+        # Check structure: class_name -> ParamClassInfo with parameters
+        param_classes = result["param_classes"]
+        assert isinstance(param_classes, dict)
+        assert "TestClass" in param_classes
+        test_class = param_classes["TestClass"]
 
-        class_docs = docs["TestClass"]
-        assert len(class_docs) == 2
-        assert all(
-            isinstance(key, str) and isinstance(value, str) for key, value in class_docs.items()
-        )
+        # Check that we have 2 documented parameters
+        documented_params = [p for p in test_class.parameters.values() if p.doc]
+        assert len(documented_params) == 2
+        assert all(isinstance(p.doc, str) for p in documented_params)
