@@ -21,8 +21,6 @@ from param_lsp.constants import (
 )
 
 # convert_to_legacy_format no longer needed in server code
-from param_lsp.models import ExternalClassInfo
-
 from .base import LSPServerBase
 
 if TYPE_CHECKING:
@@ -344,9 +342,8 @@ class CompletionMixin(LSPServerBase):
                     external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
                 if external_class_info:
-                    # Use classmethod for clean external class handling
-                    wrapped = ExternalClassInfo.from_param_class_info(external_class_info)
-                    legacy_format = wrapped.to_legacy_dict()
+                    # External class info is already an ExternalClassInfo object from analyzer
+                    legacy_format = external_class_info.to_legacy_dict()
 
                     parameters = legacy_format["parameters"]
                     parameter_types = legacy_format["parameter_types"]
@@ -690,9 +687,8 @@ class CompletionMixin(LSPServerBase):
                 external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if external_class_info:
-                # Use classmethod for clean external class handling
-                wrapped = ExternalClassInfo.from_param_class_info(external_class_info)
-                legacy_format = wrapped.to_legacy_dict()
+                # External class info is already an ExternalClassInfo object from analyzer
+                legacy_format = external_class_info.to_legacy_dict()
 
                 parameters = legacy_format["parameters"]
                 parameter_types = legacy_format["parameter_types"]
@@ -1127,9 +1123,8 @@ class CompletionMixin(LSPServerBase):
                 external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if external_class_info:
-                # Use classmethod for clean external class handling
-                wrapped = ExternalClassInfo.from_param_class_info(external_class_info)
-                legacy_format = wrapped.to_legacy_dict()
+                # External class info is already an ExternalClassInfo object from analyzer
+                legacy_format = external_class_info.to_legacy_dict()
 
                 parameters = legacy_format["parameters"]
                 parameter_types = legacy_format["parameter_types"]

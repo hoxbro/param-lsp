@@ -19,7 +19,7 @@ import param
 
 from .cache import external_library_cache
 from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
-from .models import ParamClassInfo, ParameterInfo
+from .models import ExternalClassInfo, ParamClassInfo, ParameterInfo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class ParamAnalyzer:
 
         # Cache for external Parameterized classes (AST-based detection)
         self.external_param_classes: dict[
-            str, ParamClassInfo | None
+            str, ExternalClassInfo | None
         ] = {}  # full_class_path -> class_info
 
         # Populate external library cache on initialization
@@ -1331,7 +1331,7 @@ class ParamAnalyzer:
             return -val if val is not None else None
         return None
 
-    def _analyze_external_class_ast(self, full_class_path: str) -> ParamClassInfo | None:
+    def _analyze_external_class_ast(self, full_class_path: str) -> ExternalClassInfo | None:
         """Analyze external classes using runtime introspection for allowed libraries."""
         if full_class_path in self.external_param_classes:
             return self.external_param_classes[full_class_path]
@@ -1381,7 +1381,7 @@ class ParamAnalyzer:
 
         return "\n".join(fixed_lines)
 
-    def _introspect_external_class_runtime(self, full_class_path: str) -> ParamClassInfo | None:
+    def _introspect_external_class_runtime(self, full_class_path: str) -> ExternalClassInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
 
         # Get the root library name for cache lookup
@@ -1391,26 +1391,9 @@ class ParamAnalyzer:
         cached_result = external_library_cache.get(root_library, full_class_path)
         if cached_result is not None:
             logger.debug(f"Using cached result for {full_class_path}")
-            # Convert cached dict back to ParamClassInfo
-            class_info = ParamClassInfo(name=full_class_path.split(".")[-1])
-            param_names = cached_result.get("parameters", [])
-            param_types = cached_result.get("parameter_types", {})
-            param_bounds = cached_result.get("parameter_bounds", {})
-            param_docs = cached_result.get("parameter_docs", {})
-            param_allow_none = cached_result.get("parameter_allow_none", {})
-            param_defaults = cached_result.get("parameter_defaults", {})
-
-            for param_name in param_names:
-                param_info = ParameterInfo(
-                    name=param_name,
-                    param_type=param_types.get(param_name, ""),
-                    bounds=param_bounds.get(param_name),
-                    doc=param_docs.get(param_name),
-                    allow_none=param_allow_none.get(param_name, False),
-                    default=param_defaults.get(param_name),
-                )
-                class_info.add_parameter(param_info)
-            return class_info
+            # Convert cached dict back to ExternalClassInfo using the from_legacy_dict classmethod
+            class_name = full_class_path.split(".")[-1]
+            return ExternalClassInfo.from_legacy_dict(class_name, cached_result)
 
         try:
             # Parse the full class path (e.g., "panel.widgets.IntSlider")
@@ -1515,7 +1498,7 @@ class ParamAnalyzer:
             external_library_cache.set(root_library, full_class_path, cache_data)
             logger.debug(f"Cached introspection result for {full_class_path}")
 
-            return class_info
+            return ExternalClassInfo.from_param_class_info(class_info)
 
         except Exception as e:
             logger.debug(f"Failed to introspect external class {full_class_path}: {e}")
