@@ -163,3 +163,15 @@ class LSPServerProtocol(Protocol):
     def _get_param_update_completions(self, uri: str, line: str, character: int) -> list[Any]:
         """Get parameter completions for obj.param.update() keyword arguments."""
         ...
+
+    def _resolve_class_name_from_context(
+        self, uri: str, class_name: str, param_classes: set[str]
+    ) -> str | None:
+        """Resolve a class name from context, handling both direct class names and variable names."""
+        ...
+
+    def _should_include_parentheses_in_insert_text(
+        self, line: str, character: int, method_name: str
+    ) -> bool:
+        """Determine if parentheses should be included in insert_text for method completions."""
+        ...
