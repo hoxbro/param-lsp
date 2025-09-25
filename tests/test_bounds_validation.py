@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from param_lsp.models import convert_to_legacy_format
+# Test uses new format directly
 
 
 class TestBoundsValidation:
@@ -18,7 +18,7 @@ class TestClass(param.Parameterized):
     number_param = param.Number(default=2.5, bounds=(0.0, 5.0))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
         assert "TestClass" in result["param_classes"]
@@ -38,7 +38,7 @@ class TestClass(param.Parameterized):
     invalid_bounds2 = param.Number(bounds=(5.0, 5.0))  # min == max
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         invalid_bounds_errors = [e for e in result["type_errors"] if e["code"] == "invalid-bounds"]
         assert len(invalid_bounds_errors) == 2
@@ -59,7 +59,7 @@ class TestClass(param.Parameterized):
     float_too_high = param.Number(default=6.0, bounds=(0.0, 5.0))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         bounds_violation_errors = [
             e for e in result["type_errors"] if e["code"] == "default-bounds-violation"
@@ -88,7 +88,7 @@ class TestClass(param.Parameterized):
     valid_inclusive_right = param.Number(default=0.0, bounds=(0, 5), inclusive_bounds=(True, False))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         bounds_violation_errors = [
             e for e in result["type_errors"] if e["code"] == "default-bounds-violation"
@@ -115,7 +115,7 @@ class TestClass(param.Parameterized):
     at_max = param.Integer(default=10, bounds=(0, 10))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         bounds_violation_errors = [
             e for e in result["type_errors"] if e["code"] == "default-bounds-violation"
@@ -133,7 +133,7 @@ class TestClass(param.Parameterized):
     exclusive_bounds = param.Number(default=2.5, bounds=(0, 5), inclusive_bounds=(False, True))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         test_class = result["param_classes"]["TestClass"]
 
@@ -162,7 +162,7 @@ class TestClass(param.Parameterized):
     mixed_bounds = param.Number(default=0.0, bounds=(-10.0, 10.0))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
         test_class = result["param_classes"]["TestClass"]
@@ -181,7 +181,7 @@ class TestClass(param.Parameterized):
     number_param = param.Number(default=15, bounds=(0, 10))          # Should be checked
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Only the Number parameter should generate bounds violation
         bounds_violation_errors = [
@@ -200,7 +200,7 @@ class TestClass(param.Parameterized):
     empty_tuple_with_bounds = param.Tuple(default=(), bounds=(1, 3))
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         empty_default_warnings = [
             e for e in result["type_errors"] if e["code"] == "empty-default-with-bounds"

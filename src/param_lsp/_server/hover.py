@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 import param
 
 from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
-from param_lsp.models import convert_to_legacy_format
 
+# Server code now uses new format directly
 from .base import LSPServerBase
 
 # Compiled regex patterns for performance
@@ -28,7 +28,7 @@ class HoverMixin(LSPServerBase):
     def _get_hover_info(self, uri: str, line: str, word: str) -> str | None:
         """Get hover information for a word."""
         if uri in self.document_cache:
-            analysis = convert_to_legacy_format(self.document_cache[uri]["analysis"])
+            analysis = self.document_cache[uri]["analysis"]
 
             # Check if it's the rx method in parameter context
             if word == "rx" and self._is_rx_method_context(line):
@@ -53,23 +53,14 @@ class HoverMixin(LSPServerBase):
                 return f"Param parameter type: {word}"
 
             # Check if it's a parameter in a local class
-            param_parameters = analysis.get("param_parameters", {})
-            param_parameter_types = analysis.get("param_parameter_types", {})
-            param_parameter_docs = analysis.get("param_parameter_docs", {})
-            param_parameter_bounds = analysis.get("param_parameter_bounds", {})
-            param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
-            param_parameter_locations = analysis.get("param_parameter_locations", {})
+            param_classes = analysis.get("param_classes", {})
 
-            for class_name, parameters in param_parameters.items():
-                if word in parameters:
-                    hover_info = self._build_parameter_hover_info(
-                        word,
+            for class_name, class_info in param_classes.items():
+                if word in class_info.parameters:
+                    param_info = class_info.parameters[word]
+                    hover_info = self._build_parameter_hover_info_new(
+                        param_info,
                         class_name,
-                        param_parameter_types,
-                        param_parameter_docs,
-                        param_parameter_bounds,
-                        param_parameter_allow_none,
-                        param_parameter_locations,
                     )
                     if hover_info:
                         return hover_info
@@ -85,6 +76,47 @@ class HoverMixin(LSPServerBase):
                         return hover_info
 
         return None
+
+    def _build_parameter_hover_info_new(self, param_info, class_name: str) -> str | None:
+        """Build hover information for a parameter using new dataclass format."""
+        if not param_info:
+            return None
+
+        param_name = param_info.name
+        hover_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
+
+        # Map param types to Python types, including None if allowed
+        python_type = self._get_python_type_name(param_info.param_type, param_info.allow_none)
+        hover_parts.append(f"Allowed types: {python_type}")
+
+        # Add bounds information
+        if param_info.bounds:
+            bounds = param_info.bounds
+            if len(bounds) == 2:
+                min_val, max_val = bounds
+                hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
+            elif len(bounds) == 4:
+                min_val, max_val, left_inclusive, right_inclusive = bounds
+                left_bracket = "[" if left_inclusive else "("
+                right_bracket = "]" if right_inclusive else ")"
+                hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+
+        # Add documentation
+        if param_info.doc:
+            clean_doc = self._clean_and_format_documentation(param_info.doc)
+            hover_parts.append("---")
+            hover_parts.append("Description:")
+            hover_parts.append(clean_doc)
+
+        # Add source location information
+        if param_info.location:
+            source_line = param_info.location.get("source")
+            if source_line:
+                hover_parts.append("---")
+                hover_parts.append("Definition:")
+                hover_parts.append(f"```python\n{source_line}\n```")
+
+        return "\n".join(hover_parts)
 
     def _is_rx_method_context(self, line: str) -> bool:
         """Check if the rx word is in a parameter context like obj.param.x.rx."""

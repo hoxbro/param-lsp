@@ -50,7 +50,7 @@ def convert_to_legacy_format(result):
     param_classes_dict = result["param_classes"]
 
     return {
-        "param_classes": param_classes_dict,
+        "param_classes": set(param_classes_dict.keys()),
         "param_parameters": {
             name: info.get_parameter_names() for name, info in param_classes_dict.items()
         },
