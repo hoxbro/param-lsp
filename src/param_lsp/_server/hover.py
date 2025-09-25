@@ -69,11 +69,12 @@ class HoverMixin(LSPServerBase):
             analyzer = self.document_cache[uri]["analyzer"]
             for class_name, class_info in analyzer.external_param_classes.items():
                 if class_info and word in class_info.parameters:
-                    hover_info = self._build_external_parameter_hover_info(
-                        word, class_name, class_info
-                    )
-                    if hover_info:
-                        return hover_info
+                    # Use the new format method for ExternalClassInfo objects
+                    param_info = class_info.get_parameter(word)
+                    if param_info:
+                        hover_info = self._build_parameter_hover_info_new(param_info, class_name)
+                        if hover_info:
+                            return hover_info
 
         return None
 
@@ -85,7 +86,13 @@ class HoverMixin(LSPServerBase):
         param_name = param_info.name
 
         # Build header section with type info
-        header_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
+        # Check if this is from an external class (contains dots in class name)
+        if "." in class_name:
+            header_parts = [
+                f"**{param_info.param_type} Parameter '{param_name}' (from {class_name})**"
+            ]
+        else:
+            header_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
         python_type = self._get_python_type_name(param_info.param_type, param_info.allow_none)
         header_parts.append(f"Allowed types: {python_type}")
 
