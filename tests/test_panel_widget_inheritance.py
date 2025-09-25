@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 
 class TestPanelWidgetInheritance:
@@ -25,7 +26,7 @@ class T(pn.widgets.IntSlider):
 """
 
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Verify class is detected as Parameterized
         assert "T" in result["param_classes"]
@@ -61,7 +62,7 @@ class MyWidget(CustomSlider):
 """
 
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Both classes should be detected
         assert "CustomSlider" in result["param_classes"]

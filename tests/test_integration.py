@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from param_lsp.models import convert_to_legacy_format
+
 
 class TestIntegration:
     """Integration tests covering complete workflows."""
@@ -57,7 +59,7 @@ example.count = 0               # Bounds violation
 example.ratio = 0               # Exclusive bounds violation
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Verify class detection
         assert "CompleteExample" in result["param_classes"]
@@ -172,7 +174,7 @@ processor.learning_rate = 1.5       # Bounds error
 processor.use_gpu = 1              # Boolean type error
 '''
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Verify comprehensive analysis
         assert "DataProcessor" in result["param_classes"]
@@ -245,7 +247,7 @@ edge.extreme_bounds = 1e9        # Valid (within bounds)
 edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Verify all edge cases are handled
         assert "EdgeCases" in result["param_classes"]
@@ -279,7 +281,7 @@ class ValidClass(param.Parameterized):
 """
 
         # This should not crash the analyzer
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should still extract the valid parts
         assert "ValidClass" in result["param_classes"]

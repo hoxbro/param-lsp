@@ -19,10 +19,12 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
-        assert "TestClass" in result["param_parameter_bounds"]
-        bounds = result["param_parameter_bounds"]["TestClass"]
-        assert "int_param" in bounds
-        assert "number_param" in bounds
+        assert "TestClass" in result["param_classes"]
+        test_class = result["param_classes"]["TestClass"]
+        assert "int_param" in test_class.parameters
+        assert "number_param" in test_class.parameters
+        assert test_class.parameters["int_param"].bounds is not None
+        assert test_class.parameters["number_param"].bounds is not None
 
     def test_invalid_bounds_min_greater_than_max(self, analyzer):
         """Test bounds where min >= max generates error."""
@@ -131,11 +133,11 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        bounds = result["param_parameter_bounds"]["TestClass"]
+        test_class = result["param_classes"]["TestClass"]
 
         # Check simple bounds
-        assert "simple_bounds" in bounds
-        simple_bounds_data = bounds["simple_bounds"]
+        assert "simple_bounds" in test_class.parameters
+        simple_bounds_data = test_class.parameters["simple_bounds"].bounds
         assert len(simple_bounds_data) == 4  # (min, max, left_inclusive, right_inclusive)
         assert simple_bounds_data[0] == 0
         assert simple_bounds_data[1] == 10
@@ -143,8 +145,8 @@ class TestClass(param.Parameterized):
         assert simple_bounds_data[3] is True  # Default inclusive
 
         # Check exclusive bounds
-        assert "exclusive_bounds" in bounds
-        exclusive_bounds_data = bounds["exclusive_bounds"]
+        assert "exclusive_bounds" in test_class.parameters
+        exclusive_bounds_data = test_class.parameters["exclusive_bounds"].bounds
         assert exclusive_bounds_data[2] is False  # Left exclusive
         assert exclusive_bounds_data[3] is True  # Right inclusive
 
@@ -161,9 +163,10 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
-        bounds = result["param_parameter_bounds"]["TestClass"]
-        assert bounds["negative_bounds"][0] == -5
-        assert bounds["negative_bounds"][1] == 0
+        test_class = result["param_classes"]["TestClass"]
+        negative_bounds = test_class.parameters["negative_bounds"].bounds
+        assert negative_bounds[0] == -5
+        assert negative_bounds[1] == 0
 
     def test_bounds_with_non_numeric_parameters(self, analyzer):
         """Test that bounds are only checked for numeric parameter types."""

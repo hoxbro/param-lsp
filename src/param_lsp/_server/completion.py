@@ -19,6 +19,7 @@ from param_lsp.constants import (
     RX_PROPERTIES,
     TYPE_SPECIFIC_PARAMETER_ATTRIBUTES,
 )
+from param_lsp.models import convert_to_legacy_format
 
 from .base import LSPServerBase
 
@@ -118,7 +119,8 @@ class CompletionMixin(LSPServerBase):
             return False
 
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = analysis.get("param_classes", set())
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_classes = legacy["param_classes"]
 
         # Find which param class constructor is being called
         before_cursor = line[:character]
@@ -175,13 +177,14 @@ class CompletionMixin(LSPServerBase):
             return completions
 
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = analysis.get("param_classes", set())
-        param_parameters = analysis.get("param_parameters", {})
-        param_parameter_types = analysis.get("param_parameter_types", {})
-        param_parameter_docs = analysis.get("param_parameter_docs", {})
-        param_parameter_bounds = analysis.get("param_parameter_bounds", {})
-        param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
-        param_parameter_defaults = analysis.get("param_parameter_defaults", {})
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_classes = legacy["param_classes"]
+        param_parameters = legacy["param_parameters"]
+        param_parameter_types = legacy["param_parameter_types"]
+        param_parameter_docs = legacy["param_parameter_docs"]
+        param_parameter_bounds = legacy["param_parameter_bounds"]
+        param_parameter_allow_none = legacy["param_parameter_allow_none"]
+        param_parameter_defaults = legacy["param_parameter_defaults"]
 
         # Find which param class constructor is being called
         before_cursor = line[:character]
@@ -309,12 +312,15 @@ class CompletionMixin(LSPServerBase):
                     external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
                 if external_class_info:
-                    parameters = external_class_info.get("parameters", [])
-                    parameter_types = external_class_info.get("parameter_types", {})
-                    parameter_docs = external_class_info.get("parameter_docs", {})
-                    parameter_bounds = external_class_info.get("parameter_bounds", {})
-                    parameter_allow_none = external_class_info.get("parameter_allow_none", {})
-                    parameter_defaults = external_class_info.get("parameter_defaults", {})
+                    # External class info is already an ExternalClassInfo object from analyzer
+                    legacy_format = external_class_info.to_legacy_dict()
+
+                    parameters = legacy_format["parameters"]
+                    parameter_types = legacy_format["parameter_types"]
+                    parameter_docs = legacy_format["parameter_docs"]
+                    parameter_bounds = legacy_format["parameter_bounds"]
+                    parameter_allow_none = legacy_format["parameter_allow_none"]
+                    parameter_defaults = legacy_format["parameter_defaults"]
 
                     used_params = set()
                     used_matches = _re_constructor_param_assignment.findall(before_cursor)
@@ -397,9 +403,10 @@ class CompletionMixin(LSPServerBase):
             return []
 
         analysis = self.document_cache[uri]["analysis"]
-        param_parameters = analysis.get("param_parameters", {})
-        param_parameter_types = analysis.get("param_parameter_types", {})
-        param_parameter_docs = analysis.get("param_parameter_docs", {})
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_parameters = legacy["param_parameters"]
+        param_parameter_types = legacy["param_parameter_types"]
+        param_parameter_docs = legacy["param_parameter_docs"]
 
         completions = []
 
@@ -595,13 +602,14 @@ class CompletionMixin(LSPServerBase):
         # Get analyzer for external class resolution
         analyzer = self.document_cache[uri]["analyzer"]
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = analysis.get("param_classes", set())
-        param_parameters = analysis.get("param_parameters", {})
-        param_parameter_types = analysis.get("param_parameter_types", {})
-        param_parameter_docs = analysis.get("param_parameter_docs", {})
-        param_parameter_bounds = analysis.get("param_parameter_bounds", {})
-        param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
-        param_parameter_defaults = analysis.get("param_parameter_defaults", {})
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_classes = legacy["param_classes"]
+        param_parameters = legacy["param_parameters"]
+        param_parameter_types = legacy["param_parameter_types"]
+        param_parameter_docs = legacy["param_parameter_docs"]
+        param_parameter_bounds = legacy["param_parameter_bounds"]
+        param_parameter_allow_none = legacy["param_parameter_allow_none"]
+        param_parameter_defaults = legacy["param_parameter_defaults"]
 
         # Check if this is a known param class (local or external)
         parameters = []
@@ -649,12 +657,15 @@ class CompletionMixin(LSPServerBase):
                 external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if external_class_info:
-                parameters = external_class_info.get("parameters", [])
-                parameter_types = external_class_info.get("parameter_types", {})
-                parameter_docs = external_class_info.get("parameter_docs", {})
-                parameter_bounds = external_class_info.get("parameter_bounds", {})
-                parameter_allow_none = external_class_info.get("parameter_allow_none", {})
-                parameter_defaults = external_class_info.get("parameter_defaults", {})
+                # External class info is already an ExternalClassInfo object from analyzer
+                legacy_format = external_class_info.to_legacy_dict()
+
+                parameters = legacy_format["parameters"]
+                parameter_types = legacy_format["parameter_types"]
+                parameter_docs = legacy_format["parameter_docs"]
+                parameter_bounds = legacy_format["parameter_bounds"]
+                parameter_allow_none = legacy_format["parameter_allow_none"]
+                parameter_defaults = legacy_format["parameter_defaults"]
 
         # If we don't have any parameters, no completions
         if not parameters:
@@ -777,9 +788,10 @@ class CompletionMixin(LSPServerBase):
         # Resolve the class name (could be a variable or class name)
         analyzer = self.document_cache[uri]["analyzer"]
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = analysis.get("param_classes", set())
-        param_parameters = analysis.get("param_parameters", {})
-        param_parameter_types = analysis.get("param_parameter_types", {})
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_classes = legacy["param_classes"]
+        param_parameters = legacy["param_parameters"]
+        param_parameter_types = legacy["param_parameter_types"]
 
         resolved_class_name = self._resolve_class_name_from_context(uri, class_name, param_classes)
 
@@ -913,8 +925,9 @@ class CompletionMixin(LSPServerBase):
         # Resolve the class name (could be a variable or class name)
         analyzer = self.document_cache[uri]["analyzer"]
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = analysis.get("param_classes", set())
-        param_parameters = analysis.get("param_parameters", {})
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_classes = legacy["param_classes"]
+        param_parameters = legacy["param_parameters"]
 
         resolved_class_name = self._resolve_class_name_from_context(uri, class_name, param_classes)
 
@@ -1026,13 +1039,14 @@ class CompletionMixin(LSPServerBase):
         # Get analyzer for external class resolution
         analyzer = self.document_cache[uri]["analyzer"]
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = analysis.get("param_classes", set())
-        param_parameters = analysis.get("param_parameters", {})
-        param_parameter_types = analysis.get("param_parameter_types", {})
-        param_parameter_docs = analysis.get("param_parameter_docs", {})
-        param_parameter_bounds = analysis.get("param_parameter_bounds", {})
-        param_parameter_allow_none = analysis.get("param_parameter_allow_none", {})
-        param_parameter_defaults = analysis.get("param_parameter_defaults", {})
+        legacy = convert_to_legacy_format({"param_classes": analysis.get("param_classes", {})})
+        param_classes = legacy["param_classes"]
+        param_parameters = legacy["param_parameters"]
+        param_parameter_types = legacy["param_parameter_types"]
+        param_parameter_docs = legacy["param_parameter_docs"]
+        param_parameter_bounds = legacy["param_parameter_bounds"]
+        param_parameter_allow_none = legacy["param_parameter_allow_none"]
+        param_parameter_defaults = legacy["param_parameter_defaults"]
 
         # Check if this is a known param class (local or external)
         parameters = []
@@ -1079,12 +1093,15 @@ class CompletionMixin(LSPServerBase):
                 external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if external_class_info:
-                parameters = external_class_info.get("parameters", [])
-                parameter_types = external_class_info.get("parameter_types", {})
-                parameter_docs = external_class_info.get("parameter_docs", {})
-                parameter_bounds = external_class_info.get("parameter_bounds", {})
-                parameter_allow_none = external_class_info.get("parameter_allow_none", {})
-                parameter_defaults = external_class_info.get("parameter_defaults", {})
+                # External class info is already an ExternalClassInfo object from analyzer
+                legacy_format = external_class_info.to_legacy_dict()
+
+                parameters = legacy_format["parameters"]
+                parameter_types = legacy_format["parameter_types"]
+                parameter_docs = legacy_format["parameter_docs"]
+                parameter_bounds = legacy_format["parameter_bounds"]
+                parameter_allow_none = legacy_format["parameter_allow_none"]
+                parameter_defaults = legacy_format["parameter_defaults"]
 
         # If we don't have any parameters, no completions
         if not parameters:

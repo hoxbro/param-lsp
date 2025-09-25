@@ -42,9 +42,14 @@ class ValidationMixin(LSPServerBase):
 
         # Debug logging
         logger.info(f"Analysis results for {uri}:")
-        logger.info(f"  Param classes: {analysis.get('param_classes', set())}")
-        logger.info(f"  Parameters: {analysis.get('param_parameters', {})}")
-        logger.info(f"  Parameter types: {analysis.get('param_parameter_types', {})}")
+        param_classes = analysis.get("param_classes", {})
+        logger.info(f"  Param classes: {set(param_classes.keys())}")
+        logger.info(
+            f"  Parameters: {[{name: info.get_parameter_names() for name, info in param_classes.items()}]}"
+        )
+        logger.info(
+            f"  Parameter types: {[{name: {p.name: p.param_type for p in info.parameters.values()} for name, info in param_classes.items()}]}"
+        )
         logger.info(f"  Type errors: {analysis.get('type_errors', [])}")
 
         # Publish diagnostics for type errors

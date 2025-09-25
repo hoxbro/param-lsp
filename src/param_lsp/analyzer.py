@@ -19,6 +19,7 @@ import param
 
 from .cache import external_library_cache
 from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
+from .models import ExternalClassInfo, ParamClassInfo, ParameterInfo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,20 +29,7 @@ class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
     def __init__(self, workspace_root: str | None = None):
-        self.param_classes: set[str] = set()
-        self.param_parameters: dict[str, list[str]] = {}
-        # class_name -> {param_name: param_type}
-        self.param_parameter_types: dict[str, dict[str, str]] = {}
-        # class_name -> {param_name: (min, max)}
-        self.param_parameter_bounds: dict[str, dict[str, tuple]] = {}
-        # class_name -> {param_name: doc_string}
-        self.param_parameter_docs: dict[str, dict[str, str]] = {}
-        # class_name -> {param_name: allow_None}
-        self.param_parameter_allow_none: dict[str, dict[str, bool]] = {}
-        # class_name -> {param_name: default_value}
-        self.param_parameter_defaults: dict[str, dict[str, str]] = {}
-        # class_name -> {param_name: {'line': line_no, 'source': source_line}}
-        self.param_parameter_locations: dict[str, dict[str, dict[str, Any]]] = {}
+        self.param_classes: dict[str, ParamClassInfo] = {}
         self.imports: dict[str, str] = {}
         # Store file content for source line lookup
         self._current_file_content: str | None = None
@@ -55,7 +43,7 @@ class ParamAnalyzer:
 
         # Cache for external Parameterized classes (AST-based detection)
         self.external_param_classes: dict[
-            str, dict[str, Any] | None
+            str, ExternalClassInfo | None
         ] = {}  # full_class_path -> class_info
 
         # Populate external library cache on initialization
@@ -167,13 +155,6 @@ class ParamAnalyzer:
 
         return {
             "param_classes": self.param_classes,
-            "param_parameters": self.param_parameters,
-            "param_parameter_types": self.param_parameter_types,
-            "param_parameter_bounds": self.param_parameter_bounds,
-            "param_parameter_docs": self.param_parameter_docs,
-            "param_parameter_allow_none": self.param_parameter_allow_none,
-            "param_parameter_defaults": self.param_parameter_defaults,
-            "param_parameter_locations": self.param_parameter_locations,
             "imports": self.imports,
             "type_errors": self.type_errors,
         }
@@ -181,13 +162,6 @@ class ParamAnalyzer:
     def _reset_analysis(self):
         """Reset analysis state."""
         self.param_classes.clear()
-        self.param_parameters.clear()
-        self.param_parameter_types.clear()
-        self.param_parameter_bounds.clear()
-        self.param_parameter_docs.clear()
-        self.param_parameter_allow_none.clear()
-        self.param_parameter_defaults.clear()
-        self.param_parameter_locations.clear()
         self.imports.clear()
         self.type_errors.clear()
 
@@ -214,61 +188,21 @@ class ParamAnalyzer:
                 break
 
         if is_param_class:
-            self.param_classes.add(node.name)
-            (
-                parameters,
-                parameter_types,
-                parameter_bounds,
-                parameter_docs,
-                parameter_allow_none,
-                parameter_defaults,
-                parameter_locations,
-            ) = self._extract_parameters(node)
+            class_info = ParamClassInfo(name=node.name)
 
-            # For inherited classes, we need to collect parameters from parent classes too
-            # Get parent class parameters and merge them
-            (
-                parent_parameters,
-                parent_parameter_types,
-                parent_parameter_bounds,
-                parent_parameter_docs,
-                parent_parameter_allow_none,
-                parent_parameter_defaults,
-                parent_parameter_locations,
-            ) = self._collect_inherited_parameters(node, getattr(self, "_current_file_path", None))
-
-            # Merge parent parameters with current class parameters
-            # Child class parameters override parent parameters with the same name
-            all_parameter_types = {**parent_parameter_types, **parameter_types}
-            all_parameter_bounds = {**parent_parameter_bounds, **parameter_bounds}
-            all_parameter_docs = {**parent_parameter_docs, **parameter_docs}
-            all_parameter_allow_none = {**parent_parameter_allow_none, **parameter_allow_none}
-            all_parameter_defaults = {**parent_parameter_defaults, **parameter_defaults}
-            all_parameter_locations = {**parent_parameter_locations, **parameter_locations}
-
-            # Create unique parameter list, with child parameters overriding parent ones
-            all_parameters = []
-            current_param_names = set(parameters)
-
-            # Add current class parameters first (these take precedence)
-            all_parameters.extend(parameters)
-
-            # Add parent parameters only if they're not overridden by current class
-            all_parameters.extend(
-                [
-                    parent_param
-                    for parent_param in parent_parameters
-                    if parent_param not in current_param_names
-                ]
+            # Get inherited parameters from parent classes first
+            inherited_parameters = self._collect_inherited_parameters(
+                node, getattr(self, "_current_file_path", None)
             )
+            # Add inherited parameters first
+            class_info.merge_parameters(inherited_parameters)
 
-            self.param_parameters[node.name] = all_parameters
-            self.param_parameter_types[node.name] = all_parameter_types
-            self.param_parameter_bounds[node.name] = all_parameter_bounds
-            self.param_parameter_docs[node.name] = all_parameter_docs
-            self.param_parameter_allow_none[node.name] = all_parameter_allow_none
-            self.param_parameter_defaults[node.name] = all_parameter_defaults
-            self.param_parameter_locations[node.name] = all_parameter_locations
+            # Extract parameters from this class and add them (overriding inherited ones)
+            current_parameters = self._extract_parameters(node)
+            for param_info in current_parameters:
+                class_info.add_parameter(param_info)
+
+            self.param_classes[node.name] = class_info
 
     def _format_base(self, base: ast.expr) -> str:
         """Format base class for debugging."""
@@ -319,23 +253,9 @@ class ParamAnalyzer:
 
     def _collect_inherited_parameters(
         self, node: ast.ClassDef, current_file_path: str | None = None
-    ) -> tuple[
-        list[str],
-        dict[str, str],
-        dict[str, tuple],
-        dict[str, str],
-        dict[str, bool],
-        dict[str, str],
-        dict[str, dict[str, Any]],
-    ]:
+    ) -> dict[str, ParameterInfo]:
         """Collect parameters from parent classes in inheritance hierarchy."""
-        inherited_parameters = []
-        inherited_parameter_types = {}
-        inherited_parameter_bounds = {}
-        inherited_parameter_docs = {}
-        inherited_parameter_allow_none = {}
-        inherited_parameter_defaults = {}
-        inherited_parameter_locations = {}
+        inherited_parameters = {}  # Last wins
 
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -344,30 +264,9 @@ class ParamAnalyzer:
                 # First check if it's a local class in the same file
                 if parent_class_name in self.param_classes:
                     # Get parameters from the parent class
-                    parent_params = self.param_parameters.get(parent_class_name, [])
-                    parent_types = self.param_parameter_types.get(parent_class_name, {})
-                    parent_bounds = self.param_parameter_bounds.get(parent_class_name, {})
-                    parent_docs = self.param_parameter_docs.get(parent_class_name, {})
-                    parent_allow_none = self.param_parameter_allow_none.get(parent_class_name, {})
-                    parent_defaults = self.param_parameter_defaults.get(parent_class_name, {})
-                    parent_locations = self.param_parameter_locations.get(parent_class_name, {})
-
-                    # Add parent parameters (avoid duplicates)
-                    for param in parent_params:
-                        if param not in inherited_parameters:
-                            inherited_parameters.append(param)
-                        if param in parent_types:
-                            inherited_parameter_types[param] = parent_types[param]
-                        if param in parent_bounds:
-                            inherited_parameter_bounds[param] = parent_bounds[param]
-                        if param in parent_docs:
-                            inherited_parameter_docs[param] = parent_docs[param]
-                        if param in parent_allow_none:
-                            inherited_parameter_allow_none[param] = parent_allow_none[param]
-                        if param in parent_defaults:
-                            inherited_parameter_defaults[param] = parent_defaults[param]
-                        if param in parent_locations:
-                            inherited_parameter_locations[param] = parent_locations[param]
+                    parent_class_info = self.param_classes[parent_class_name]
+                    for param_name, param_info in parent_class_info.parameters.items():
+                        inherited_parameters[param_name] = param_info  # noqa: PERF403
 
                 # If not found locally, check if it's an imported class
                 else:
@@ -377,30 +276,8 @@ class ParamAnalyzer:
                     )
 
                     if imported_class_info:
-                        parent_params = imported_class_info.get("parameters", [])
-                        parent_types = imported_class_info.get("parameter_types", {})
-                        parent_bounds = imported_class_info.get("parameter_bounds", {})
-                        parent_docs = imported_class_info.get("parameter_docs", {})
-                        parent_allow_none = imported_class_info.get("parameter_allow_none", {})
-                        parent_defaults = imported_class_info.get("parameter_defaults", {})
-                        parent_locations = imported_class_info.get("parameter_locations", {})
-
-                        # Add parent parameters (avoid duplicates)
-                        for param in parent_params:
-                            if param not in inherited_parameters:
-                                inherited_parameters.append(param)
-                            if param in parent_types:
-                                inherited_parameter_types[param] = parent_types[param]
-                            if param in parent_bounds:
-                                inherited_parameter_bounds[param] = parent_bounds[param]
-                            if param in parent_docs:
-                                inherited_parameter_docs[param] = parent_docs[param]
-                            if param in parent_allow_none:
-                                inherited_parameter_allow_none[param] = parent_allow_none[param]
-                            if param in parent_defaults:
-                                inherited_parameter_defaults[param] = parent_defaults[param]
-                            if param in parent_locations:
-                                inherited_parameter_locations[param] = parent_locations[param]
+                        for param_name, param_info in imported_class_info.parameters.items():
+                            inherited_parameters[param_name] = param_info  # noqa: PERF403
 
             elif isinstance(base, ast.Attribute):
                 # Handle complex attribute access like pn.widgets.IntSlider
@@ -409,66 +286,27 @@ class ParamAnalyzer:
                     # Check if this external class is a Parameterized class
                     class_info = self._analyze_external_class_ast(full_class_path)
                     if class_info:
-                        parent_params = class_info.get("parameters", [])
-                        parent_types = class_info.get("parameter_types", {})
-                        parent_bounds = class_info.get("parameter_bounds", {})
-                        parent_docs = class_info.get("parameter_docs", {})
-                        parent_allow_none = class_info.get("parameter_allow_none", {})
-                        parent_defaults = class_info.get("parameter_defaults", {})
-                        parent_locations = class_info.get("parameter_locations", {})
+                        for param_name, param_info in class_info.parameters.items():
+                            inherited_parameters[param_name] = param_info  # noqa: PERF403
 
-                        # Add parent parameters (avoid duplicates)
-                        for param in parent_params:
-                            if param not in inherited_parameters:
-                                inherited_parameters.append(param)
-                            if param in parent_types:
-                                inherited_parameter_types[param] = parent_types[param]
-                            if param in parent_bounds:
-                                inherited_parameter_bounds[param] = parent_bounds[param]
-                            if param in parent_docs:
-                                inherited_parameter_docs[param] = parent_docs[param]
-                            if param in parent_allow_none:
-                                inherited_parameter_allow_none[param] = parent_allow_none[param]
-                            if param in parent_defaults:
-                                inherited_parameter_defaults[param] = parent_defaults[param]
-                            if param in parent_locations:
-                                inherited_parameter_locations[param] = parent_locations[param]
+        return inherited_parameters
 
-        return (
-            inherited_parameters,
-            inherited_parameter_types,
-            inherited_parameter_bounds,
-            inherited_parameter_docs,
-            inherited_parameter_allow_none,
-            inherited_parameter_defaults,
-            inherited_parameter_locations,
-        )
-
-    def _extract_parameters(
-        self, node: ast.ClassDef
-    ) -> tuple[
-        list[str],
-        dict[str, str],
-        dict[str, tuple],
-        dict[str, str],
-        dict[str, bool],
-        dict[str, str],
-        dict[str, dict[str, Any]],
-    ]:
+    def _extract_parameters(self, node: ast.ClassDef) -> list[ParameterInfo]:
         """Extract parameter definitions from a Param class."""
         parameters = []
-        parameter_types = {}
-        parameter_bounds = {}
-        parameter_docs = {}
-        parameter_allow_none = {}
-        parameter_defaults = {}
-        parameter_locations = {}
         for item in node.body:
             if isinstance(item, ast.Assign):
                 for target in item.targets:
                     if isinstance(target, ast.Name) and self._is_parameter_assignment(item.value):
                         param_name = target.id
-                        parameters.append(param_name)
+
+                        # Initialize parameter info
+                        param_type = ""
+                        bounds = None
+                        doc = None
+                        allow_none = False
+                        default = None
+                        location = None
 
                         # Capture complete source definition information
                         if hasattr(item, "lineno") and self._current_file_content:
@@ -478,14 +316,14 @@ class ParamAnalyzer:
                                 lines, param_name
                             )
                             if complete_definition:
-                                parameter_locations[param_name] = {
+                                location = {
                                     "line": item.lineno,
                                     "source": complete_definition,
                                 }
                             elif 0 <= item.lineno - 1 < len(lines):
                                 # Fallback to single line if complete definition extraction fails
                                 source_line = lines[item.lineno - 1]
-                                parameter_locations[param_name] = {
+                                location = {
                                     "line": item.lineno,
                                     "source": source_line.strip(),
                                 }
@@ -494,44 +332,41 @@ class ParamAnalyzer:
                         if isinstance(item.value, ast.Call):
                             param_class_info = self._resolve_parameter_class(item.value.func)
                             if param_class_info:
-                                parameter_types[param_name] = param_class_info["type"]
+                                param_type = param_class_info["type"]
 
-                        # Get bounds if present
-                        if isinstance(item.value, ast.Call):
+                            # Get bounds if present
                             bounds = self._extract_bounds_from_call(item.value)
-                            if bounds:
-                                parameter_bounds[param_name] = bounds
 
                             # Get doc string if present
-                            doc_string = self._extract_doc_from_call(item.value)
-                            if doc_string is not None:
-                                parameter_docs[param_name] = doc_string
+                            doc = self._extract_doc_from_call(item.value)
 
                             # Get allow_None if present
-                            allow_none = self._extract_allow_none_from_call(item.value)
+                            allow_none_value = self._extract_allow_none_from_call(item.value)
                             default_value = self._extract_default_from_call(item.value)
 
                             # Store default value as a string representation
                             if default_value is not None:
-                                parameter_defaults[param_name] = self._format_default_value(
-                                    default_value
-                                )
+                                default = self._format_default_value(default_value)
 
                             # Param automatically sets allow_None=True when default=None
                             if default_value is not None and self._is_none_value(default_value):
-                                parameter_allow_none[param_name] = True
-                            elif allow_none is not None:
-                                parameter_allow_none[param_name] = allow_none
+                                allow_none = True
+                            elif allow_none_value is not None:
+                                allow_none = allow_none_value
 
-        return (
-            parameters,
-            parameter_types,
-            parameter_bounds,
-            parameter_docs,
-            parameter_allow_none,
-            parameter_defaults,
-            parameter_locations,
-        )
+                        # Create ParameterInfo object
+                        param_info = ParameterInfo(
+                            name=param_name,
+                            param_type=param_type or "Unknown",
+                            bounds=bounds,
+                            doc=doc,
+                            allow_none=allow_none,
+                            default=default,
+                            location=location,
+                        )
+                        parameters.append(param_info)
+
+        return parameters
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
         """Extract bounds from a parameter call."""
@@ -798,7 +633,7 @@ class ParamAnalyzer:
         if assigned_numeric is None:
             return
 
-        # Handle both old format (min, max) and new format (min, max, left_inclusive, right_inclusive)
+        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
         if len(bounds) == 2:
             min_val, max_val = bounds
             left_inclusive, right_inclusive = True, True  # Default to inclusive
@@ -936,15 +771,15 @@ class ParamAnalyzer:
             # Case: instance_var.x = value
             # We need to infer the class from context or assume it could be any param class
             # First check local param classes
-            for class_name in self.param_classes:
-                if param_name in self.param_parameters.get(class_name, []):
+            for class_name, class_info in self.param_classes.items():
+                if param_name in class_info.parameters:
                     instance_class = class_name
                     break
 
             # If not found in local classes, check external param classes
             if not instance_class:
                 for class_name, class_info in self.external_param_classes.items():
-                    if class_info and param_name in class_info.get("parameters", []):
+                    if class_info and param_name in class_info.parameters:
                         instance_class = class_name
                         break
 
@@ -1045,7 +880,7 @@ class ParamAnalyzer:
         if assigned_numeric is None:
             return
 
-        # Handle both old format (min, max) and new format (min, max, left_inclusive, right_inclusive)
+        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
         if len(bounds) == 2:
             min_val, max_val = bounds
             left_inclusive, right_inclusive = True, True  # Default to inclusive
@@ -1092,13 +927,15 @@ class ParamAnalyzer:
     def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
         """Get parameter bounds from a class definition."""
         # Check local classes first
-        if class_name in self.param_parameter_bounds:
-            return self.param_parameter_bounds[class_name].get(param_name)
+        if class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            return param_info.bounds if param_info else None
 
         # Check external classes
         external_class_info = self.external_param_classes.get(class_name)
         if external_class_info:
-            return external_class_info["parameter_bounds"].get(param_name)
+            param_info = external_class_info.get_parameter(param_name)
+            return param_info.bounds if param_info else None
 
         return None
 
@@ -1149,26 +986,30 @@ class ParamAnalyzer:
     def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
         """Get the parameter type from a class definition."""
         # Check local classes first
-        if class_name in self.param_parameter_types:
-            return self.param_parameter_types[class_name].get(param_name)
+        if class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            return param_info.param_type if param_info else None
 
         # Check external classes
         external_class_info = self.external_param_classes.get(class_name)
         if external_class_info:
-            return external_class_info["parameter_types"].get(param_name)
+            param_info = external_class_info.get_parameter(param_name)
+            return param_info.param_type if param_info else None
 
         return None
 
     def _get_parameter_allow_none(self, class_name: str, param_name: str) -> bool:
         """Get the allow_None setting for a parameter from a class definition."""
         # Check local classes first
-        if class_name in self.param_parameter_allow_none:
-            return self.param_parameter_allow_none[class_name].get(param_name, False)
+        if class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            return param_info.allow_none if param_info else False
 
         # Check external classes
         external_class_info = self.external_param_classes.get(class_name)
         if external_class_info:
-            return external_class_info["parameter_allow_none"].get(param_name, False)
+            param_info = external_class_info.get_parameter(param_name)
+            return param_info.allow_none if param_info else False
 
         return False
 
@@ -1444,7 +1285,7 @@ class ParamAnalyzer:
 
     def _get_imported_param_class_info(
         self, class_name: str, import_name: str, current_file_path: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> ParamClassInfo | None:
         """Get parameter information for a class imported from another module."""
         # Get the full module name from imports
         full_import_name = self.imports.get(import_name)
@@ -1466,32 +1307,14 @@ class ParamAnalyzer:
             return None
 
         # Check if the class exists in the imported module
-        param_classes = module_analysis.get("param_classes", set())
-        if imported_class_name not in param_classes:
-            return None
+        param_classes_dict = module_analysis.get("param_classes", {})
+        if isinstance(param_classes_dict, dict) and imported_class_name in param_classes_dict:
+            class_info = param_classes_dict[imported_class_name]
+            # If it's a ParamClassInfo object, return it
+            if hasattr(class_info, "parameters"):
+                return class_info
 
-        # Return parameter information for the imported class
-        return {
-            "parameters": module_analysis.get("param_parameters", {}).get(imported_class_name, []),
-            "parameter_types": module_analysis.get("param_parameter_types", {}).get(
-                imported_class_name, {}
-            ),
-            "parameter_bounds": module_analysis.get("param_parameter_bounds", {}).get(
-                imported_class_name, {}
-            ),
-            "parameter_docs": module_analysis.get("param_parameter_docs", {}).get(
-                imported_class_name, {}
-            ),
-            "parameter_allow_none": module_analysis.get("param_parameter_allow_none", {}).get(
-                imported_class_name, {}
-            ),
-            "parameter_defaults": module_analysis.get("param_parameter_defaults", {}).get(
-                imported_class_name, {}
-            ),
-            "parameter_locations": module_analysis.get("param_parameter_locations", {}).get(
-                imported_class_name, {}
-            ),
-        }
+        return None
 
     def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
         """Extract numeric value from AST node."""
@@ -1506,7 +1329,7 @@ class ParamAnalyzer:
             return -val if val is not None else None
         return None
 
-    def _analyze_external_class_ast(self, full_class_path: str) -> dict[str, Any] | None:
+    def _analyze_external_class_ast(self, full_class_path: str) -> ExternalClassInfo | None:
         """Analyze external classes using runtime introspection for allowed libraries."""
         if full_class_path in self.external_param_classes:
             return self.external_param_classes[full_class_path]
@@ -1556,7 +1379,7 @@ class ParamAnalyzer:
 
         return "\n".join(fixed_lines)
 
-    def _introspect_external_class_runtime(self, full_class_path: str) -> dict[str, Any] | None:
+    def _introspect_external_class_runtime(self, full_class_path: str) -> ExternalClassInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
 
         # Get the root library name for cache lookup
@@ -1566,7 +1389,9 @@ class ParamAnalyzer:
         cached_result = external_library_cache.get(root_library, full_class_path)
         if cached_result is not None:
             logger.debug(f"Using cached result for {full_class_path}")
-            return cached_result
+            # Convert cached dict back to ExternalClassInfo using the from_legacy_dict classmethod
+            class_name = full_class_path.split(".")[-1]
+            return ExternalClassInfo.from_legacy_dict(class_name, cached_result)
 
         try:
             # Parse the full class path (e.g., "panel.widgets.IntSlider")
@@ -1592,74 +1417,86 @@ class ParamAnalyzer:
                 return None
 
             # Extract parameter information using param's introspection
-            parameters = []
-            parameter_types = {}
-            parameter_bounds = {}
-            parameter_docs = {}
-            parameter_allow_none = {}
-            parameter_defaults = {}
-            parameter_locations = {}
+            class_info = ParamClassInfo(name=full_class_path.split(".")[-1])
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
                     # Skip the 'name' parameter as it's rarely set in constructors
                     if param_name == "name":
                         continue
-                    parameters.append(param_name)
 
                     if param_obj:
                         # Get parameter type
                         param_type_name = type(param_obj).__name__
-                        parameter_types[param_name] = param_type_name
 
                         # Get bounds if present
+                        bounds = None
                         if hasattr(param_obj, "bounds") and param_obj.bounds is not None:
-                            bounds = param_obj.bounds
+                            bounds_tuple = param_obj.bounds
                             # Handle inclusive bounds
                             if hasattr(param_obj, "inclusive_bounds"):
                                 inclusive_bounds = param_obj.inclusive_bounds
-                                parameter_bounds[param_name] = (*bounds, *inclusive_bounds)
+                                bounds = (*bounds_tuple, *inclusive_bounds)
                             else:
-                                parameter_bounds[param_name] = bounds
+                                bounds = bounds_tuple
 
                         # Get doc string
-                        if hasattr(param_obj, "doc") and param_obj.doc:
-                            parameter_docs[param_name] = param_obj.doc
+                        doc = (
+                            param_obj.doc if hasattr(param_obj, "doc") and param_obj.doc else None
+                        )
 
                         # Get allow_None
-                        if hasattr(param_obj, "allow_None"):
-                            parameter_allow_none[param_name] = param_obj.allow_None
+                        allow_none = (
+                            param_obj.allow_None if hasattr(param_obj, "allow_None") else False
+                        )
 
                         # Get default value
-                        if hasattr(param_obj, "default"):
-                            parameter_defaults[param_name] = str(param_obj.default)
+                        default = str(param_obj.default) if hasattr(param_obj, "default") else None
 
                         # Try to get source file location for the parameter
+                        location = None
                         try:
                             source_location = self._get_parameter_source_location(
                                 param_obj, cls, param_name
                             )
                             if source_location:
-                                parameter_locations[param_name] = source_location
+                                location = source_location
                         except Exception as e:
                             # If we can't get source location, just continue without it
                             logger.debug(f"Could not get source location for {param_name}: {e}")
 
-            result = {
-                "parameters": parameters,
-                "parameter_types": parameter_types,
-                "parameter_bounds": parameter_bounds,
-                "parameter_docs": parameter_docs,
-                "parameter_allow_none": parameter_allow_none,
-                "parameter_defaults": parameter_defaults,
-                "parameter_locations": parameter_locations,
-            }
+                        # Create ParameterInfo object
+                        param_info = ParameterInfo(
+                            name=param_name,
+                            param_type=param_type_name,
+                            bounds=bounds,
+                            doc=doc,
+                            allow_none=allow_none,
+                            default=default,
+                            location=location,
+                        )
+                        class_info.add_parameter(param_info)
 
             # Cache the result for future use
-            external_library_cache.set(root_library, full_class_path, result)
+            # Convert to dict for caching compatibility
+            cache_data = {
+                "parameters": class_info.get_parameter_names(),
+                "parameter_types": {p.name: p.param_type for p in class_info.parameters.values()},
+                "parameter_bounds": {
+                    p.name: p.bounds for p in class_info.parameters.values() if p.bounds
+                },
+                "parameter_docs": {p.name: p.doc for p in class_info.parameters.values() if p.doc},
+                "parameter_allow_none": {
+                    p.name: p.allow_none for p in class_info.parameters.values()
+                },
+                "parameter_defaults": {
+                    p.name: p.default for p in class_info.parameters.values() if p.default
+                },
+            }
+            external_library_cache.set(root_library, full_class_path, cache_data)
             logger.debug(f"Cached introspection result for {full_class_path}")
 
-            return result
+            return ExternalClassInfo.from_param_class_info(class_info)
 
         except Exception as e:
             logger.debug(f"Failed to introspect external class {full_class_path}: {e}")
@@ -2042,7 +1879,7 @@ class ParamAnalyzer:
             return None
 
     def resolve_class_name_from_context(
-        self, class_name: str, param_classes: set[str], document_content: str
+        self, class_name: str, param_classes: dict[str, ParamClassInfo], document_content: str
     ) -> str | None:
         """Resolve a class name from context, handling both direct class names and variable names."""
         # If it's already a known param class, return it

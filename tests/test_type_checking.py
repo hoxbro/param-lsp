@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from param_lsp.models import convert_to_legacy_format
+
 
 class TestParameterTypeChecking:
     """Test parameter type checking in class definitions."""
@@ -21,7 +23,7 @@ class TestClass(param.Parameterized):
     dict_param = param.Dict(default={})
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "TestClass" in result["param_classes"]
         assert len(result["type_errors"]) == 0
@@ -35,7 +37,7 @@ class TestClass(param.Parameterized):
     string_param = param.String(default=123)
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert len(result["type_errors"]) == 1
         error = result["type_errors"][0]
@@ -53,7 +55,7 @@ class TestClass(param.Parameterized):
     int_param = param.Integer(default="not_int")
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert len(result["type_errors"]) == 1
         error = result["type_errors"][0]
@@ -73,7 +75,7 @@ class TestClass(param.Parameterized):
     bool_with_string = param.Boolean(default="yes")
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should have 3 errors - Boolean parameters should only accept True/False
         assert len(result["type_errors"]) == 3
@@ -92,7 +94,7 @@ class TestClass(param.Parameterized):
     bool_false = param.Boolean(default=False)
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert len(result["type_errors"]) == 0
 
@@ -106,7 +108,7 @@ class TestClass(param.Parameterized):
     number_float = param.Number(default=5.5)
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert len(result["type_errors"]) == 0
 
@@ -126,7 +128,7 @@ class TestClass(param.Parameterized):
     dict_wrong = param.Dict(default=[])
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should have 3 errors for the wrong types
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
@@ -144,7 +146,7 @@ class TestClass(p.Parameterized):
     param3 = Integer(default="invalid") # Error
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "TestClass" in result["param_classes"]
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
@@ -164,6 +166,6 @@ class ParamClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        assert result["param_classes"] == {"ParamClass"}
+        assert set(result["param_classes"]) == {"ParamClass"}
         assert "RegularClass" not in result["param_classes"]
         assert len(result["type_errors"]) == 0
