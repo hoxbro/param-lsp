@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from lsprotocol.types import CompletionItemKind, Position
 
-from src.param_lsp.server import ParamLanguageServer
+from param_lsp import ParamLanguageServer
 
 
 class TestReactiveExpressionCompletion:

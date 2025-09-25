@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from param_lsp import ParamLanguageServer
 from param_lsp.analyzer import ParamAnalyzer
-from param_lsp.server import ParamLanguageServer
 
 
 @pytest.fixture(autouse=True)

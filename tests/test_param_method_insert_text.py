@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from param_lsp.server import ParamLanguageServer
+from param_lsp import ParamLanguageServer
 
 
 class TestParamMethodInsertText:

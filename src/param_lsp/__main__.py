@@ -4,7 +4,7 @@ import logging
 import sys
 
 from . import __version__
-from .server import server
+from ._server.server import server
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
