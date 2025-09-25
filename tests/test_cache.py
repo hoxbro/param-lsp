@@ -56,11 +56,7 @@ class TestExternalLibraryCache:
         """Test getting library version."""
         cache = ExternalLibraryCache()
 
-        # Mock a module with __version__
-        mock_module = Mock()
-        mock_module.__version__ = "1.2.3"
-
-        with patch("importlib.import_module", return_value=mock_module):
+        with patch("param_lsp.cache._get_version", return_value="1.2.3"):
             version = cache._get_library_version("test_lib")
             assert version == "1.2.3"
 
@@ -68,18 +64,15 @@ class TestExternalLibraryCache:
         """Test getting library version when no version attribute exists."""
         cache = ExternalLibraryCache()
 
-        # Mock a module without version
-        mock_module = Mock(spec=[])  # Empty spec means no attributes
-
-        with patch("importlib.import_module", return_value=mock_module):
-            version = cache._get_library_version("test_lib")
+        with patch("param_lsp.cache._get_version", return_value=None):
+            version = cache._get_library_version("test_lib_no_version")
             assert version is None
 
     def test_get_library_version_import_error(self):
         """Test getting library version when import fails."""
         cache = ExternalLibraryCache()
 
-        with patch("importlib.import_module", side_effect=ImportError):
+        with patch("param_lsp.cache._get_version", return_value=None):
             version = cache._get_library_version("nonexistent_lib")
             assert version is None
 
