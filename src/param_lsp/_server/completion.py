@@ -5,13 +5,13 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from lsprotocol.types import CompletionItem, Position
-
-    from .protocol import LSPServerProtocol
-
 import param
 from lsprotocol.types import CompletionItem, CompletionItemKind, InsertTextFormat
+
+if TYPE_CHECKING:
+    from lsprotocol.types import Position
+
+    from .protocol import LSPServerProtocol
 
 # Compiled regex patterns for performance
 PARAM_DEPENDS_PATTERN = re.compile(r"^([^#]*?)@param\.depends\s*\(", re.MULTILINE)

@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+import param
+
 if TYPE_CHECKING:
     from typing import Any
 
     from .protocol import LSPServerProtocol
-
-import param
 
 
 class HoverMixin:

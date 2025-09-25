@@ -6,14 +6,14 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
+
+from param_lsp.analyzer import ParamAnalyzer
+
 if TYPE_CHECKING:
     from typing import Any
 
     from .protocol import LSPServerProtocol
-
-from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
-
-from param_lsp.analyzer import ParamAnalyzer
 
 logger = logging.getLogger(__name__)
 

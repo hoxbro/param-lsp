@@ -23,6 +23,7 @@ The server analyzes Python AST to understand Param usage patterns and provides i
 
 - Always confirm that the tests passes with `pytest tests/`
 - Always confirm that lint passes with `prek run --all-files`
+- `TYPE_CHECKING` import should always come after the main imports
 
 # param Nomenclature
 
