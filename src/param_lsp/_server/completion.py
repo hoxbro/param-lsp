@@ -8,6 +8,18 @@ from typing import TYPE_CHECKING
 import param
 from lsprotocol.types import CompletionItem, CompletionItemKind, InsertTextFormat
 
+from param_lsp.constants import (
+    COMMON_PARAMETER_ATTRIBUTES,
+    CONTAINER_PARAMETER_TYPES,
+    NUMERIC_PARAMETER_TYPES,
+    PARAM_ARGS,
+    PARAM_METHODS,
+    PARAMETER_METHODS,
+    RX_METHODS,
+    RX_PROPERTIES,
+    TYPE_SPECIFIC_PARAMETER_ATTRIBUTES,
+)
+
 from .base import LSPServerBase
 
 if TYPE_CHECKING:
@@ -88,21 +100,6 @@ class CompletionMixin(LSPServerBase):
 
         # Show parameter arguments only when inside param.ParameterType(...)
         elif self._is_in_param_definition_context(line, character):
-            param_args = [
-                ("default", "Default value for the parameter"),
-                ("doc", "Documentation string describing the parameter"),
-                ("label", "Human-readable name for the parameter"),
-                ("precedence", "Numeric precedence for parameter ordering"),
-                ("instantiate", "Whether to instantiate the default value per instance"),
-                ("constant", "Whether the parameter value cannot be changed after construction"),
-                ("readonly", "Whether the parameter value can be modified after construction"),
-                ("allow_None", "Whether None is allowed as a valid value"),
-                ("per_instance", "Whether the parameter is stored per instance"),
-                ("bounds", "Tuple of (min, max) values for numeric parameters"),
-                ("inclusive_bounds", "Tuple of (left_inclusive, right_inclusive) booleans"),
-                ("softbounds", "Tuple of (soft_min, soft_max) for suggested ranges"),
-            ]
-
             return [
                 CompletionItem(
                     label=arg_name,
@@ -110,7 +107,7 @@ class CompletionMixin(LSPServerBase):
                     detail="Parameter argument",
                     documentation=arg_doc,
                 )
-                for arg_name, arg_doc in param_args
+                for arg_name, arg_doc in PARAM_ARGS
             ]
 
         # Don't show any generic completions in other contexts
@@ -671,28 +668,7 @@ class CompletionMixin(LSPServerBase):
             partial_text = param_dot_match.group(1)
 
         # Add param namespace method completions (objects, values, update)
-        param_methods = [
-            {
-                "name": "objects",
-                "insert_text": "objects()",
-                "documentation": "Returns a dictionary of (parameter_name, parameter_object) pairs for all parameters of this Parameterized object.",
-                "detail": "param.objects() method",
-            },
-            {
-                "name": "values",
-                "insert_text": "values()",
-                "documentation": "Returns an iterator of parameter values for all parameters of this Parameterized object.",
-                "detail": "param.values() method",
-            },
-            {
-                "name": "update",
-                "insert_text": "update($0)",
-                "documentation": "Update multiple parameters at once by passing parameter names as keyword arguments.",
-                "detail": "param.update() method",
-            },
-        ]
-
-        for method in param_methods:
+        for method in PARAM_METHODS:
             method_name = method["name"]
             # Filter based on partial text being typed
             if partial_text and not method_name.startswith(partial_text):
@@ -857,59 +833,23 @@ class CompletionMixin(LSPServerBase):
         if param_attr_match:
             partial_text = param_attr_match.group(1)
 
-        # Common Parameter attributes (available on all parameter types)
-        common_attributes = {
-            "default": "Default value of the parameter",
-            "doc": "Documentation string for the parameter",
-            "name": "Name of the parameter",
-            "label": "Human-readable label for the parameter",
-            "owner": "The Parameterized class that owns this parameter",
-            "allow_None": "Whether the parameter allows None values",
-            "readonly": "Whether the parameter is read-only",
-            "constant": "Whether the parameter is constant",
-            "instantiate": "Whether to instantiate the default value",
-            "per_instance": "Whether the parameter is per-instance",
-            "precedence": "Precedence level for GUI ordering",
-            "watchers": "Dictionary of parameter watchers",
-            "rx": "Reactive expression property for this parameter",
-        }
-
         # Type-specific attributes
         type_specific_attributes = {}
 
-        if param_type in ["Integer", "Number", "Float"]:
-            type_specific_attributes.update(
-                {
-                    "bounds": "Valid range for numeric values (min, max)",
-                    "inclusive_bounds": "Whether bounds are inclusive (bool, bool)",
-                    "softbounds": "Soft bounds for validation",
-                    "step": "Step size for numeric input",
-                }
-            )
+        if param_type in NUMERIC_PARAMETER_TYPES:
+            type_specific_attributes.update(TYPE_SPECIFIC_PARAMETER_ATTRIBUTES["numeric"])
 
         if param_type == "String":
-            type_specific_attributes.update(
-                {
-                    "regex": "Regular expression pattern for validation",
-                }
-            )
+            type_specific_attributes.update(TYPE_SPECIFIC_PARAMETER_ATTRIBUTES["string"])
 
-        if param_type in ["List", "Tuple"]:
-            type_specific_attributes.update(
-                {
-                    "item_type": "Type of items in the container",
-                    "bounds": "Length bounds (min, max)",
-                }
-            )
-
-        # Parameter methods (available on all parameter types)
-        parameter_methods = {}
+        if param_type in CONTAINER_PARAMETER_TYPES:
+            type_specific_attributes.update(TYPE_SPECIFIC_PARAMETER_ATTRIBUTES["container"])
 
         # Combine all available attributes
-        all_attributes = {**common_attributes, **type_specific_attributes}
+        all_attributes = {**COMMON_PARAMETER_ATTRIBUTES, **type_specific_attributes}
 
         # Add parameter methods
-        for method_name, method_doc in parameter_methods.items():
+        for method_name, method_doc in PARAMETER_METHODS.items():
             # Filter based on partial text being typed
             if partial_text and not method_name.startswith(partial_text):
                 continue
@@ -1022,30 +962,8 @@ class CompletionMixin(LSPServerBase):
         if rx_method_match:
             partial_text = rx_method_match.group(1)
 
-        # Reactive expression methods (from param documentation)
-        rx_methods = {
-            "and_": "Applies the `and` operator",
-            "bool": "Reactive version of `bool()`",
-            "in_": "Checks if value is in a collection",
-            "is_": "Checks object identity",
-            "is_not": "Checks absence of object identity",
-            "len": "Returns length of object",
-            "map": "Maps a function to collection items",
-            "or_": "Applies the `or` operator",
-            "pipe": "Pipes value into a function",
-            "updating": "Indicates if expression is currently updating",
-            "when": "Updates only when specific conditions are met",
-            "where": "Reactive ternary conditional",
-            "watch": "Triggers side-effect when expression outputs a new event",
-        }
-
-        # Reactive expression properties
-        rx_properties = {
-            "value": "Retrieves or sets the current value of the reactive expression",
-        }
-
         # Add method completions
-        for method_name, method_doc in rx_methods.items():
+        for method_name, method_doc in RX_METHODS.items():
             # Filter based on partial text being typed
             if partial_text and not method_name.startswith(partial_text):
                 continue
@@ -1069,7 +987,7 @@ class CompletionMixin(LSPServerBase):
             )
 
         # Add property completions
-        for prop_name, prop_doc in rx_properties.items():
+        for prop_name, prop_doc in RX_PROPERTIES.items():
             # Filter based on partial text being typed
             if partial_text and not prop_name.startswith(partial_text):
                 continue
