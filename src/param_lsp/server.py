@@ -14,9 +14,7 @@ from lsprotocol.types import (
     CompletionList,
     CompletionOptions,
     CompletionParams,
-    Diagnostic,
     DiagnosticOptions,
-    DiagnosticSeverity,
     DidChangeTextDocumentParams,
     DidOpenTextDocumentParams,
     Hover,
@@ -91,57 +89,6 @@ class ParamLanguageServer(
         """Convert URI to file path."""
         parsed = urlparse(uri)
         return parsed.path
-
-    def _analyze_document(self, uri: str, content: str):
-        """Analyze a document and cache the results."""
-        file_path = self._uri_to_path(uri)
-
-        # Update analyzer with workspace root if available
-        if self.workspace_root and not self.analyzer.workspace_root:
-            self.analyzer = ParamAnalyzer(self.workspace_root)
-
-        analysis = self.analyzer.analyze_file(content, file_path)
-        self.document_cache[uri] = {
-            "content": content,
-            "analysis": analysis,
-            "analyzer": self.analyzer,
-        }
-
-        # Debug logging
-        logger.info(f"Analysis results for {uri}:")
-        logger.info(f"  Param classes: {analysis.get('param_classes', set())}")
-        logger.info(f"  Parameters: {analysis.get('param_parameters', {})}")
-        logger.info(f"  Parameter types: {analysis.get('param_parameter_types', {})}")
-        logger.info(f"  Type errors: {analysis.get('type_errors', [])}")
-
-        # Publish diagnostics for type errors
-        self._publish_diagnostics(uri, analysis.get("type_errors", []))
-
-    def _publish_diagnostics(self, uri: str, type_errors: list[dict[str, Any]]):
-        """Publish diagnostics for type errors."""
-        diagnostics = []
-
-        for error in type_errors:
-            severity = (
-                DiagnosticSeverity.Error
-                if error.get("severity") == "error"
-                else DiagnosticSeverity.Warning
-            )
-
-            diagnostic = Diagnostic(
-                range=Range(
-                    start=Position(line=error["line"], character=error["col"]),
-                    end=Position(line=error["end_line"], character=error["end_col"]),
-                ),
-                message=error["message"],
-                severity=severity,
-                code=error.get("code"),
-                source="param-lsp",
-            )
-            diagnostics.append(diagnostic)
-
-        # Publish diagnostics
-        self.publish_diagnostics(uri, diagnostics)
 
     def _is_in_param_definition_context(self, line: str, character: int) -> bool:
         """Check if we're in a parameter definition context like param.String("""
@@ -569,91 +516,6 @@ class ParamLanguageServer(
 
         return completions
 
-    def _get_python_type_name(self, param_type: str, allow_none: bool = False) -> str:
-        """Map param type to Python type name for hover display using existing param_type_map."""
-        if param_type in self.analyzer.param_type_map:
-            python_types = self.analyzer.param_type_map[param_type]
-            if isinstance(python_types, tuple):
-                # Multiple types like (int, float) -> "int or float"
-                type_names = [t.__name__ for t in python_types]
-            else:
-                # Single type like int -> "int"
-                type_names = [python_types.__name__]
-
-            # Add None if allow_None is True
-            if allow_none:
-                type_names.append("None")
-
-            return " | ".join(type_names)
-
-        # For unknown param types, just return the param type name
-        base_type = param_type.lower()
-        return f"{base_type} | None" if allow_none else base_type
-
-    def _format_default_for_display(
-        self, default_value: str, param_type: str | None = None
-    ) -> str:
-        """Format default value for autocomplete display."""
-        # Check if the default value is a string literal (regardless of parameter type)
-        is_string_literal = False
-
-        # If it's already quoted, it's a string literal
-        if (
-            default_value.startswith("'")
-            and default_value.endswith("'")
-            and len(default_value) >= 2
-        ) or (
-            default_value.startswith('"')
-            and default_value.endswith('"')
-            and len(default_value) >= 2
-        ):
-            is_string_literal = True
-        # If it's not quoted but contains letters (not just numbers/symbols), it might be a string
-        elif default_value not in ["None", "True", "False", "[]", "{}", "()"]:
-            # Check if it looks like a string value (contains letters and isn't a number)
-            try:
-                # If it can be parsed as a number, it's not a string literal
-                float(default_value)
-            except ValueError:
-                # Contains non-numeric characters, likely a string
-                if any(c.isalpha() for c in default_value):
-                    is_string_literal = True
-
-        # For string literals, ensure they have double quotes
-        if is_string_literal:
-            # If it's already quoted, standardize to double quotes
-            if (
-                default_value.startswith("'")
-                and default_value.endswith("'")
-                and len(default_value) >= 2
-            ):
-                unquoted = default_value[1:-1]  # Remove single quotes
-                return f'"{unquoted}"'  # Add double quotes
-            elif (
-                default_value.startswith('"')
-                and default_value.endswith('"')
-                and len(default_value) >= 2
-            ):
-                return default_value  # Already double-quoted, keep as-is
-            else:
-                # Not quoted, add double quotes
-                return f'"{default_value}"'
-        # For non-string values, remove quotes if present
-        elif (
-            default_value.startswith("'")
-            and default_value.endswith("'")
-            and len(default_value) >= 2
-        ):
-            return default_value[1:-1]  # Remove single quotes
-        elif (
-            default_value.startswith('"')
-            and default_value.endswith('"')
-            and len(default_value) >= 2
-        ):
-            return default_value[1:-1]  # Remove double quotes
-        else:
-            return default_value  # Return as-is for numbers, booleans, etc.
-
     def _get_hover_info(self, uri: str, line: str, word: str) -> str | None:
         """Get hover information for a word."""
         if uri in self.document_cache:
@@ -714,23 +576,6 @@ class ParamLanguageServer(
                         return hover_info
 
         return None
-
-    def _is_rx_method_context(self, line: str) -> bool:
-        """Check if the rx word is in a parameter context like obj.param.x.rx."""
-        # Check if line contains pattern like .param.something.rx
-        return bool(re.search(r"\.param\.\w+\.rx\b", line))
-
-    def _build_rx_method_hover_info(self) -> str:
-        """Build hover information for the rx property."""
-        hover_parts = [
-            "**rx Property**",
-            "Create a reactive expression for this parameter.",
-            "",
-            "Reactive expressions enable you to build computational graphs that automatically update when parameter values change.",
-            "",
-            "**Documentation**: [Reactive Expressions Guide](https://param.holoviz.org/user_guide/Reactive_Expressions.html)",
-        ]
-        return "\n".join(hover_parts)
 
     def _get_param_namespace_method_hover_info(self, line: str, word: str) -> str | None:
         """Get hover information for param namespace methods like obj.param.values()."""
@@ -1153,22 +998,6 @@ class ParamLanguageServer(
 
         return ""
 
-    def _find_containing_class(self, lines: list[str], current_line: int) -> str | None:
-        """Find the class that contains the current line."""
-        # Look backwards for class definition
-        for line_idx in range(current_line, -1, -1):
-            if line_idx >= len(lines):
-                continue
-            line = lines[line_idx].strip()
-
-            # Look for class definition
-            match = CLASS_DEFINITION_PATTERN.match(line)
-            if match:
-                class_name = match.group(2)
-                return class_name
-
-        return None
-
     def _extract_used_depends_parameters(self, line: str, character: int) -> set[str]:
         """Extract parameter names already used in the param.depends decorator."""
         used_params = set()
@@ -1222,72 +1051,6 @@ class ParamLanguageServer(
             used_params.add(match)
 
         return used_params
-
-    def _resolve_class_name_from_context(
-        self, uri: str, class_name: str, param_classes: set[str]
-    ) -> str | None:
-        """Resolve a class name from context, handling both direct class names and variable names."""
-        # If it's already a known param class, return it
-        if class_name in param_classes:
-            return class_name
-
-        # If it's a variable name, try to find its assignment in the document
-        if uri in self.document_cache:
-            content = self.document_cache[uri]["content"]
-
-            # Look for assignments like: variable_name = ClassName(...)
-            assignment_pattern = re.compile(
-                rf"^([^#]*?){re.escape(class_name)}\s*=\s*(\w+(?:\.\w+)*)\s*\(", re.MULTILINE
-            )
-
-            for match in assignment_pattern.finditer(content):
-                assigned_class = match.group(2)
-
-                # Check if the assigned class is a known param class
-                if assigned_class in param_classes:
-                    return assigned_class
-
-                # Check if it's an external class
-                analyzer = self.document_cache[uri]["analyzer"]
-                if "." in assigned_class:
-                    # Handle dotted names like hv.Curve
-                    parts = assigned_class.split(".")
-                    if len(parts) >= 2:
-                        alias = parts[0]
-                        class_part = ".".join(parts[1:])
-                        if alias in analyzer.imports:
-                            full_module = analyzer.imports[alias]
-                            full_class_path = f"{full_module}.{class_part}"
-                            external_class_info = analyzer.external_param_classes.get(
-                                full_class_path
-                            )
-                            if external_class_info is None:
-                                external_class_info = analyzer._analyze_external_class_ast(
-                                    full_class_path
-                                )
-                            if external_class_info:
-                                # Return the original dotted name for external class handling
-                                return assigned_class
-
-        return None
-
-    def _should_include_parentheses_in_insert_text(
-        self, line: str, character: int, method_name: str
-    ) -> bool:
-        """Determine if parentheses should be included in insert_text for method completions.
-
-        Returns False if:
-        - The method is already followed by parentheses (e.g., obj.param.objects()CURSOR)
-        - There are already parentheses after the cursor position
-        """
-        # Check if the method name with parentheses appears before the cursor
-        before_cursor = line[:character]
-        if f"{method_name}()" in before_cursor:
-            return False
-
-        # Check if there are parentheses immediately after the cursor
-        after_cursor = line[character:].lstrip()
-        return not after_cursor.startswith("()")
 
     def _get_param_attribute_completions(
         self, uri: str, line: str, character: int
