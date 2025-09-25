@@ -83,40 +83,45 @@ class HoverMixin(LSPServerBase):
             return None
 
         param_name = param_info.name
-        hover_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
 
-        # Map param types to Python types, including None if allowed
+        # Build header section with type info
+        header_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
         python_type = self._get_python_type_name(param_info.param_type, param_info.allow_none)
-        hover_parts.append(f"Allowed types: {python_type}")
+        header_parts.append(f"Allowed types: {python_type}")
 
-        # Add bounds information
+        # Add bounds information to header section
         if param_info.bounds:
             bounds = param_info.bounds
             if len(bounds) == 2:
                 min_val, max_val = bounds
-                hover_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
+                header_parts.append(f"Bounds: `[{min_val}, {max_val}]`")
             elif len(bounds) == 4:
                 min_val, max_val, left_inclusive, right_inclusive = bounds
                 left_bracket = "[" if left_inclusive else "("
                 right_bracket = "]" if right_inclusive else ")"
-                hover_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+                header_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
 
-        # Add documentation
+        hover_sections = ["\n".join(header_parts)]
+
+        # Add documentation section
         if param_info.doc:
             clean_doc = self._clean_and_format_documentation(param_info.doc)
-            hover_parts.append("---")
-            hover_parts.append("Description:")
-            hover_parts.append(clean_doc)
+            doc_section = "---\nDescription:\n" + clean_doc
+            hover_sections.append(doc_section)
 
-        # Add source location information
+        # Add source location section
         if param_info.location:
             source_line = param_info.location.get("source")
+            line_number = param_info.location.get("line")
             if source_line:
-                hover_parts.append("---")
-                hover_parts.append("Definition:")
-                hover_parts.append(f"```python\n{source_line}\n```")
+                if line_number:
+                    definition_header = f"Definition (line {line_number}):"
+                else:
+                    definition_header = "Definition:"
+                source_section = f"---\n{definition_header}\n```python\n{source_line}\n```"
+                hover_sections.append(source_section)
 
-        return "\n".join(hover_parts)
+        return "\n\n".join(hover_sections)
 
     def _is_rx_method_context(self, line: str) -> bool:
         """Check if the rx word is in a parameter context like obj.param.x.rx."""
