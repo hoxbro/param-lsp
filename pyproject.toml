@@ -32,6 +32,7 @@ param-lsp = "param_lsp.__main__:main"
 
 [dependency-groups]
 dev = [
+    "debugpy",
     "pytest",
     "setuptools_scm",
     "holoviews; python_version != '3.14'",
