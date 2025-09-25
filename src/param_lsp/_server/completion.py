@@ -21,6 +21,8 @@ from param_lsp.constants import (
 )
 
 # convert_to_legacy_format no longer needed in server code
+from param_lsp.models import wrap_external_class
+
 from .base import LSPServerBase
 
 if TYPE_CHECKING:
@@ -342,25 +344,19 @@ class CompletionMixin(LSPServerBase):
                     external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
                 if external_class_info:
-                    parameters = external_class_info.get_parameter_names()
-                    parameter_types = {
-                        p.name: p.param_type for p in external_class_info.parameters.values()
-                    }
-                    parameter_docs = {
-                        p.name: p.doc for p in external_class_info.parameters.values() if p.doc
-                    }
+                    # Use wrapper for clean external class handling
+                    wrapped = wrap_external_class(external_class_info)
+                    parameters = wrapped.get_parameter_names()
+                    parameter_types = {p.name: p.param_type for p in wrapped.parameters.values()}
+                    parameter_docs = {p.name: p.doc for p in wrapped.parameters.values() if p.doc}
                     parameter_bounds = {
-                        p.name: p.bounds
-                        for p in external_class_info.parameters.values()
-                        if p.bounds
+                        p.name: p.bounds for p in wrapped.parameters.values() if p.bounds
                     }
                     parameter_allow_none = {
-                        p.name: p.allow_none for p in external_class_info.parameters.values()
+                        p.name: p.allow_none for p in wrapped.parameters.values()
                     }
                     parameter_defaults = {
-                        p.name: p.default
-                        for p in external_class_info.parameters.values()
-                        if p.default
+                        p.name: p.default for p in wrapped.parameters.values() if p.default
                     }
 
                     used_params = set()

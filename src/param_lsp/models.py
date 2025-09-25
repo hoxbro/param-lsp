@@ -45,6 +45,123 @@ class ParamClassInfo:
                 self.parameters[name] = param_info
 
 
+@dataclass
+class ExternalClassInfo:
+    """Wrapper for external class parameter information with conversion utilities.
+
+    This class provides a clean interface for working with external Param classes,
+    handling both dataclass and legacy format conversions seamlessly.
+    """
+
+    class_name: str
+    param_class_info: ParamClassInfo
+
+    @classmethod
+    def from_param_class_info(cls, param_class_info: ParamClassInfo) -> ExternalClassInfo:
+        """Create from a ParamClassInfo object."""
+        return cls(class_name=param_class_info.name, param_class_info=param_class_info)
+
+    @classmethod
+    def from_legacy_dict(cls, class_name: str, legacy_data: dict) -> ExternalClassInfo:
+        """Create from legacy dictionary format."""
+        param_class_info = ParamClassInfo(name=class_name)
+
+        # Extract parameter data from legacy format
+        parameters = legacy_data.get("parameters", [])
+        parameter_types = legacy_data.get("parameter_types", {})
+        parameter_docs = legacy_data.get("parameter_docs", {})
+        parameter_bounds = legacy_data.get("parameter_bounds", {})
+        parameter_allow_none = legacy_data.get("parameter_allow_none", {})
+        parameter_defaults = legacy_data.get("parameter_defaults", {})
+        parameter_locations = legacy_data.get("parameter_locations", {})
+
+        for param_name in parameters:
+            param_info = ParameterInfo(
+                name=param_name,
+                param_type=parameter_types.get(param_name, "Unknown"),
+                bounds=parameter_bounds.get(param_name),
+                doc=parameter_docs.get(param_name),
+                allow_none=parameter_allow_none.get(param_name, False),
+                default=parameter_defaults.get(param_name),
+                location=parameter_locations.get(param_name),
+            )
+            param_class_info.add_parameter(param_info)
+
+        return cls(class_name=class_name, param_class_info=param_class_info)
+
+    def to_legacy_dict(self) -> dict:
+        """Convert to legacy dictionary format for compatibility."""
+        return {
+            "parameters": self.param_class_info.get_parameter_names(),
+            "parameter_types": {
+                p.name: p.param_type for p in self.param_class_info.parameters.values()
+            },
+            "parameter_docs": {
+                p.name: p.doc
+                for p in self.param_class_info.parameters.values()
+                if p.doc is not None
+            },
+            "parameter_bounds": {
+                p.name: p.bounds for p in self.param_class_info.parameters.values() if p.bounds
+            },
+            "parameter_allow_none": {
+                p.name: p.allow_none for p in self.param_class_info.parameters.values()
+            },
+            "parameter_defaults": {
+                p.name: p.default for p in self.param_class_info.parameters.values() if p.default
+            },
+            "parameter_locations": {
+                p.name: p.location for p in self.param_class_info.parameters.values() if p.location
+            },
+        }
+
+    def get_parameter_names(self) -> list[str]:
+        """Get list of parameter names."""
+        return self.param_class_info.get_parameter_names()
+
+    @property
+    def parameters(self) -> dict[str, ParameterInfo]:
+        """Get parameters dict for direct access."""
+        return self.param_class_info.parameters
+
+    def get_parameter(self, name: str) -> ParameterInfo | None:
+        """Get parameter info by name."""
+        return self.param_class_info.get_parameter(name)
+
+
+def wrap_external_class(external_class_info) -> ExternalClassInfo:
+    """Wrap external class info for easier usage.
+
+    This function can handle both ParamClassInfo objects and legacy dict formats,
+    returning a unified ExternalClassInfo wrapper.
+
+    Args:
+        external_class_info: Either a ParamClassInfo object or a legacy dict
+
+    Returns:
+        ExternalClassInfo: Wrapped external class info
+
+    Example:
+        # Works with ParamClassInfo
+        wrapped = wrap_external_class(param_class_info)
+        param_names = wrapped.get_parameter_names()
+
+        # Works with legacy dict
+        wrapped = wrap_external_class(legacy_dict)
+        param_info = wrapped.get_parameter('width')
+        param_type = param_info.param_type
+    """
+    if isinstance(external_class_info, ParamClassInfo):
+        return ExternalClassInfo.from_param_class_info(external_class_info)
+    elif isinstance(external_class_info, dict):
+        # Legacy format - extract class name from context or use a default
+        class_name = external_class_info.get("class_name", "ExternalClass")
+        return ExternalClassInfo.from_legacy_dict(class_name, external_class_info)
+    else:
+        error_msg = f"Unsupported external class info type: {type(external_class_info)}"
+        raise ValueError(error_msg)
+
+
 def convert_to_legacy_format(result):
     """Convert new dataclass format to legacy dict format for tests."""
     param_classes_dict = result["param_classes"]
