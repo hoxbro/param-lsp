@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import inspect
 import logging
-from typing import Any
-from urllib.parse import urlparse
 
-import param
 from lsprotocol.types import (
     CompletionList,
     CompletionOptions,
@@ -26,45 +22,17 @@ from lsprotocol.types import (
 )
 
 from param_lsp import __version__
-from param_lsp.analyzer import ParamAnalyzer
 
-from .base import LSPServerBase
 from .completion import CompletionMixin
 from .hover import HoverMixin
-from .utils import ParamUtilsMixin
 from .validation import ValidationMixin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class ParamLanguageServer(
-    ParamUtilsMixin, ValidationMixin, HoverMixin, CompletionMixin, LSPServerBase
-):
+class ParamLanguageServer(ValidationMixin, HoverMixin, CompletionMixin):
     """Language Server for HoloViz Param."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.workspace_root: str | None = None
-        self.analyzer = ParamAnalyzer()
-        self.document_cache: dict[str, dict[str, Any]] = {}
-        self.param_types = self._get_param_types()
-
-    def _get_param_types(self) -> list[str]:
-        """Get available Param parameter types."""
-
-        # Get actual param types from the module
-        param_types = []
-        for name in dir(param):
-            obj = getattr(param, name)
-            if inspect.isclass(obj) and issubclass(obj, param.Parameter):
-                param_types.append(name)
-        return param_types
-
-    def _uri_to_path(self, uri: str) -> str:
-        """Convert URI to file path."""
-        parsed = urlparse(uri)
-        return parsed.path
 
 
 server = ParamLanguageServer("param-lsp", __version__)

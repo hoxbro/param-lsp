@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from typing import TYPE_CHECKING
 
 import param
@@ -358,3 +359,12 @@ class HoverMixin(LSPServerBase):
                     hover_parts.append(f"```python\n{source_line}\n```")
 
         return "\n\n".join(hover_parts)
+
+    def _clean_and_format_documentation(self, doc: str) -> str:
+        """Clean and format documentation text."""
+        if not doc:
+            return doc
+
+        # Clean and dedent the documentation
+        clean_doc = textwrap.dedent(doc).strip()
+        return clean_doc

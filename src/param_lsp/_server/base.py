@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import inspect
+from typing import Any
+from urllib.parse import urlparse
 
+import param
 from pygls.server import LanguageServer
 
-if TYPE_CHECKING:
-    from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.analyzer import ParamAnalyzer
 
 
 class LSPServerBase(LanguageServer):
@@ -17,61 +19,46 @@ class LSPServerBase(LanguageServer):
     reducing the need for verbose type annotations in mixin methods.
     """
 
-    # Core attributes required by mixins
-    workspace_root: str | None
-    analyzer: ParamAnalyzer
-    document_cache: dict[str, dict[str, Any]]
-    param_types: list[str]
-
-    # Method stubs for methods implemented by mixins or LanguageServer
-    # Note: publish_diagnostics is implemented by LanguageServer with different signature
-
-    def _analyze_document(self, uri: str, content: str) -> None:
-        """Analyze document content and cache results."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.workspace_root: str | None = None
+        self.analyzer = ParamAnalyzer()
+        self.document_cache: dict[str, dict[str, Any]] = {}
+        self.param_types = self._get_param_types()
 
     def _uri_to_path(self, uri: str) -> str:
         """Convert URI to file path."""
-        return ""
+        parsed = urlparse(uri)
+        return parsed.path
+
+    def _get_param_types(self) -> list[str]:
+        """Get available Param parameter types."""
+
+        # Get actual param types from the module
+        param_types = []
+        for name in dir(param):
+            obj = getattr(param, name)
+            if inspect.isclass(obj) and issubclass(obj, param.Parameter):
+                param_types.append(name)
+        return param_types
 
     def _get_python_type_name(self, param_type: str, allow_none: bool = False) -> str:
-        """Map param type to Python type name for display."""
-        return ""
+        """Map param type to Python type name for display using existing param_type_map."""
+        if hasattr(self, "analyzer") and param_type in self.analyzer.param_type_map:
+            python_types = self.analyzer.param_type_map[param_type]
+            if isinstance(python_types, tuple):
+                # Multiple types like (int, float) -> "int or float"
+                type_names = [t.__name__ for t in python_types]
+            else:
+                # Single type like int -> "int"
+                type_names = [python_types.__name__]
 
-    def _clean_and_format_documentation(self, doc: str) -> str:
-        """Clean and format documentation text."""
-        return ""
+            # Add None if allow_None is True
+            if allow_none:
+                type_names.append("None")
 
-    def _format_default_for_display(
-        self, default_value: Any, param_type: str | None = None
-    ) -> str:
-        """Format default value for display."""
-        return ""
+            return " | ".join(type_names)
 
-    def _build_parameter_documentation(
-        self,
-        param_name: str,
-        class_name: str,
-        parameter_types: dict[str, str],
-        parameter_docs: dict[str, str],
-        parameter_bounds: dict[str, tuple],
-        parameter_allow_none: dict[str, bool] | None = None,
-        parameter_defaults: dict[str, str] | None = None,
-    ) -> str:
-        """Build documentation for a parameter."""
-        return ""
-
-    def _find_containing_class(self, lines: list[str], current_line: int) -> str | None:
-        """Find the containing class for a given line."""
-        return None
-
-    def _resolve_class_name_from_context(
-        self, uri: str, class_name: str, param_classes: set[str]
-    ) -> str | None:
-        """Resolve a class name from context."""
-        return None
-
-    def _should_include_parentheses_in_insert_text(
-        self, line: str, character: int, method_name: str
-    ) -> bool:
-        """Determine if parentheses should be included in insert_text."""
-        return False
+        # For unknown param types, just return the param type name
+        base_type = param_type.lower()
+        return f"{base_type} | None" if allow_none else base_type
