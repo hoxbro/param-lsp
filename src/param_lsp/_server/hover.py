@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 import param
 
+from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
+
 from .base import LSPServerBase
 
 if TYPE_CHECKING:
@@ -101,33 +103,8 @@ class HoverMixin(LSPServerBase):
         if not re.search(r"\.param\.\w+\(", line):
             return None
 
-        # Define param namespace methods with their documentation
-        param_namespace_methods = {
-            "values": {
-                "signature": "values()",
-                "description": "Returns a dictionary mapping parameter names to their current values for all parameters of this Parameterized object.",
-                "example": "obj.param.values()\n# Output: {'x': 5, 'y': 'hello', 'z': True}",
-                "returns": "Dict[str, Any] (actual parameter values)",
-                "note": "Returns the actual current parameter values, not parameter names or objects",
-            },
-            "objects": {
-                "signature": "objects()",
-                "description": "Returns a dictionary mapping parameter names to their Parameter objects for all parameters of this Parameterized object.",
-                "example": "obj.param.objects()\n# Output: {'x': Integer(default=5), 'y': String(default='hello'), 'z': Boolean(default=True)}",
-                "returns": "Dict[str, Parameter] (parameter objects with metadata)",
-                "note": "Returns the Parameter objects themselves (with metadata), not the current parameter values",
-            },
-            "update": {
-                "signature": "update(**params)",
-                "description": "Update multiple parameters at once by passing parameter names as keyword arguments.",
-                "example": "obj.param.update(x=10, y='new_value')\n# Updates multiple parameters simultaneously",
-                "returns": "None",
-                "note": "Efficiently updates multiple parameters with validation and triggers watchers",
-            },
-        }
-
-        if word in param_namespace_methods:
-            method_info = param_namespace_methods[word]
+        if word in PARAM_NAMESPACE_METHODS:
+            method_info = PARAM_NAMESPACE_METHODS[word]
             hover_parts = [
                 f"**obj.param.{method_info['signature']}**",
                 "",
@@ -158,82 +135,8 @@ class HoverMixin(LSPServerBase):
         if not re.search(r"\.param\.\w+\.rx\.", line):
             return None
 
-        # Define reactive expression methods with their documentation
-        rx_methods_docs = {
-            "and_": {
-                "signature": "and_(other)",
-                "description": "Returns a reactive expression that applies the `and` operator between this expression and another value.",
-                "example": "param_rx.and_(other_value)",
-            },
-            "bool": {
-                "signature": "bool()",
-                "description": "Returns a reactive expression that applies the `bool()` function to this expression's value.",
-                "example": "param_rx.bool()",
-            },
-            "in_": {
-                "signature": "in_(container)",
-                "description": "Returns a reactive expression that checks if this expression's value is in the given container.",
-                "example": "param_rx.in_([1, 2, 3])",
-            },
-            "is_": {
-                "signature": "is_(other)",
-                "description": "Returns a reactive expression that checks object identity between this expression and another value using the `is` operator.",
-                "example": "param_rx.is_(None)",
-            },
-            "is_not": {
-                "signature": "is_not(other)",
-                "description": "Returns a reactive expression that checks absence of object identity using the `is not` operator.",
-                "example": "param_rx.is_not(None)",
-            },
-            "len": {
-                "signature": "len()",
-                "description": "Returns a reactive expression that applies the `len()` function to this expression's value.",
-                "example": "param_rx.len()",
-            },
-            "map": {
-                "signature": "map(func, *args, **kwargs)",
-                "description": "Returns a reactive expression that maps a function over the collection items in this expression's value.",
-                "example": "param_rx.map(lambda x: x * 2)",
-            },
-            "or_": {
-                "signature": "or_(other)",
-                "description": "Returns a reactive expression that applies the `or` operator between this expression and another value.",
-                "example": "param_rx.or_(default_value)",
-            },
-            "pipe": {
-                "signature": "pipe(func, *args, **kwargs)",
-                "description": "Returns a reactive expression that pipes this expression's value into the given function.",
-                "example": "param_rx.pipe(str.upper)",
-            },
-            "updating": {
-                "signature": "updating()",
-                "description": "Returns a boolean reactive expression indicating whether this expression is currently updating.",
-                "example": "param_rx.updating()",
-            },
-            "when": {
-                "signature": "when(*conditions)",
-                "description": "Returns a reactive expression that only updates when the specified conditions are met.",
-                "example": "param_rx.when(condition_rx)",
-            },
-            "where": {
-                "signature": "where(condition, other)",
-                "description": "Returns a reactive expression implementing a ternary conditional (like numpy.where).",
-                "example": "param_rx.where(condition, true_value)",
-            },
-            "watch": {
-                "signature": "watch(callback, onlychanged=True)",
-                "description": "Triggers a side-effect callback when this reactive expression outputs a new event.",
-                "example": "param_rx.watch(lambda x: print(f'Value changed to {x}'))",
-            },
-            "value": {
-                "signature": "value",
-                "description": "Property to get or set the current value of this reactive expression.",
-                "example": "current_val = param_rx.value",
-            },
-        }
-
-        if word in rx_methods_docs:
-            method_info = rx_methods_docs[word]
+        if word in RX_METHODS_DOCS:
+            method_info = RX_METHODS_DOCS[word]
             hover_parts = [
                 f"**{method_info['signature']}**",
                 "",

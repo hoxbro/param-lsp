@@ -18,16 +18,10 @@ from typing import Any
 import param
 
 from .cache import external_library_cache
+from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Global configuration for allowed external libraries for runtime introspection
-ALLOWED_EXTERNAL_LIBRARIES = {
-    "panel",
-    "holoviews",
-    "param",
-}
 
 
 class ParamAnalyzer:
@@ -52,23 +46,7 @@ class ParamAnalyzer:
         # Store file content for source line lookup
         self._current_file_content: str | None = None
         self.type_errors: list[dict[str, Any]] = []
-        self.param_type_map = {
-            "Number": (int, float),
-            "Integer": int,
-            "String": str,
-            "Boolean": bool,
-            "List": list,
-            "Tuple": tuple,
-            "Dict": dict,
-            "Array": (list, tuple),
-            "Range": (int, float),
-            "Date": str,
-            "CalendarDate": str,
-            "Filename": str,
-            "Foldername": str,
-            "Path": str,
-            "Color": str,
-        }
+        self.param_type_map = PARAM_TYPE_MAP
 
         # Workspace-wide analysis
         self.workspace_root = Path(workspace_root) if workspace_root else None
@@ -667,34 +645,8 @@ class ParamAnalyzer:
                 param_type = param_class_info["type"]
                 param_module = param_class_info.get("module")
 
-                # Common param types
-                param_types = {
-                    "Parameter",
-                    "Number",
-                    "Integer",
-                    "String",
-                    "Boolean",
-                    "List",
-                    "Tuple",
-                    "Dict",
-                    "Array",
-                    "DataFrame",
-                    "Series",
-                    "Range",
-                    "Date",
-                    "CalendarDate",
-                    "Filename",
-                    "Foldername",
-                    "Path",
-                    "Color",
-                    "Composite",
-                    "Dynamic",
-                    "Event",
-                    "Action",
-                    "FileSelector",
-                    "ListSelector",
-                    "ObjectSelector",
-                }
+                # Use param types from constants
+                param_types = PARAM_TYPES
 
                 # If we have module info, verify it's from param
                 if param_module and "param" in param_module:
