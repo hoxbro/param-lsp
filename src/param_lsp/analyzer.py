@@ -255,7 +255,7 @@ class ParamAnalyzer:
         self, node: ast.ClassDef, current_file_path: str | None = None
     ) -> dict[str, ParameterInfo]:
         """Collect parameters from parent classes in inheritance hierarchy."""
-        inherited_parameters = {}
+        inherited_parameters = {}  # Last wins
 
         for base in node.bases:
             if isinstance(base, ast.Name):
@@ -266,7 +266,7 @@ class ParamAnalyzer:
                     # Get parameters from the parent class
                     parent_class_info = self.param_classes[parent_class_name]
                     for param_name, param_info in parent_class_info.parameters.items():
-                        inherited_parameters[param_name] = param_info  # Last wins
+                        inherited_parameters[param_name] = param_info  # noqa: PERF403
 
                 # If not found locally, check if it's an imported class
                 else:
@@ -277,7 +277,7 @@ class ParamAnalyzer:
 
                     if imported_class_info:
                         for param_name, param_info in imported_class_info.parameters.items():
-                            inherited_parameters[param_name] = param_info  # Last wins
+                            inherited_parameters[param_name] = param_info  # noqa: PERF403
 
             elif isinstance(base, ast.Attribute):
                 # Handle complex attribute access like pn.widgets.IntSlider
@@ -287,7 +287,7 @@ class ParamAnalyzer:
                     class_info = self._analyze_external_class_ast(full_class_path)
                     if class_info:
                         for param_name, param_info in class_info.parameters.items():
-                            inherited_parameters[param_name] = param_info  # Last wins
+                            inherited_parameters[param_name] = param_info  # noqa: PERF403
 
         return inherited_parameters
 
