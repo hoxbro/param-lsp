@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
 from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
@@ -23,7 +22,7 @@ class ValidationMixin(LSPServerBase):
 
     def _analyze_document(self, uri: str, content: str):
         """Analyze a document and cache the results."""
-        file_path = urlparse(uri).path
+        file_path = self._uri_to_path(uri)
 
         # Update analyzer with workspace root if available
         if (
@@ -75,5 +74,4 @@ class ValidationMixin(LSPServerBase):
             diagnostics.append(diagnostic)
 
         # Publish diagnostics
-        if hasattr(self, "publish_diagnostics"):
-            self.publish_diagnostics(uri, diagnostics)
+        self.publish_diagnostics(uri, diagnostics)

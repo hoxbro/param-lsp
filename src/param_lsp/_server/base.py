@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlsplit
 
 import param
 from pygls.server import LanguageServer
@@ -28,8 +28,7 @@ class LSPServerBase(LanguageServer):
 
     def _uri_to_path(self, uri: str) -> str:
         """Convert URI to file path."""
-        parsed = urlparse(uri)
-        return parsed.path
+        return urlsplit(uri).path
 
     def _get_param_types(self) -> list[str]:
         """Get available Param parameter types."""
