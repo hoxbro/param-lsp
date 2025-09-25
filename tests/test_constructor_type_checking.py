@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from param_lsp.analyzer import ParamAnalyzer
 from param_lsp.models import convert_to_legacy_format
-from src.param_lsp.analyzer import ParamAnalyzer
 
 
 class TestConstructorTypeChecking:
