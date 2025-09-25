@@ -102,7 +102,7 @@ class HoverMixin(LSPServerBase):
                 right_bracket = "]" if right_inclusive else ")"
                 header_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
 
-        hover_sections = ["\n".join(header_parts)]
+        hover_sections = ["\n\n".join(header_parts)]
 
         # Add documentation section
         if param_info.doc:
