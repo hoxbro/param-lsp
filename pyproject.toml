@@ -102,6 +102,7 @@ extend-unsafe-fixes = [
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
+known-first-party = ["param_lsp"]
 
 [tool.pyright]
 include = ["**/*.py"]
