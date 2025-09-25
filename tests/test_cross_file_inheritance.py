@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 
 class TestCrossFileInheritance:
@@ -42,7 +43,7 @@ S().name = 123         # Should error - inherited String
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         assert "S" in result["param_classes"]
         assert set(result["param_parameters"]["S"]) == {"x", "name", "b"}
@@ -99,7 +100,7 @@ obj.final_bool = "invalid"  # Error - Boolean
         with open(final_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(final_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(final_file)))
 
         assert "Final" in result["param_classes"]
         assert set(result["param_parameters"]["Final"]) == {
@@ -147,7 +148,7 @@ Child().value = 123  # Should error - expecting string now
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         assert "Child" in result["param_classes"]
         # Child should override parent parameter type
@@ -186,7 +187,7 @@ Child().y = 10  # Should violate local bounds
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         assert "Child" in result["param_classes"]
 
@@ -224,7 +225,7 @@ class Child(Parent):
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         assert "Child" in result["param_classes"]
 
@@ -251,7 +252,7 @@ S().b = "test"  # No error should be detected since P is unknown
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         # S should not be detected as a param class since P is unknown
         assert "S" not in result["param_classes"]
@@ -284,7 +285,7 @@ S().b = "test"  # No error since S doesn't inherit from param.Parameterized
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         # S should not be detected as a param class
         assert "S" not in result["param_classes"]

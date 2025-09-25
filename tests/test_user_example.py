@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 
 class TestUserExample:
@@ -45,7 +46,7 @@ S().x = "a"  # This should now trigger a type error!
         with open(example_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(example_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(example_file)))
 
         # Verify S is detected as a param class
         assert "S" in result["param_classes"], "Class S should be detected as a param class"
@@ -94,7 +95,7 @@ S().b = "a"
         with open(child_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(child_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
 
         # Verify the inheritance works
         assert "S" in result["param_classes"], "Class S should be detected as a param class"
@@ -156,7 +157,7 @@ obj.final_bool = "xyz"  # Error: Boolean parameter
         with open(final_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(final_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(final_file)))
 
         # Verify complete inheritance chain
         assert "Final" in result["param_classes"], (
@@ -223,7 +224,7 @@ D().d_param = "wrong"   # Error: Number
         with open(test_file) as f:
             content = f.read()
 
-        result = analyzer.analyze_file(content, str(test_file))
+        result = convert_to_legacy_format(analyzer.analyze_file(content, str(test_file)))
 
         # Verify both classes are detected
         assert "C" in result["param_classes"], "Class C should be detected"

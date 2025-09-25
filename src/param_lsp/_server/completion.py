@@ -19,6 +19,7 @@ from param_lsp.constants import (
     RX_PROPERTIES,
     TYPE_SPECIFIC_PARAMETER_ATTRIBUTES,
 )
+from param_lsp.models import convert_to_legacy_format
 
 from .base import LSPServerBase
 
@@ -307,6 +308,8 @@ class CompletionMixin(LSPServerBase):
 
                 if external_class_info is None and full_class_path:
                     external_class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+                external_class_info = convert_to_legacy_format(external_class_info)
 
                 if external_class_info:
                     parameters = external_class_info.get("parameters", [])

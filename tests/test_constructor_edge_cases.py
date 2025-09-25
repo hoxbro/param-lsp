@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from src.param_lsp.analyzer import ParamAnalyzer
+from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 
 class TestConstructorEdgeCases:
@@ -27,7 +28,7 @@ P(x=get_number(), name=get_string())  # Should not error - can't infer return ty
 P(x="direct_string")                  # Should error - direct string literal
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should only error on the direct string literal, not the function calls
@@ -46,7 +47,7 @@ my_var = "string"
 P(x=my_var)  # Should not error - can't infer variable types at static analysis time
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should not error since we can't infer variable types
@@ -66,7 +67,7 @@ P(x=1.5 + 2.5)  # Should not error - can't determine result type statically
 P(y=10 / 2)     # Should not error - arithmetic expression
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should not error since we don't evaluate expressions
@@ -88,7 +89,7 @@ class P(param.Parameterized):
 P(x=Constants.VALUE, name=Constants.NAME)  # Should not error - can't infer attribute types
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should not error since we don't resolve class attributes
@@ -108,7 +109,7 @@ P(**params)  # Should not error - can't analyze **kwargs
 P(x=5, **params)  # Should not error - can't analyze **kwargs
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should not error since we skip **kwargs
@@ -131,7 +132,7 @@ p1 = factory.create_p()  # Should not error
 p2 = P(x="error")        # Should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -149,7 +150,7 @@ P(items=[x for x in range(10)])  # Should not error - list comprehension creates
 P(items="not a list")            # Should error - direct string
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -171,7 +172,7 @@ P(items=[[1, 2], [3, 4]])                  # Valid nested list
 P(data=[1, 2, 3])                          # Should error - list to Dict
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -193,7 +194,7 @@ P(coords=())      # Valid empty tuple
 P(items={})       # Should error - dict to List
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -216,7 +217,7 @@ ClassA(value="bad")  # Should error - string to Integer in ClassA
 ClassB(value=123)    # Should error - integer to String in ClassB
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -244,7 +245,7 @@ P(large=1e10)    # Valid large scientific notation
 P(small=1e3)     # Should error - outside bounds (1000 > 1)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -270,7 +271,7 @@ P(flag="false")   # Should error - string not boolean
 P(flag=None)      # Should error - None not boolean (unless allow_None=True)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 5  # All non-boolean values should error
@@ -306,7 +307,7 @@ P(non_negative=0)  # Valid - left inclusive
 P(non_negative=-0.0) # Valid - left inclusive
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2

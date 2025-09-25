@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from param_lsp.models import convert_to_legacy_format
+
 
 class TestExternalParameterizedClasses:
     """Test external Parameterized classes like Panel widgets and HoloViews elements."""
@@ -20,7 +22,7 @@ import panel as pn
 w = pn.widgets.IntSlider()
 w.value = "2"  # should error - expects int
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect external param class
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -47,7 +49,7 @@ w2 = pn.widgets.IntSlider(value="5")
 # Invalid constructor - boolean type mismatch
 w3 = pn.widgets.Checkbox(value="true")
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect external param classes
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -81,7 +83,7 @@ curve.label = "test"
 scatter = hv.Scatter([(1, 2), (3, 4)])
 scatter.label = 123  # should error - expects str
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect external param classes
         assert "holoviews.Curve" in analyzer.external_param_classes
@@ -104,7 +106,7 @@ scatter1 = hv.Scatter([(1, 2), (3, 4)], label="test")
 # Invalid constructor - type mismatch
 scatter2 = hv.Scatter([(1, 2), (3, 4)], label=123)
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect external param class
         assert "holoviews.Scatter" in analyzer.external_param_classes
@@ -129,7 +131,7 @@ w.value = "invalid"
 curve = hv.Curve([1, 2, 3])
 curve.label = 999
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect both external param classes
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -145,7 +147,7 @@ import panel as pn
 
 w = pn.widgets.IntSlider()
 """
-        analyzer.analyze_file(code_py)
+        convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should have introspected the class
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes
@@ -170,11 +172,11 @@ w2 = pn.widgets.IntSlider()
 """
 
         # First analysis
-        analyzer.analyze_file(code1)
+        convert_to_legacy_format(analyzer.analyze_file(code1))
         first_cache_size = len(analyzer.external_param_classes)
 
         # Second analysis should use cached results
-        analyzer.analyze_file(code2)
+        convert_to_legacy_format(analyzer.analyze_file(code2))
         second_cache_size = len(analyzer.external_param_classes)
 
         # Cache size should remain the same
@@ -189,7 +191,7 @@ import json
 # This should not be detected as a param class
 data = json.loads('{"key": "value"}')
 """
-        analyzer.analyze_file(code_py)
+        convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should not detect any external param classes
         valid_external_classes = [
@@ -208,7 +210,7 @@ import panel as pn
 w = pn.widgets.TextInput()
 w.value = 123  # should error - expects str
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect the external class
         assert "panel.widgets.TextInput" in analyzer.external_param_classes
@@ -240,7 +242,7 @@ p.group = 1
 
 w.value = "2"  # should error
 """
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Should detect both external param classes
         assert "panel.widgets.IntSlider" in analyzer.external_param_classes

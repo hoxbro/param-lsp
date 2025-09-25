@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from src.param_lsp.analyzer import ParamAnalyzer
+from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 
 class TestConstructorComplexScenarios:
@@ -27,7 +28,7 @@ LocalChild(base_x=42, base_name="test", child_value=50)        # All valid
 LocalChild(base_x="bad", base_name=123, child_value=150)       # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -78,7 +79,7 @@ Diamond(
 )  # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -116,7 +117,7 @@ Child(x=42, y=10)      # Valid - x is Integer in Child, y is Integer
 Child(x="bad", y="bad") # Both should error - x expects Integer, y expects Integer
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -149,7 +150,7 @@ Combined(shared="string", a_only=42, b_only=True, own_param=3.14)  # String valu
 Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer value
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Verify the analyzer chose one consistent type for 'shared'
@@ -178,7 +179,7 @@ ComplexBounds(percentage=0.01, angle=-180, probability=0.5, positive_int=10)   #
 ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        # Multiple errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Verify bounds are correctly extracted including None bounds
@@ -223,7 +224,7 @@ NumericEdges(small_float=1e-8, big_int=1500000, precise=0.5)    # All valid
 NumericEdges(small_float=1e-11, big_int=3000000, precise=1.0)   # All outside bounds
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -268,7 +269,7 @@ ColoredRectangle(
 )  # Multiple errors
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert (
@@ -303,7 +304,7 @@ Outer(outer_param=123)                        # Should error
 Outer.Inner(inner_param="bad")                # Should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Verify both nested and outer classes are recognized
@@ -352,7 +353,7 @@ instance = factory.create_instance(x=42)      # Should not error - method call
 direct = SomeClass(x="bad")                   # Should error - direct constructor
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -376,7 +377,7 @@ Container(items=(x for x in range(5)))                     # Generator to List -
 Container(items="not_a_list")                              # Should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # The analyzer should detect the direct string assignment
@@ -414,7 +415,7 @@ ManyParams(
 )  # All should error
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 10  # All parameters should have errors

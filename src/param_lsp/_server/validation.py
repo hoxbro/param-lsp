@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
 from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 from .base import LSPServerBase
 
@@ -33,7 +34,7 @@ class ValidationMixin(LSPServerBase):
         ):
             self.analyzer = ParamAnalyzer(self.workspace_root)
 
-        analysis = self.analyzer.analyze_file(content, file_path)
+        analysis = convert_to_legacy_format(self.analyzer.analyze_file(content, file_path))
         self.document_cache[uri] = {
             "content": content,
             "analysis": analysis,

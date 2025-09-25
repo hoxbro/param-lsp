@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from param_lsp.models import convert_to_legacy_format
+
 
 class TestDocExtraction:
     """Test parameter documentation extraction and storage."""
@@ -25,7 +27,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "TestClass" in result["param_parameter_docs"]
         docs = result["param_parameter_docs"]["TestClass"]
@@ -52,7 +54,7 @@ class TestClass(param.Parameterized):
     triple_quotes = param.String(default="test", doc="""Triple quoted documentation""")
 '''
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -77,7 +79,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -111,7 +113,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -135,7 +137,7 @@ class TestClass(param.Parameterized):
     )
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Check that doc is extracted
         docs = result["param_parameter_docs"]["TestClass"]
@@ -162,7 +164,7 @@ class TestClass(param.Parameterized):
     none_doc = param.String(default="test", doc=None)  # This would be a runtime error, but test parsing
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -185,7 +187,7 @@ class TestClass(p.Parameterized):
     no_doc = Integer(default=5)
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -212,7 +214,7 @@ class ClassC(param.Parameterized):
     param_c = param.Boolean(default=True)  # No doc
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]
 
@@ -241,7 +243,7 @@ class TestClass(param.Parameterized):
     method_doc = param.String(default="test", doc=str("method call"))
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         docs = result["param_parameter_docs"]["TestClass"]
 
@@ -264,7 +266,7 @@ class TestClass(param.Parameterized):
     param2 = param.Integer(default=5, doc="Doc 2")
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # Check that param_parameter_docs is in the result
         assert "param_parameter_docs" in result

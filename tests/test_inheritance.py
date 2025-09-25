@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from param_lsp.models import convert_to_legacy_format
+
 
 class TestParameterInheritance:
     """Test parameter inheritance in class hierarchies."""
@@ -20,7 +22,7 @@ class S(P):
 S().b = "a"
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -54,7 +56,7 @@ T().b = "not_bool"
 T().name = 123
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -90,7 +92,7 @@ class S(P):
 S().value = 123  # Should error - expecting string now
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -120,7 +122,7 @@ S().x = 15  # Should violate inherited bounds
 S().y = 10  # Should violate local bounds
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -145,7 +147,7 @@ class S(P):
     y = param.String("test", doc="Child parameter")
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]
@@ -177,7 +179,7 @@ C().a_param = "not_int"   # Should error
 C().c_param = "not_num"   # Should error
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         # All classes should be recognized
         expected_classes = {"Base", "A", "B", "C"}
@@ -210,7 +212,7 @@ class P(param.Parameterized):
 S().x = "not_int"  # Should detect error for inherited parameter
 """
 
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
 
         assert "P" in result["param_classes"]
         assert "S" in result["param_classes"]

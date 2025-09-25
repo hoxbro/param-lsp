@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from src.param_lsp.analyzer import ParamAnalyzer
+from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.models import convert_to_legacy_format
 
 
 class TestConstructorIntegration:
@@ -29,7 +30,7 @@ instance3 = P(x=10, y=20)  # Constructor error on y
 instance3.x = "runtime_bad"  # Runtime error on x
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -62,7 +63,7 @@ child2.base_x = "runtime_bad"
 child2.child_y = 456
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -91,7 +92,7 @@ P(y=5)           # Valid - within bounds despite bad default
 P(z=123)         # Invalid - wrong type
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should have errors for:
@@ -128,7 +129,7 @@ DocumentedClass(x=42, y="test", z=True)
 DocumentedClass(x="bad", y=123, z="false")
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should have 3 constructor errors
@@ -169,7 +170,7 @@ Style2(x=2)
 Style3(x=3)
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should have exactly 3 constructor errors (one for each bad call)
@@ -230,7 +231,7 @@ extended = ExtendedExample(
 extended.priority = 10  # Runtime bounds error on new parameter
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should have many errors from different validation types
@@ -272,7 +273,7 @@ P(x=42)
 P(x="error4")
 """
         analyzer = ParamAnalyzer()
-        result = analyzer.analyze_file(code_py)
+        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
         errors = result.get("type_errors", [])
 
         # Should catch all 4 errors and not stop after first
