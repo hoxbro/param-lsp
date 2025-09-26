@@ -106,6 +106,7 @@ extend-unsafe-fixes = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["S101"]
+"docs/**" = ["I002"]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]
