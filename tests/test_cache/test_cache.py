@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
+from param_lsp.models import ExternalClassInfo, ParamClassInfo, ParameterInfo
 
 
 @pytest.fixture
@@ -98,14 +99,31 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data = {
-                "parameters": ["value", "name"],
-                "parameter_types": {"value": "Integer", "name": "String"},
-                "parameter_bounds": {},
-                "parameter_docs": {},
-                "parameter_allow_none": {},
-                "parameter_defaults": {},
-            }
+            # Create test data using dataclass format
+            param_class_info = ParamClassInfo(name="IntSlider")
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    param_type="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="name",
+                    param_type="String",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data = ExternalClassInfo(
+                class_name="IntSlider", param_class_info=param_class_info
+            )
 
             # Mock library version
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
@@ -115,7 +133,12 @@ class TestExternalLibraryCache:
                 # Get cache data
                 result = cache.get("panel", "panel.widgets.IntSlider")
 
-                assert result == test_data
+                assert result is not None
+                assert result.class_name == test_data.class_name
+                assert result.param_class_info.name == test_data.param_class_info.name
+                assert len(result.parameters) == len(test_data.parameters)
+                assert "value" in result.parameters
+                assert "name" in result.parameters
 
     def test_cache_get_nonexistent(self, enable_cache_for_test):
         """Test getting data that doesn't exist in cache."""

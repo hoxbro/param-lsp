@@ -1389,9 +1389,7 @@ class ParamAnalyzer:
         cached_result = external_library_cache.get(root_library, full_class_path)
         if cached_result is not None:
             logger.debug(f"Using cached result for {full_class_path}")
-            # Convert cached dict back to ExternalClassInfo using the from_legacy_dict classmethod
-            class_name = full_class_path.split(".")[-1]
-            return ExternalClassInfo.from_legacy_dict(class_name, cached_result)
+            return cached_result
 
         try:
             # Parse the full class path (e.g., "panel.widgets.IntSlider")
@@ -1477,26 +1475,12 @@ class ParamAnalyzer:
                         )
                         class_info.add_parameter(param_info)
 
-            # Cache the result for future use
-            # Convert to dict for caching compatibility
-            cache_data = {
-                "parameters": class_info.get_parameter_names(),
-                "parameter_types": {p.name: p.param_type for p in class_info.parameters.values()},
-                "parameter_bounds": {
-                    p.name: p.bounds for p in class_info.parameters.values() if p.bounds
-                },
-                "parameter_docs": {p.name: p.doc for p in class_info.parameters.values() if p.doc},
-                "parameter_allow_none": {
-                    p.name: p.allow_none for p in class_info.parameters.values()
-                },
-                "parameter_defaults": {
-                    p.name: p.default for p in class_info.parameters.values() if p.default
-                },
-            }
-            external_library_cache.set(root_library, full_class_path, cache_data)
+            # Create ExternalClassInfo and cache it
+            external_class_info = ExternalClassInfo.from_param_class_info(class_info)
+            external_library_cache.set(root_library, full_class_path, external_class_info)
             logger.debug(f"Cached introspection result for {full_class_path}")
 
-            return ExternalClassInfo.from_param_class_info(class_info)
+            return external_class_info
 
         except Exception as e:
             logger.debug(f"Failed to introspect external class {full_class_path}: {e}")
@@ -1771,9 +1755,9 @@ class ParamAnalyzer:
                         continue
 
                     # Introspect and cache the class
-                    cache_data = self._introspect_param_class_for_cache(cls)
-                    if cache_data:
-                        external_library_cache.set(library_name, full_path, cache_data)
+                    external_class_info = self._introspect_param_class_for_cache(cls)
+                    if external_class_info:
+                        external_library_cache.set(library_name, full_path, external_class_info)
                         classes_cached += 1
 
             except (TypeError, AttributeError):
@@ -1821,59 +1805,59 @@ class ParamAnalyzer:
 
         return classes
 
-    def _introspect_param_class_for_cache(self, cls) -> dict[str, Any] | None:
-        """Introspect a param.Parameterized class and return cache-ready data."""
+    def _introspect_param_class_for_cache(self, cls) -> ExternalClassInfo | None:
+        """Introspect a param.Parameterized class and return ExternalClassInfo."""
         try:
-            # Extract parameter information using param's introspection
-            parameters = []
-            parameter_types = {}
-            parameter_bounds = {}
-            parameter_docs = {}
-            parameter_allow_none = {}
-            parameter_defaults = {}
+            class_name = getattr(cls, "__name__", "Unknown")
+            param_class_info = ParamClassInfo(name=class_name)
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
                     # Skip the 'name' parameter as it's rarely set in constructors
                     if param_name == "name":
                         continue
-                    parameters.append(param_name)
 
                     if param_obj:
                         # Get parameter type
                         param_type_name = type(param_obj).__name__
-                        parameter_types[param_name] = param_type_name
 
                         # Get bounds if present
+                        bounds = None
                         if hasattr(param_obj, "bounds") and param_obj.bounds is not None:
-                            bounds = param_obj.bounds
+                            bounds_tuple = param_obj.bounds
                             # Handle inclusive bounds
                             if hasattr(param_obj, "inclusive_bounds"):
                                 inclusive_bounds = param_obj.inclusive_bounds
-                                parameter_bounds[param_name] = (*bounds, *inclusive_bounds)
+                                bounds = (*bounds_tuple, *inclusive_bounds)
                             else:
-                                parameter_bounds[param_name] = bounds
+                                bounds = bounds_tuple
 
                         # Get doc string
-                        if hasattr(param_obj, "doc") and param_obj.doc:
-                            parameter_docs[param_name] = param_obj.doc
+                        doc = (
+                            param_obj.doc if hasattr(param_obj, "doc") and param_obj.doc else None
+                        )
 
                         # Get allow_None
-                        if hasattr(param_obj, "allow_None"):
-                            parameter_allow_none[param_name] = param_obj.allow_None
+                        allow_none = (
+                            param_obj.allow_None if hasattr(param_obj, "allow_None") else False
+                        )
 
                         # Get default value
-                        if hasattr(param_obj, "default"):
-                            parameter_defaults[param_name] = str(param_obj.default)
+                        default = str(param_obj.default) if hasattr(param_obj, "default") else None
 
-            return {
-                "parameters": parameters,
-                "parameter_types": parameter_types,
-                "parameter_bounds": parameter_bounds,
-                "parameter_docs": parameter_docs,
-                "parameter_allow_none": parameter_allow_none,
-                "parameter_defaults": parameter_defaults,
-            }
+                        # Create ParameterInfo object
+                        param_info = ParameterInfo(
+                            name=param_name,
+                            param_type=param_type_name,
+                            bounds=bounds,
+                            doc=doc,
+                            allow_none=allow_none,
+                            default=default,
+                            location=None,  # No location for external classes
+                        )
+                        param_class_info.add_parameter(param_info)
+
+            return ExternalClassInfo.from_param_class_info(param_class_info)
 
         except Exception:
             return None
