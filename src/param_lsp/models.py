@@ -47,10 +47,10 @@ class ParamClassInfo:
 
 @dataclass
 class ExternalClassInfo:
-    """Wrapper for external class parameter information with conversion utilities.
+    """Wrapper for external class parameter information.
 
-    This class provides a clean interface for working with external Param classes,
-    handling both dataclass and legacy format conversions seamlessly.
+    This class provides a clean interface for working with external Param classes
+    using structured dataclass models.
     """
 
     class_name: str
@@ -60,60 +60,6 @@ class ExternalClassInfo:
     def from_param_class_info(cls, param_class_info: ParamClassInfo) -> ExternalClassInfo:
         """Create from a ParamClassInfo object."""
         return cls(class_name=param_class_info.name, param_class_info=param_class_info)
-
-    @classmethod
-    def from_legacy_dict(cls, class_name: str, legacy_data: dict) -> ExternalClassInfo:
-        """Create from legacy dictionary format."""
-        param_class_info = ParamClassInfo(name=class_name)
-
-        # Extract parameter data from legacy format
-        parameters = legacy_data.get("parameters", [])
-        parameter_types = legacy_data.get("parameter_types", {})
-        parameter_docs = legacy_data.get("parameter_docs", {})
-        parameter_bounds = legacy_data.get("parameter_bounds", {})
-        parameter_allow_none = legacy_data.get("parameter_allow_none", {})
-        parameter_defaults = legacy_data.get("parameter_defaults", {})
-        parameter_locations = legacy_data.get("parameter_locations", {})
-
-        for param_name in parameters:
-            param_info = ParameterInfo(
-                name=param_name,
-                param_type=parameter_types.get(param_name, "Unknown"),
-                bounds=parameter_bounds.get(param_name),
-                doc=parameter_docs.get(param_name),
-                allow_none=parameter_allow_none.get(param_name, False),
-                default=parameter_defaults.get(param_name),
-                location=parameter_locations.get(param_name),
-            )
-            param_class_info.add_parameter(param_info)
-
-        return cls(class_name=class_name, param_class_info=param_class_info)
-
-    def to_legacy_dict(self) -> dict:
-        """Convert to legacy dictionary format for compatibility."""
-        return {
-            "parameters": self.param_class_info.get_parameter_names(),
-            "parameter_types": {
-                p.name: p.param_type for p in self.param_class_info.parameters.values()
-            },
-            "parameter_docs": {
-                p.name: p.doc
-                for p in self.param_class_info.parameters.values()
-                if p.doc is not None
-            },
-            "parameter_bounds": {
-                p.name: p.bounds for p in self.param_class_info.parameters.values() if p.bounds
-            },
-            "parameter_allow_none": {
-                p.name: p.allow_none for p in self.param_class_info.parameters.values()
-            },
-            "parameter_defaults": {
-                p.name: p.default for p in self.param_class_info.parameters.values() if p.default
-            },
-            "parameter_locations": {
-                p.name: p.location for p in self.param_class_info.parameters.values() if p.location
-            },
-        }
 
     def get_parameter_names(self) -> list[str]:
         """Get list of parameter names."""
@@ -127,42 +73,3 @@ class ExternalClassInfo:
     def get_parameter(self, name: str) -> ParameterInfo | None:
         """Get parameter info by name."""
         return self.param_class_info.get_parameter(name)
-
-
-def convert_to_legacy_format(result):
-    """Convert dataclass format to legacy dict format for tests."""
-    param_classes_dict = result["param_classes"]
-
-    return {
-        "param_classes": set(param_classes_dict.keys()),
-        "param_parameters": {
-            name: info.get_parameter_names() for name, info in param_classes_dict.items()
-        },
-        "param_parameter_types": {
-            name: {p.name: p.param_type for p in info.parameters.values()}
-            for name, info in param_classes_dict.items()
-        },
-        "param_parameter_bounds": {
-            name: {p.name: p.bounds for p in info.parameters.values() if p.bounds}
-            for name, info in param_classes_dict.items()
-        },
-        "param_parameter_docs": {
-            name: {p.name: p.doc for p in info.parameters.values() if p.doc is not None}
-            for name, info in param_classes_dict.items()
-        },
-        "param_parameter_allow_none": {
-            name: {p.name: p.allow_none for p in info.parameters.values()}
-            for name, info in param_classes_dict.items()
-        },
-        "param_parameter_defaults": {
-            name: {p.name: p.default for p in info.parameters.values() if p.default}
-            for name, info in param_classes_dict.items()
-        },
-        "param_parameter_locations": {
-            name: {p.name: p.location for p in info.parameters.values() if p.location}
-            for name, info in param_classes_dict.items()
-        },
-        # Pass through other keys
-        "imports": result.get("imports", {}),
-        "type_errors": result.get("type_errors", []),
-    }
