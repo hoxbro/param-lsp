@@ -30,6 +30,9 @@ PARAM_TYPE_MAP = {
     "Foldername": str,
     "Path": str,
     "Color": str,
+    "Selector": object,
+    "ObjectSelector": object,
+    "ListSelector": list,
 }
 
 # Parameter types that are considered to be numeric
@@ -65,6 +68,7 @@ PARAM_TYPES = {
     "FileSelector",
     "ListSelector",
     "ObjectSelector",
+    "Selector",
 }
 
 # =============================================================================
