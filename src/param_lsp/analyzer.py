@@ -301,7 +301,7 @@ class ParamAnalyzer:
                         param_name = target.id
 
                         # Initialize parameter info
-                        param_type = ""
+                        cls = ""
                         bounds = None
                         doc = None
                         allow_None = False
@@ -332,7 +332,7 @@ class ParamAnalyzer:
                         if isinstance(item.value, ast.Call):
                             param_class_info = self._resolve_parameter_class(item.value.func)
                             if param_class_info:
-                                param_type = param_class_info["type"]
+                                cls = param_class_info["type"]
 
                             # Get bounds if present
                             bounds = self._extract_bounds_from_call(item.value)
@@ -357,7 +357,7 @@ class ParamAnalyzer:
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
                             name=param_name,
-                            param_type=param_type or "Unknown",
+                            cls=cls or "Unknown",
                             bounds=bounds,
                             doc=doc,
                             allow_None=allow_None,
@@ -477,25 +477,25 @@ class ParamAnalyzer:
         if isinstance(value, ast.Call):
             param_class_info = self._resolve_parameter_class(value.func)
             if param_class_info:
-                param_type = param_class_info["type"]
+                cls = param_class_info["type"]
                 param_module = param_class_info.get("module")
 
                 # Use param types from constants
-                param_types = PARAM_TYPES
+                clss = PARAM_TYPES
 
                 # If we have module info, verify it's from param
                 if param_module and "param" in param_module:
-                    return param_type in param_types
+                    return cls in clss
                 # If no module but type matches and we have param imports, likely a param type
                 elif (
                     param_module is None
-                    and param_type in param_types
+                    and cls in clss
                     and any("param" in imp for imp in self.imports.values())
                 ):
                     return True
                 # Direct param.X() call
                 elif param_module == "param":
-                    return param_type in param_types
+                    return cls in clss
 
         return False
 
@@ -545,8 +545,8 @@ class ParamAnalyzer:
             param_value = keyword.value
 
             # Get the expected parameter type
-            param_type = self._get_parameter_type_from_class(class_name, param_name)
-            if not param_type:
+            cls = self._get_parameter_type_from_class(class_name, param_name)
+            if not cls:
                 continue  # Skip if parameter not found (could be inherited or not a param)
 
             # Check if None is allowed for this parameter
@@ -558,15 +558,15 @@ class ParamAnalyzer:
                 # If allow_None is False or not specified, continue with normal type checking
 
             # Check if assigned value matches expected type
-            if param_type in self.param_type_map:
-                expected_types = self.param_type_map[param_type]
+            if cls in self.param_type_map:
+                expected_types = self.param_type_map[cls]
                 if not isinstance(expected_types, tuple):
                     expected_types = (expected_types,)
 
                 # inferred_type was already computed above
 
                 # Special handling for Boolean parameters - they should only accept actual bool values
-                if param_type == "Boolean" and inferred_type and inferred_type is not bool:
+                if cls == "Boolean" and inferred_type and inferred_type is not bool:
                     if not (
                         isinstance(param_value, ast.Constant)
                         and isinstance(param_value.value, bool)
@@ -601,26 +601,26 @@ class ParamAnalyzer:
                             "end_col": node.end_col_offset
                             if node.end_col_offset
                             else node.col_offset,
-                            "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {param_type} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})",
+                            "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})",
                             "severity": "error",
                             "code": "constructor-type-mismatch",
                         }
                     )
 
             # Check bounds for numeric parameters in constructor calls
-            self._check_constructor_bounds(node, class_name, param_name, param_type, param_value)
+            self._check_constructor_bounds(node, class_name, param_name, cls, param_value)
 
     def _check_constructor_bounds(
         self,
         node: ast.Call,
         class_name: str,
         param_name: str,
-        param_type: str,
+        cls: str,
         param_value: ast.expr,
     ):
         """Check if constructor parameter value is within parameter bounds."""
         # Only check bounds for numeric types
-        if param_type not in ["Number", "Integer"]:
+        if cls not in ["Number", "Integer"]:
             return
 
         # Get bounds for this parameter
@@ -686,7 +686,7 @@ class ParamAnalyzer:
         if not param_class_info:
             return
 
-        param_type = param_class_info["type"]
+        cls = param_class_info["type"]
         param_class_info.get("module")
 
         # Get default value and allow_None from keyword arguments
@@ -702,8 +702,8 @@ class ParamAnalyzer:
         if default_value is not None and self._is_none_value(default_value):
             allow_None = True
 
-        if param_type and default_value and param_type in self.param_type_map:
-            expected_types = self.param_type_map[param_type]
+        if cls and default_value and cls in self.param_type_map:
+            expected_types = self.param_type_map[cls]
             if not isinstance(expected_types, tuple):
                 expected_types = (expected_types,)
 
@@ -715,7 +715,7 @@ class ParamAnalyzer:
                 # If allow_None is False or not specified, continue with normal type checking
 
             # Special handling for Boolean parameters - they should only accept actual bool values
-            if param_type == "Boolean" and inferred_type and inferred_type is not bool:
+            if cls == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
                 if not (
                     isinstance(default_value, ast.Constant)
@@ -747,7 +747,7 @@ class ParamAnalyzer:
                         "col": node.col_offset,
                         "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
                         "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                        "message": f"Parameter '{param_name}' of type {param_type} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}",
+                        "message": f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}",
                         "severity": "error",
                         "code": "type-mismatch",
                     }
@@ -796,13 +796,13 @@ class ParamAnalyzer:
             return
 
         # Get the parameter type from the class definition
-        param_type = self._get_parameter_type_from_class(instance_class, param_name)
-        if not param_type:
+        cls = self._get_parameter_type_from_class(instance_class, param_name)
+        if not cls:
             return
 
         # Check if assigned value matches expected type
-        if param_type in self.param_type_map:
-            expected_types = self.param_type_map[param_type]
+        if cls in self.param_type_map:
+            expected_types = self.param_type_map[cls]
             if not isinstance(expected_types, tuple):
                 expected_types = (expected_types,)
 
@@ -816,7 +816,7 @@ class ParamAnalyzer:
                 # If allow_None is False or not specified, continue with normal type checking
 
             # Special handling for Boolean parameters - they should only accept actual bool values
-            if param_type == "Boolean" and inferred_type and inferred_type is not bool:
+            if cls == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
                 if not (
                     isinstance(assigned_value, ast.Constant)
@@ -848,26 +848,26 @@ class ParamAnalyzer:
                         "col": node.col_offset,
                         "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
                         "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                        "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {param_type} (expects {self._format_expected_types(expected_types)})",
+                        "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})",
                         "severity": "error",
                         "code": "runtime-type-mismatch",
                     }
                 )
 
         # Check bounds for numeric parameters
-        self._check_runtime_bounds(node, instance_class, param_name, param_type, assigned_value)
+        self._check_runtime_bounds(node, instance_class, param_name, cls, assigned_value)
 
     def _check_runtime_bounds(
         self,
         node: ast.Assign,
         instance_class: str,
         param_name: str,
-        param_type: str,
+        cls: str,
         assigned_value: ast.expr,
     ):
         """Check if assigned value is within parameter bounds."""
         # Only check bounds for numeric types
-        if param_type not in ["Number", "Integer"]:
+        if cls not in ["Number", "Integer"]:
             return
 
         # Get bounds for this parameter
@@ -988,13 +988,13 @@ class ParamAnalyzer:
         # Check local classes first
         if class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.param_type if param_info else None
+            return param_info.cls if param_info else None
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
         if class_info:
             param_info = class_info.get_parameter(param_name)
-            return param_info.param_type if param_info else None
+            return param_info.cls if param_info else None
 
         return None
 
@@ -1071,10 +1071,10 @@ class ParamAnalyzer:
         if not param_class_info:
             return
 
-        resolved_param_type = param_class_info["type"]
+        resolved_cls = param_class_info["type"]
 
         # Check bounds for Number/Integer parameters
-        if resolved_param_type in ["Number", "Integer"]:
+        if resolved_cls in ["Number", "Integer"]:
             bounds = None
             inclusive_bounds = (True, True)  # Default to inclusive
             default_value = None
@@ -1160,7 +1160,7 @@ class ParamAnalyzer:
                     pass
 
         # Check for empty lists/tuples with List/Tuple parameters
-        elif resolved_param_type in ["List", "Tuple"]:
+        elif resolved_cls in ["List", "Tuple"]:
             for keyword in node.value.keywords:
                 if keyword.arg == "default" and (
                     isinstance(keyword.value, (ast.List, ast.Tuple))
@@ -1425,7 +1425,7 @@ class ParamAnalyzer:
 
                     if param_obj:
                         # Get parameter type
-                        param_type_name = type(param_obj).__name__
+                        cls_name = type(param_obj).__name__
 
                         # Get bounds if present
                         bounds = None
@@ -1466,7 +1466,7 @@ class ParamAnalyzer:
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
                             name=param_name,
-                            param_type=param_type_name,
+                            cls=cls_name,
                             bounds=bounds,
                             doc=doc,
                             allow_None=allow_None,
@@ -1818,7 +1818,7 @@ class ParamAnalyzer:
 
                     if param_obj:
                         # Get parameter type
-                        param_type_name = type(param_obj).__name__
+                        cls_name = type(param_obj).__name__
 
                         # Get bounds if present
                         bounds = None
@@ -1847,7 +1847,7 @@ class ParamAnalyzer:
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
                             name=param_name,
-                            param_type=param_type_name,
+                            cls=cls_name,
                             bounds=bounds,
                             doc=doc,
                             allow_None=allow_None,

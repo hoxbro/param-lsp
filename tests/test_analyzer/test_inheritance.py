@@ -27,7 +27,7 @@ S().b = "a"
         assert "S" in param_classes
         assert len(param_classes["P"].parameters) == 0
         assert list(param_classes["S"].parameters.keys()) == ["b"]
-        assert param_classes["S"].parameters["b"].param_type == "Boolean"
+        assert param_classes["S"].parameters["b"].cls == "Boolean"
 
         # Should detect type error
         assert len(result["type_errors"]) == 1
@@ -68,9 +68,9 @@ T().name = 123
         assert set(param_classes["T"].parameters.keys()) == {"x", "b", "name"}
 
         # Check type inheritance
-        assert param_classes["T"].parameters["x"].param_type == "Integer"
-        assert param_classes["T"].parameters["b"].param_type == "Boolean"
-        assert param_classes["T"].parameters["name"].param_type == "String"
+        assert param_classes["T"].parameters["x"].cls == "Integer"
+        assert param_classes["T"].parameters["b"].cls == "Boolean"
+        assert param_classes["T"].parameters["name"].cls == "String"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -99,8 +99,8 @@ S().value = 123  # Should error - expecting string now
         assert "S" in param_classes
 
         # Child class should override parent parameter type
-        assert param_classes["P"].parameters["value"].param_type == "Integer"
-        assert param_classes["S"].parameters["value"].param_type == "String"
+        assert param_classes["P"].parameters["value"].cls == "Integer"
+        assert param_classes["S"].parameters["value"].cls == "String"
 
         # Should detect type error based on child class type
         assert len(result["type_errors"]) == 1
@@ -194,9 +194,9 @@ C().c_param = "not_num"   # Should error
         assert c_params == {"base_param", "a_param", "c_param"}
 
         # Check type inheritance
-        assert param_classes["C"].parameters["base_param"].param_type == "String"
-        assert param_classes["C"].parameters["a_param"].param_type == "Integer"
-        assert param_classes["C"].parameters["c_param"].param_type == "Number"
+        assert param_classes["C"].parameters["base_param"].cls == "String"
+        assert param_classes["C"].parameters["a_param"].cls == "Integer"
+        assert param_classes["C"].parameters["c_param"].cls == "Number"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -224,7 +224,7 @@ S().x = "not_int"  # Should detect error for inherited parameter
 
         # Child should inherit parent's parameter
         assert "x" in param_classes["S"].parameters
-        assert param_classes["S"].parameters["x"].param_type == "Integer"
+        assert param_classes["S"].parameters["x"].cls == "Integer"
 
         # Should detect type error
         assert len(result["type_errors"]) == 1

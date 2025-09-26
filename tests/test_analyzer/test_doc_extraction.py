@@ -153,7 +153,7 @@ class TestClass(param.Parameterized):
         # Check that other attributes are also extracted
         assert test_class.parameters["comprehensive_param"].bounds is not None
 
-        assert test_class.parameters["comprehensive_param"].param_type == "Number"
+        assert test_class.parameters["comprehensive_param"].cls == "Number"
 
     def test_empty_doc_parameter(self, analyzer):
         """Test handling of empty doc parameters."""

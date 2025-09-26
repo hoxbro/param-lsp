@@ -154,7 +154,7 @@ w = pn.widgets.IntSlider()
 
         # Should have parameter information
         assert "value" in class_info.parameters
-        assert class_info.parameters["value"].param_type == "Integer"
+        assert class_info.parameters["value"].cls == "Integer"
         assert class_info.parameters["value"].allow_None is True
 
     def test_external_class_caching(self, analyzer):

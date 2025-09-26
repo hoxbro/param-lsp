@@ -169,7 +169,7 @@ class ExternalLibraryCache:
         for param_name, param_info in param_class_info.parameters.items():
             parameters_data[param_name] = {
                 "name": param_info.name,
-                "param_type": param_info.param_type,
+                "cls": param_info.cls,
                 "bounds": param_info.bounds,
                 "doc": param_info.doc,
                 "allow_None": param_info.allow_None,
@@ -192,12 +192,18 @@ class ExternalLibraryCache:
             param_class_info = ParameterizedInfo(name=class_name)
 
             for param_data in parameters_data.values():
+                # Handle backward compatibility - old cache may have "param_type" instead of "cls"
+                cls_value = param_data.get("cls") or param_data.get("param_type", "Unknown")
+                allow_None_value = param_data.get("allow_None")
+                if allow_None_value is None:
+                    allow_None_value = param_data.get("allow_none", False)
+
                 param_info = ParameterInfo(
                     name=param_data["name"],
-                    param_type=param_data["param_type"],
+                    cls=cls_value,
                     bounds=param_data.get("bounds"),
                     doc=param_data.get("doc"),
-                    allow_None=param_data.get("allow_None", False),
+                    allow_None=allow_None_value,
                     default=param_data.get("default"),
                     location=param_data.get("location"),
                 )

@@ -104,7 +104,7 @@ class TestExternalLibraryCache:
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -114,7 +114,7 @@ class TestExternalLibraryCache:
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="name",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -156,7 +156,7 @@ class TestExternalLibraryCache:
             param_class_info1.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -167,7 +167,7 @@ class TestExternalLibraryCache:
             param_class_info2.add_parameter(
                 ParameterInfo(
                     name="text",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -203,7 +203,7 @@ class TestExternalLibraryCache:
             param_class_info_v1.add_parameter(
                 ParameterInfo(
                     name="old_param",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -216,7 +216,7 @@ class TestExternalLibraryCache:
             param_class_info_v2.add_parameter(
                 ParameterInfo(
                     name="new_param",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -257,7 +257,7 @@ class TestExternalLibraryCache:
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -292,7 +292,7 @@ class TestExternalLibraryCache:
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
                     allow_None=False,
@@ -334,7 +334,7 @@ class TestExternalLibraryCache:
                 param_class_info.add_parameter(
                     ParameterInfo(
                         name="value",
-                        param_type="Integer",
+                        cls="Integer",
                         bounds=None,
                         doc=None,
                         allow_None=False,
@@ -363,7 +363,7 @@ class TestCacheIntegration:
         param_class_info.add_parameter(
             ParameterInfo(
                 name="value",
-                param_type="Integer",
+                cls="Integer",
                 bounds=None,
                 doc=None,
                 allow_None=False,

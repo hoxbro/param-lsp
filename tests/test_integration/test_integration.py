@@ -78,10 +78,10 @@ example.ratio = 0               # Exclusive bounds violation
         assert all(param in params for param in expected_params)
 
         # Verify type extraction
-        assert complete_class.parameters["name"].param_type == "String"
-        assert complete_class.parameters["count"].param_type == "Integer"
-        assert complete_class.parameters["enabled"].param_type == "Boolean"
-        assert complete_class.parameters["ratio"].param_type == "Number"
+        assert complete_class.parameters["name"].cls == "String"
+        assert complete_class.parameters["count"].cls == "Integer"
+        assert complete_class.parameters["enabled"].cls == "Boolean"
+        assert complete_class.parameters["ratio"].cls == "Number"
 
         # Verify documentation extraction
         assert complete_class.parameters["name"].doc is not None
@@ -189,7 +189,7 @@ processor.use_gpu = 1              # Boolean type error
 
         for param_name, expected_type in expected_types.items():
             assert param_name in data_processor_class.parameters
-            assert data_processor_class.parameters[param_name].param_type == expected_type
+            assert data_processor_class.parameters[param_name].cls == expected_type
 
         # Check documentation is extracted
         docs_count = sum(1 for p in data_processor_class.parameters.values() if p.doc is not None)
@@ -281,4 +281,4 @@ class ValidClass(param.Parameterized):
         # Should still extract the valid parts
         assert "ValidClass" in result["param_classes"]
         valid_class = result["param_classes"]["ValidClass"]
-        assert valid_class.parameters["valid_param"].param_type == "String"
+        assert valid_class.parameters["valid_param"].cls == "String"

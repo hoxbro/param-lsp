@@ -11,7 +11,7 @@ class ParameterInfo:
     """Information about a single parameter."""
 
     name: str
-    param_type: str
+    cls: str
     bounds: tuple | None = None
     doc: str | None = None
     allow_None: bool = False

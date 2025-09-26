@@ -40,7 +40,7 @@ class HoverMixin(LSPServerBase):
                 return rx_method_info
 
             # Check if it's a parameter type
-            if hasattr(self, "param_types") and word in self.param_types:
+            if hasattr(self, "clss") and word in self.clss:
                 if param:
                     param_class = getattr(param, word, None)
                     if param_class and hasattr(param_class, "__doc__"):
@@ -82,12 +82,10 @@ class HoverMixin(LSPServerBase):
         # Build header section with type info
         # Check if this is from an external class (contains dots in class name)
         if "." in class_name:
-            header_parts = [
-                f"**{param_info.param_type} Parameter '{param_name}' (from {class_name})**"
-            ]
+            header_parts = [f"**{param_info.cls} Parameter '{param_name}' (from {class_name})**"]
         else:
-            header_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
-        python_type = self._get_python_type_name(param_info.param_type, param_info.allow_None)
+            header_parts = [f"**{param_info.cls} Parameter '{param_name}'**"]
+        python_type = self._get_python_type_name(param_info.cls, param_info.allow_None)
         header_parts.append(f"Allowed types: {python_type}")
 
         # Add bounds information to header section

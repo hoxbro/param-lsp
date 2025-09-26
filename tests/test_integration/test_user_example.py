@@ -99,9 +99,7 @@ S().b = "a"
         assert "S" in result["param_classes"], "Class S should be detected as a param class"
         s_class = result["param_classes"]["S"]
         assert "b" in s_class.parameters, "S should have parameter 'b'"
-        assert s_class.parameters["b"].param_type == "Boolean", (
-            "Parameter 'b' should be Boolean type"
-        )
+        assert s_class.parameters["b"].cls == "Boolean", "Parameter 'b' should be Boolean type"
 
         # Verify the type error is detected
         assert len(result["type_errors"]) == 1, "Should detect exactly one type error"
@@ -172,13 +170,11 @@ obj.final_bool = "xyz"  # Error: Boolean parameter
         )
 
         # Check parameter types
-        assert final_class.parameters["base_str"].param_type == "String", (
-            "base_str should be String type"
-        )
-        assert final_class.parameters["middle_int"].param_type == "Integer", (
+        assert final_class.parameters["base_str"].cls == "String", "base_str should be String type"
+        assert final_class.parameters["middle_int"].cls == "Integer", (
             "middle_int should be Integer type"
         )
-        assert final_class.parameters["final_bool"].param_type == "Boolean", (
+        assert final_class.parameters["final_bool"].cls == "Boolean", (
             "final_bool should be Boolean type"
         )
 
@@ -240,13 +236,13 @@ D().d_param = "wrong"   # Error: Number
 
         # Verify inheritance for C
         assert set(c_class.parameters.keys()) == {"a_param", "c_param"}, "C should inherit from A"
-        assert c_class.parameters["a_param"].param_type == "String", "a_param should be String"
-        assert c_class.parameters["c_param"].param_type == "Boolean", "c_param should be Boolean"
+        assert c_class.parameters["a_param"].cls == "String", "a_param should be String"
+        assert c_class.parameters["c_param"].cls == "Boolean", "c_param should be Boolean"
 
         # Verify inheritance for D
         assert set(d_class.parameters.keys()) == {"b_param", "d_param"}, "D should inherit from B"
-        assert d_class.parameters["b_param"].param_type == "Integer", "b_param should be Integer"
-        assert d_class.parameters["d_param"].param_type == "Number", "d_param should be Number"
+        assert d_class.parameters["b_param"].cls == "Integer", "b_param should be Integer"
+        assert d_class.parameters["d_param"].cls == "Number", "d_param should be Number"
 
         # Verify all type errors are detected
         assert len(result["type_errors"]) == 4, "Should detect four type errors"
