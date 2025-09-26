@@ -20,7 +20,7 @@ class ParameterInfo:
 
 
 @dataclass
-class ParamClassInfo:
+class ParameterizedInfo:
     """Information about a Parameterized class."""
 
     name: str

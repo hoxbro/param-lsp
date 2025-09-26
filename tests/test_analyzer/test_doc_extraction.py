@@ -278,7 +278,7 @@ class TestClass(param.Parameterized):
         # Check that param_classes is in the result
         assert "param_classes" in result
 
-        # Check structure: class_name -> ParamClassInfo with parameters
+        # Check structure: class_name -> ParameterizedInfo with parameters
         param_classes = result["param_classes"]
         assert isinstance(param_classes, dict)
         assert "TestClass" in param_classes

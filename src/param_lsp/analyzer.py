@@ -19,7 +19,7 @@ import param
 
 from .cache import external_library_cache
 from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
-from .models import ParamClassInfo, ParameterInfo
+from .models import ParameterInfo, ParameterizedInfo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
     def __init__(self, workspace_root: str | None = None):
-        self.param_classes: dict[str, ParamClassInfo] = {}
+        self.param_classes: dict[str, ParameterizedInfo] = {}
         self.imports: dict[str, str] = {}
         # Store file content for source line lookup
         self._current_file_content: str | None = None
@@ -43,7 +43,7 @@ class ParamAnalyzer:
 
         # Cache for external Parameterized classes (AST-based detection)
         self.external_param_classes: dict[
-            str, ParamClassInfo | None
+            str, ParameterizedInfo | None
         ] = {}  # full_class_path -> class_info
 
         # Populate external library cache on initialization
@@ -188,7 +188,7 @@ class ParamAnalyzer:
                 break
 
         if is_param_class:
-            class_info = ParamClassInfo(name=node.name)
+            class_info = ParameterizedInfo(name=node.name)
 
             # Get inherited parameters from parent classes first
             inherited_parameters = self._collect_inherited_parameters(
@@ -1285,7 +1285,7 @@ class ParamAnalyzer:
 
     def _get_imported_param_class_info(
         self, class_name: str, import_name: str, current_file_path: str | None = None
-    ) -> ParamClassInfo | None:
+    ) -> ParameterizedInfo | None:
         """Get parameter information for a class imported from another module."""
         # Get the full module name from imports
         full_import_name = self.imports.get(import_name)
@@ -1310,7 +1310,7 @@ class ParamAnalyzer:
         param_classes_dict = module_analysis.get("param_classes", {})
         if isinstance(param_classes_dict, dict) and imported_class_name in param_classes_dict:
             class_info = param_classes_dict[imported_class_name]
-            # If it's a ParamClassInfo object, return it
+            # If it's a ParameterizedInfo object, return it
             if hasattr(class_info, "parameters"):
                 return class_info
 
@@ -1329,7 +1329,7 @@ class ParamAnalyzer:
             return -val if val is not None else None
         return None
 
-    def _analyze_external_class_ast(self, full_class_path: str) -> ParamClassInfo | None:
+    def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using runtime introspection for allowed libraries."""
         if full_class_path in self.external_param_classes:
             return self.external_param_classes[full_class_path]
@@ -1379,7 +1379,7 @@ class ParamAnalyzer:
 
         return "\n".join(fixed_lines)
 
-    def _introspect_external_class_runtime(self, full_class_path: str) -> ParamClassInfo | None:
+    def _introspect_external_class_runtime(self, full_class_path: str) -> ParameterizedInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
 
         # Get the root library name for cache lookup
@@ -1415,7 +1415,7 @@ class ParamAnalyzer:
                 return None
 
             # Extract parameter information using param's introspection
-            class_info = ParamClassInfo(name=full_class_path.split(".")[-1])
+            class_info = ParameterizedInfo(name=full_class_path.split(".")[-1])
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
@@ -1804,11 +1804,11 @@ class ParamAnalyzer:
 
         return classes
 
-    def _introspect_param_class_for_cache(self, cls) -> ParamClassInfo | None:
-        """Introspect a param.Parameterized class and return ParamClassInfo."""
+    def _introspect_param_class_for_cache(self, cls) -> ParameterizedInfo | None:
+        """Introspect a param.Parameterized class and return ParameterizedInfo."""
         try:
             class_name = getattr(cls, "__name__", "Unknown")
-            param_class_info = ParamClassInfo(name=class_name)
+            param_class_info = ParameterizedInfo(name=class_name)
 
             if hasattr(cls, "param"):
                 for param_name, param_obj in cls.param.objects().items():
@@ -1862,7 +1862,7 @@ class ParamAnalyzer:
             return None
 
     def resolve_class_name_from_context(
-        self, class_name: str, param_classes: dict[str, ParamClassInfo], document_content: str
+        self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str
     ) -> str | None:
         """Resolve a class name from context, handling both direct class names and variable names."""
         # If it's already a known param class, return it

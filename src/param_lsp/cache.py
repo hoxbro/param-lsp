@@ -14,7 +14,7 @@ from typing import Any
 
 import platformdirs
 
-from .models import ParamClassInfo, ParameterInfo
+from .models import ParameterInfo, ParameterizedInfo
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class ExternalLibraryCache:
         """Get the version of an installed library."""
         return _get_version(library_name)
 
-    def get(self, library_name: str, class_path: str) -> ParamClassInfo | None:
+    def get(self, library_name: str, class_path: str) -> ParameterizedInfo | None:
         """Get cached introspection data for a library class."""
         if not self._caching_enabled:
             return None
@@ -93,7 +93,7 @@ class ExternalLibraryCache:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
-    def set(self, library_name: str, class_path: str, data: ParamClassInfo) -> None:
+    def set(self, library_name: str, class_path: str, data: ParameterizedInfo) -> None:
         """Cache introspection data for a library class."""
         if not self._caching_enabled:
             return
@@ -162,8 +162,8 @@ class ExternalLibraryCache:
         # Only accept exact cache version match (no backward compatibility)
         return tuple(metadata.get("cache_version", ())) == CACHE_VERSION
 
-    def _serialize_param_class_info(self, param_class_info: ParamClassInfo) -> dict[str, Any]:
-        """Serialize ParamClassInfo to dictionary format for JSON storage."""
+    def _serialize_param_class_info(self, param_class_info: ParameterizedInfo) -> dict[str, Any]:
+        """Serialize ParameterizedInfo to dictionary format for JSON storage."""
         parameters_data = {}
 
         for param_name, param_info in param_class_info.parameters.items():
@@ -182,14 +182,14 @@ class ExternalLibraryCache:
             "parameters": parameters_data,
         }
 
-    def _deserialize_param_class_info(self, data: dict[str, Any]) -> ParamClassInfo | None:
-        """Deserialize dictionary format back to ParamClassInfo."""
+    def _deserialize_param_class_info(self, data: dict[str, Any]) -> ParameterizedInfo | None:
+        """Deserialize dictionary format back to ParameterizedInfo."""
         # Handle new dataclass format
         if "class_name" in data and "parameters" in data and isinstance(data["parameters"], dict):
             class_name = data["class_name"]
             parameters_data = data["parameters"]
 
-            param_class_info = ParamClassInfo(name=class_name)
+            param_class_info = ParameterizedInfo(name=class_name)
 
             for param_data in parameters_data.values():
                 param_info = ParameterInfo(

@@ -53,9 +53,7 @@ S().x = "a"  # This should now trigger a type error!
 
         # Verify S inherits parameters from P
         assert "x" in s_class.parameters, "S should inherit parameter 'x' from P"
-        assert s_class.parameters["x"].param_type == "Integer", (
-            "Parameter 'x' should be of type Integer"
-        )
+        assert s_class.parameters["x"].cls == "Integer", "Parameter 'x' should be of type Integer"
 
         # Verify the type error is detected
         assert len(result["type_errors"]) == 1, "Should detect exactly one type error"
