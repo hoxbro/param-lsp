@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
-from param_lsp.models import convert_to_legacy_format
 
 
 class TestCrossFileInheritance:
@@ -43,13 +42,14 @@ S().name = 123         # Should error - inherited String
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         assert "S" in result["param_classes"]
-        assert set(result["param_parameters"]["S"]) == {"x", "name", "b"}
-        assert result["param_parameter_types"]["S"]["x"] == "Integer"
-        assert result["param_parameter_types"]["S"]["name"] == "String"
-        assert result["param_parameter_types"]["S"]["b"] == "Boolean"
+        s_class = result["param_classes"]["S"]
+        assert set(s_class.parameters.keys()) == {"x", "name", "b"}
+        assert s_class.parameters["x"].param_type == "Integer"
+        assert s_class.parameters["name"].param_type == "String"
+        assert s_class.parameters["b"].param_type == "Boolean"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -100,22 +100,23 @@ obj.final_bool = "invalid"  # Error - Boolean
         with open(final_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(final_file)))
+        result = analyzer.analyze_file(content, str(final_file))
 
         assert "Final" in result["param_classes"]
-        assert set(result["param_parameters"]["Final"]) == {
+        final_class = result["param_classes"]["Final"]
+        assert set(final_class.parameters.keys()) == {
             "base_value",
             "intermediate_num",
             "final_bool",
         }
 
         # Check inherited types
-        assert result["param_parameter_types"]["Final"]["base_value"] == "String"
-        assert result["param_parameter_types"]["Final"]["intermediate_num"] == "Number"
-        assert result["param_parameter_types"]["Final"]["final_bool"] == "Boolean"
+        assert final_class.parameters["base_value"].param_type == "String"
+        assert final_class.parameters["intermediate_num"].param_type == "Number"
+        assert final_class.parameters["final_bool"].param_type == "Boolean"
 
         # Check inherited bounds
-        assert "intermediate_num" in result["param_parameter_bounds"]["Final"]
+        assert final_class.parameters["intermediate_num"].bounds is not None
 
         # Should detect 3 errors
         assert len(result["type_errors"]) == 3
@@ -148,11 +149,12 @@ Child().value = 123  # Should error - expecting string now
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         assert "Child" in result["param_classes"]
+        child_class = result["param_classes"]["Child"]
         # Child should override parent parameter type
-        assert result["param_parameter_types"]["Child"]["value"] == "String"
+        assert child_class.parameters["value"].param_type == "String"
 
         # Should detect type error based on child class type
         assert len(result["type_errors"]) == 1
@@ -187,13 +189,14 @@ Child().y = 10  # Should violate local bounds
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         assert "Child" in result["param_classes"]
+        child_class = result["param_classes"]["Child"]
 
         # Check bounds inheritance
-        assert "x" in result["param_parameter_bounds"]["Child"]
-        assert "y" in result["param_parameter_bounds"]["Child"]
+        assert child_class.parameters["x"].bounds is not None
+        assert child_class.parameters["y"].bounds is not None
 
         # Should detect 2 bounds violations
         bounds_errors = [e for e in result["type_errors"] if e["code"] == "bounds-violation"]
@@ -225,13 +228,14 @@ class Child(Parent):
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         assert "Child" in result["param_classes"]
+        child_class = result["param_classes"]["Child"]
 
         # Check doc inheritance
-        assert result["param_parameter_docs"]["Child"]["x"] == "Parent parameter documentation"
-        assert result["param_parameter_docs"]["Child"]["y"] == "Child parameter documentation"
+        assert child_class.parameters["x"].doc == "Parent parameter documentation"
+        assert child_class.parameters["y"].doc == "Child parameter documentation"
 
     def test_missing_import_module(self, tmp_path):
         """Test graceful handling when imported module doesn't exist."""
@@ -252,7 +256,7 @@ S().b = "test"  # No error should be detected since P is unknown
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         # S should not be detected as a param class since P is unknown
         assert "S" not in result["param_classes"]
@@ -285,7 +289,7 @@ S().b = "test"  # No error since S doesn't inherit from param.Parameterized
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         # S should not be detected as a param class
         assert "S" not in result["param_classes"]

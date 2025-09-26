@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
-from param_lsp.models import convert_to_legacy_format
 
 
 class TestConstructorIntegration:
@@ -30,7 +29,7 @@ instance3 = P(x=10, y=20)  # Constructor error on y
 instance3.x = "runtime_bad"  # Runtime error on x
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -63,7 +62,7 @@ child2.base_x = "runtime_bad"
 child2.child_y = 456
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 4
@@ -92,7 +91,7 @@ P(y=5)           # Valid - within bounds despite bad default
 P(z=123)         # Invalid - wrong type
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have errors for:
@@ -129,18 +128,19 @@ DocumentedClass(x=42, y="test", z=True)
 DocumentedClass(x="bad", y=123, z="false")
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have 3 constructor errors
         assert len(errors) == 3
 
         # Verify documentation is still extracted properly
-        param_docs = result.get("param_parameter_docs", {})
-        assert "DocumentedClass" in param_docs
-        assert param_docs["DocumentedClass"]["x"] == "An integer parameter"
-        assert param_docs["DocumentedClass"]["y"] == "A string parameter with documentation"
-        assert param_docs["DocumentedClass"]["z"] == "Boolean flag"
+        param_classes = result.get("param_classes", {})
+        assert "DocumentedClass" in param_classes
+        documented_class = param_classes["DocumentedClass"]
+        assert documented_class.parameters["x"].doc == "An integer parameter"
+        assert documented_class.parameters["y"].doc == "A string parameter with documentation"
+        assert documented_class.parameters["z"].doc == "Boolean flag"
 
     def test_constructor_validation_with_import_resolution(self):
         """Test constructor validation with different import styles."""
@@ -170,7 +170,7 @@ Style2(x=2)
 Style3(x=3)
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have exactly 3 constructor errors (one for each bad call)
@@ -231,7 +231,7 @@ extended = ExtendedExample(
 extended.priority = 10  # Runtime bounds error on new parameter
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should have many errors from different validation types
@@ -246,12 +246,15 @@ extended.priority = 10  # Runtime bounds error on new parameter
         assert "bounds-violation" in error_codes
 
         # Verify parameter analysis still works
-        param_classes = result.get("param_classes", set())
+        param_classes = result.get("param_classes", {})
         assert "CompleteExample" in param_classes
         assert "ExtendedExample" in param_classes
 
-        param_docs = result.get("param_parameter_docs", {})
-        assert len(param_docs.get("CompleteExample", {})) == 6  # All parameters documented
+        # Check documentation for CompleteExample
+        complete_example_class = param_classes.get("CompleteExample")
+        if complete_example_class:
+            documented_params = [p for p in complete_example_class.parameters.values() if p.doc]
+            assert len(documented_params) == 6  # All parameters documented
 
     def test_constructor_validation_error_recovery(self):
         """Test that constructor validation continues after errors."""
@@ -273,7 +276,7 @@ P(x=42)
 P(x="error4")
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # Should catch all 4 errors and not stop after first

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from param_lsp.models import convert_to_legacy_format
-
 
 class TestParameterInheritance:
     """Test parameter inheritance in class hierarchies."""
@@ -22,13 +20,14 @@ class S(P):
 S().b = "a"
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "P" in result["param_classes"]
-        assert "S" in result["param_classes"]
-        assert result["param_parameters"]["P"] == []
-        assert result["param_parameters"]["S"] == ["b"]
-        assert result["param_parameter_types"]["S"]["b"] == "Boolean"
+        param_classes = result["param_classes"]
+        assert "P" in param_classes
+        assert "S" in param_classes
+        assert len(param_classes["P"].parameters) == 0
+        assert list(param_classes["S"].parameters.keys()) == ["b"]
+        assert param_classes["S"].parameters["b"].param_type == "Boolean"
 
         # Should detect type error
         assert len(result["type_errors"]) == 1
@@ -56,21 +55,22 @@ T().b = "not_bool"
 T().name = 123
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "P" in result["param_classes"]
-        assert "S" in result["param_classes"]
-        assert "T" in result["param_classes"]
+        param_classes = result["param_classes"]
+        assert "P" in param_classes
+        assert "S" in param_classes
+        assert "T" in param_classes
 
         # Check parameter inheritance
-        assert result["param_parameters"]["P"] == ["x"]
-        assert set(result["param_parameters"]["S"]) == {"x", "b"}
-        assert set(result["param_parameters"]["T"]) == {"x", "b", "name"}
+        assert list(param_classes["P"].parameters.keys()) == ["x"]
+        assert set(param_classes["S"].parameters.keys()) == {"x", "b"}
+        assert set(param_classes["T"].parameters.keys()) == {"x", "b", "name"}
 
         # Check type inheritance
-        assert result["param_parameter_types"]["T"]["x"] == "Integer"
-        assert result["param_parameter_types"]["T"]["b"] == "Boolean"
-        assert result["param_parameter_types"]["T"]["name"] == "String"
+        assert param_classes["T"].parameters["x"].param_type == "Integer"
+        assert param_classes["T"].parameters["b"].param_type == "Boolean"
+        assert param_classes["T"].parameters["name"].param_type == "String"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -92,14 +92,15 @@ class S(P):
 S().value = 123  # Should error - expecting string now
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "P" in result["param_classes"]
-        assert "S" in result["param_classes"]
+        param_classes = result["param_classes"]
+        assert "P" in param_classes
+        assert "S" in param_classes
 
         # Child class should override parent parameter type
-        assert result["param_parameter_types"]["P"]["value"] == "Integer"
-        assert result["param_parameter_types"]["S"]["value"] == "String"
+        assert param_classes["P"].parameters["value"].param_type == "Integer"
+        assert param_classes["S"].parameters["value"].param_type == "String"
 
         # Should detect type error based on child class type
         assert len(result["type_errors"]) == 1
@@ -122,14 +123,15 @@ S().x = 15  # Should violate inherited bounds
 S().y = 10  # Should violate local bounds
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "P" in result["param_classes"]
-        assert "S" in result["param_classes"]
+        param_classes = result["param_classes"]
+        assert "P" in param_classes
+        assert "S" in param_classes
 
         # Check bounds inheritance
-        assert "x" in result["param_parameter_bounds"]["S"]
-        assert "y" in result["param_parameter_bounds"]["S"]
+        assert param_classes["S"].parameters["x"].bounds is not None
+        assert param_classes["S"].parameters["y"].bounds is not None
 
         # Should detect 2 bounds violations
         bounds_errors = [e for e in result["type_errors"] if e["code"] == "bounds-violation"]
@@ -147,14 +149,15 @@ class S(P):
     y = param.String("test", doc="Child parameter")
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "P" in result["param_classes"]
-        assert "S" in result["param_classes"]
+        param_classes = result["param_classes"]
+        assert "P" in param_classes
+        assert "S" in param_classes
 
         # Check doc inheritance
-        assert result["param_parameter_docs"]["S"]["x"] == "Parent parameter"
-        assert result["param_parameter_docs"]["S"]["y"] == "Child parameter"
+        assert param_classes["S"].parameters["x"].doc == "Parent parameter"
+        assert param_classes["S"].parameters["y"].doc == "Child parameter"
 
     def test_complex_inheritance_chain(self, analyzer):
         """Test complex inheritance with multiple parents and parameters."""
@@ -179,20 +182,21 @@ C().a_param = "not_int"   # Should error
 C().c_param = "not_num"   # Should error
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # All classes should be recognized
+        param_classes = result["param_classes"]
         expected_classes = {"Base", "A", "B", "C"}
-        assert result["param_classes"] == expected_classes
+        assert set(param_classes.keys()) == expected_classes
 
         # Check parameter inheritance for class C
-        c_params = set(result["param_parameters"]["C"])
+        c_params = set(param_classes["C"].parameters.keys())
         assert c_params == {"base_param", "a_param", "c_param"}
 
         # Check type inheritance
-        assert result["param_parameter_types"]["C"]["base_param"] == "String"
-        assert result["param_parameter_types"]["C"]["a_param"] == "Integer"
-        assert result["param_parameter_types"]["C"]["c_param"] == "Number"
+        assert param_classes["C"].parameters["base_param"].param_type == "String"
+        assert param_classes["C"].parameters["a_param"].param_type == "Integer"
+        assert param_classes["C"].parameters["c_param"].param_type == "Number"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -212,14 +216,15 @@ class P(param.Parameterized):
 S().x = "not_int"  # Should detect error for inherited parameter
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
-        assert "P" in result["param_classes"]
-        assert "S" in result["param_classes"]
+        param_classes = result["param_classes"]
+        assert "P" in param_classes
+        assert "S" in param_classes
 
         # Child should inherit parent's parameter
-        assert "x" in result["param_parameters"]["S"]
-        assert result["param_parameter_types"]["S"]["x"] == "Integer"
+        assert "x" in param_classes["S"].parameters
+        assert param_classes["S"].parameters["x"].param_type == "Integer"
 
         # Should detect type error
         assert len(result["type_errors"]) == 1

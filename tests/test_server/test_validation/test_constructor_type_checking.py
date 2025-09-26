@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
-from param_lsp.models import convert_to_legacy_format
 
 
 class TestConstructorTypeChecking:
@@ -20,7 +19,7 @@ class P(param.Parameterized):
 P(x="A")  # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -42,7 +41,7 @@ class P(param.Parameterized):
 P(flag="true")  # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -63,7 +62,7 @@ class P(param.Parameterized):
 P(y=15)  # Should trigger bounds error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -91,7 +90,7 @@ P(name="test")                  # Valid string
 P(x=5, y=2.5, flag=False, name="valid")  # All valid
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 0
@@ -109,7 +108,7 @@ class P(param.Parameterized):
 P(x="A", y=15, flag="true")  # Should trigger 3 errors
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -141,7 +140,7 @@ class Child(Base):
 Child(x="A", y=123)  # Should trigger 2 errors
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -165,7 +164,7 @@ class P(param.Parameterized):
 P(x=5, unknown_param="value")  # Should only check known parameters
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 0
@@ -186,7 +185,7 @@ NonParamClass(x="anything")  # Should be ignored
 P(x=5)                       # Valid param class call
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 0
@@ -203,7 +202,7 @@ P(x=0)   # Should trigger error (left exclusive)
 P(x=10)  # Should be valid (right inclusive)
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -226,7 +225,7 @@ P(value=5.5)   # Should be valid (float)
 P(value="5")   # Should trigger error (string)
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -250,7 +249,7 @@ P(coords=123)             # Should trigger error
 P(mapping=[1, 2, 3])      # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -278,7 +277,7 @@ class P(p.Parameterized):
 P(x="A")  # Should trigger error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -296,7 +295,7 @@ class P(Parameterized):
 P(x="A", name=123)  # Should trigger 2 errors
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -322,7 +321,7 @@ P(temp=-15)   # Should trigger bounds error
 P(count=-1)   # Should trigger bounds error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -353,7 +352,7 @@ class Child(Middle):
 Child(base_param=123, middle_param="abc", child_param="true")  # All should error
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 3
@@ -384,7 +383,7 @@ class P(param.Parameterized):
 P(a=5, b="valid", c="invalid", d=15)  # 2 should error, 2 should be valid
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -409,7 +408,7 @@ class Child(Parent):
 Child(x="should_error")  # Should error because x is now Integer in Child
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 1
@@ -428,7 +427,7 @@ P(required=None)   # Should error - None not allowed
 P(optional=None)   # Should NOT error - allow_None=True
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         # With allow_None implemented, we should get:
@@ -456,7 +455,7 @@ P(x=10)   # Should error (right exclusive)
 P(x=5)    # Should be valid
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2
@@ -484,7 +483,7 @@ P(num_param=1.2)    # Should error - outside bounds
 P(num_param=2.0)    # Should be valid
 """
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
         errors = result.get("type_errors", [])
 
         assert len(errors) == 2

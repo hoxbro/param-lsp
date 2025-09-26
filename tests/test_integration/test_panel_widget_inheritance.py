@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from param_lsp.analyzer import ParamAnalyzer
-from param_lsp.models import convert_to_legacy_format
 
 
 class TestPanelWidgetInheritance:
@@ -26,13 +25,14 @@ class T(pn.widgets.IntSlider):
 """
 
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Verify class is detected as Parameterized
         assert "T" in result["param_classes"]
+        t_class = result["param_classes"]["T"]
 
         # Verify T inherits Panel IntSlider parameters
-        t_params = result["param_parameters"]["T"]
+        t_params = list(t_class.parameters.keys())
         assert len(t_params) > 10  # Panel IntSlider has many parameters
 
         # Verify key parameters are available
@@ -43,8 +43,7 @@ class T(pn.widgets.IntSlider):
         # Note: 'name' parameter is excluded from autocompletion
 
         # Verify parameter types are correctly inherited
-        param_types = result["param_parameter_types"]["T"]
-        assert param_types["value"] == "Integer"
+        assert t_class.parameters["value"].param_type == "Integer"
 
     def test_panel_widget_chain_inheritance(self):
         """Test inheritance chain through Panel widgets."""
@@ -62,19 +61,22 @@ class MyWidget(CustomSlider):
 """
 
         analyzer = ParamAnalyzer()
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Both classes should be detected
         assert "CustomSlider" in result["param_classes"]
         assert "MyWidget" in result["param_classes"]
 
+        custom_slider_class = result["param_classes"]["CustomSlider"]
+        my_widget_class = result["param_classes"]["MyWidget"]
+
         # CustomSlider should have Panel IntSlider params + custom_param
-        custom_params = result["param_parameters"]["CustomSlider"]
+        custom_params = list(custom_slider_class.parameters.keys())
         assert "value" in custom_params
         assert "custom_param" in custom_params
 
         # MyWidget should inherit everything
-        my_params = result["param_parameters"]["MyWidget"]
+        my_params = list(my_widget_class.parameters.keys())
         assert "value" in my_params  # From Panel IntSlider
         assert "custom_param" in my_params  # From CustomSlider
         assert "my_param" in my_params  # Own parameter

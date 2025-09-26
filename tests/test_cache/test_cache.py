@@ -9,7 +9,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
-from param_lsp.models import convert_to_legacy_format
 
 
 @pytest.fixture
@@ -273,7 +272,7 @@ import panel as pn
 w = pn.widgets.IntSlider()
 w.value = "invalid"  # should error
 """
-            result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+            result = analyzer.analyze_file(code_py)
 
             # Verify cache was called
             external_library_cache.get.assert_called_with("panel", "panel.widgets.IntSlider")
@@ -297,7 +296,7 @@ w.value = "invalid"  # should error
 import panel as pn
 w = pn.widgets.IntSlider()
 """
-        convert_to_legacy_format(analyzer.analyze_file(code_py))
+        analyzer.analyze_file(code_py)
 
         # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
