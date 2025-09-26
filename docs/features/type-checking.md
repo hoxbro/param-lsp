@@ -6,30 +6,36 @@ param-lsp provides real-time validation of parameter values, types, and constrai
 
 Immediate feedback when parameter values violate bounds:
 
-```python
-import param
+=== "Screenshot"
 
-class Widget(param.Parameterized):
-    width = param.Integer(default=100, bounds=(10, 500))
-    opacity = param.Number(default=1.0, bounds=(0.0, 1.0))
+    <!-- TODO: Add screenshot showing error diagnostics for:
+    widget = Widget(width=1000, opacity=1.5)
+    with red squiggly lines under the invalid values and error tooltips
+    -->
 
-# These will show error diagnostics:
-widget = Widget(
-    width=1000,    # ❌ Error: Value 1000 exceeds upper bound 500
-    opacity=1.5    # ❌ Error: Value 1.5 exceeds upper bound 1.0
-)
+    **Screenshot needed:** Error diagnostics with red squiggly lines under invalid values and error tooltips
 
-# These are valid:
-widget = Widget(
-    width=250,     # ✅ Valid: Within bounds (10, 500)
-    opacity=0.8    # ✅ Valid: Within bounds (0.0, 1.0)
-)
-```
+=== "Code"
 
-<!-- TODO: Add screenshot showing error diagnostics for:
-widget = Widget(width=1000, opacity=1.5)
-with red squiggly lines under the invalid values and error tooltips
--->
+    ```python
+    import param
+
+    class Widget(param.Parameterized):
+        width = param.Integer(default=100, bounds=(10, 500))
+        opacity = param.Number(default=1.0, bounds=(0.0, 1.0))
+
+    # These will show error diagnostics:
+    widget = Widget(
+        width=1000,    # ❌ Error: Value 1000 exceeds upper bound 500
+        opacity=1.5    # ❌ Error: Value 1.5 exceeds upper bound 1.0
+    )
+
+    # These are valid:
+    widget = Widget(
+        width=250,     # ✅ Valid: Within bounds (10, 500)
+        opacity=0.8    # ✅ Valid: Within bounds (0.0, 1.0)
+    )
+    ```
 
 **Error messages include:**
 
@@ -41,21 +47,29 @@ with red squiggly lines under the invalid values and error tooltips
 
 Catch type mismatches before runtime:
 
-```python
-import param
+=== "Screenshot"
 
-class Config(param.Parameterized):
-    name = param.String(default="app")
-    count = param.Integer(default=10)
-    enabled = param.Boolean(default=True)
+    <!-- TODO: Add screenshot showing type validation errors -->
 
-# These will show error diagnostics:
-config = Config(
-    name=123,          # ❌ Error: Expected string, got integer
-    count="not_int",   # ❌ Error: Expected integer, got string
-    enabled="yes"      # ❌ Error: Expected boolean, got string
-)
-```
+    **Screenshot needed:** Type validation errors with specific type mismatch messages
+
+=== "Code"
+
+    ```python
+    import param
+
+    class Config(param.Parameterized):
+        name = param.String(default="app")
+        count = param.Integer(default=10)
+        enabled = param.Boolean(default=True)
+
+    # These will show error diagnostics:
+    config = Config(
+        name=123,          # ❌ Error: Expected string, got integer
+        count="not_int",   # ❌ Error: Expected integer, got string
+        enabled="yes"      # ❌ Error: Expected boolean, got string
+    )
+    ```
 
 **Supported type validations:**
 
@@ -71,31 +85,39 @@ config = Config(
 
 Validation for parameter choices:
 
-```python
-import param
+=== "Screenshot"
 
-class Theme(param.Parameterized):
-    style = param.Selector(
-        default="light",
-        objects=["light", "dark", "auto"]
+    <!-- TODO: Add screenshot showing selector validation errors -->
+
+    **Screenshot needed:** Selector validation errors showing invalid choice messages
+
+=== "Code"
+
+    ```python
+    import param
+
+    class Theme(param.Parameterized):
+        style = param.Selector(
+            default="light",
+            objects=["light", "dark", "auto"]
+        )
+        size = param.Selector(
+            default="medium",
+            objects=["small", "medium", "large"]
+        )
+
+    # This will show error diagnostics:
+    theme = Theme(
+        style="blue",      # ❌ Error: 'blue' not in allowed objects
+        size="tiny"        # ❌ Error: 'tiny' not in allowed objects
     )
-    size = param.Selector(
-        default="medium",
-        objects=["small", "medium", "large"]
+
+    # This is valid:
+    theme = Theme(
+        style="dark",      # ✅ Valid: In allowed objects
+        size="large"       # ✅ Valid: In allowed objects
     )
-
-# This will show error diagnostics:
-theme = Theme(
-    style="blue",      # ❌ Error: 'blue' not in allowed objects
-    size="tiny"        # ❌ Error: 'tiny' not in allowed objects
-)
-
-# This is valid:
-theme = Theme(
-    style="dark",      # ✅ Valid: In allowed objects
-    size="large"       # ✅ Valid: In allowed objects
-)
-```
+    ```
 
 **Selector features:**
 

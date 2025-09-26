@@ -6,20 +6,30 @@ param-lsp offers context-aware autocompletion for Param classes, parameters, and
 
 When creating instances of Parameterized classes, param-lsp provides intelligent parameter name completion:
 
-```python
-import param
+=== "Screenshot"
 
-class MyClass(param.Parameterized):
-    width = param.Integer(default=100, bounds=(1, 1000))
-    height = param.Integer(default=50, bounds=(1, 1000))
-    title = param.String(default="Widget")
+    <!-- TODO: Add screenshot showing autocompletion dropdown for:
+    MyClass(w|  # cursor position, showing width, height completions
+    ) -->
 
-# Type 'MyClass(' and see parameter completions
-instance = MyClass(
-    w  # <- Autocompletion suggests 'width'
-    # Completion shows: width, height, title
-)
-```
+    **Screenshot needed:** Autocompletion dropdown showing parameter suggestions for MyClass constructor
+
+=== "Code"
+
+    ```python
+    import param
+
+    class MyClass(param.Parameterized):
+        width = param.Integer(default=100, bounds=(1, 1000))
+        height = param.Integer(default=50, bounds=(1, 1000))
+        title = param.String(default="Widget")
+
+    # Type 'MyClass(' and see parameter completions
+    instance = MyClass(
+        w  # <- Autocompletion suggests 'width'
+        # Completion shows: width, height, title
+    )
+    ```
 
 **What you'll see:**
 
@@ -27,25 +37,27 @@ instance = MyClass(
 - Parameter type information in completion details
 - Default values and bounds shown in completion documentation
 
-<!-- TODO: Add screenshot showing autocompletion dropdown for:
-MyClass(w|  # cursor position, showing width, height completions
-) -->
-
-**Screenshot needed:** Autocompletion dropdown showing parameter suggestions
-
 ## Parameter Definition Completion
 
 When defining new Parameterized classes, get completions for parameter types:
 
-```python
-import param
+=== "Screenshot"
 
-class NewWidget(param.Parameterized):
-    # Type 'param.' to see all parameter types
-    value = param.Num  # <- Completes to 'param.Number'
-    text = param.Str   # <- Completes to 'param.String'
-    flag = param.Bool  # <- Completes to 'param.Boolean'
-```
+    <!-- TODO: Add screenshot showing parameter type completions when typing 'param.' -->
+
+    **Screenshot needed:** Parameter type completions when typing 'param.' in class definitions
+
+=== "Code"
+
+    ```python
+    import param
+
+    class NewWidget(param.Parameterized):
+        # Type 'param.' to see all parameter types
+        value = param.Num  # <- Completes to 'param.Number'
+        text = param.Str   # <- Completes to 'param.String'
+        flag = param.Bool  # <- Completes to 'param.Boolean'
+    ```
 
 **Available parameter types:**
 
@@ -62,21 +74,29 @@ class NewWidget(param.Parameterized):
 
 Smart completion for dependency decorators:
 
-```python
-import param
+=== "Screenshot"
 
-class DataProcessor(param.Parameterized):
-    input_file = param.String(default="data.csv")
-    threshold = param.Number(default=0.5)
+    <!-- TODO: Add screenshot showing parameter name completions within @param.depends decorator -->
 
-    @param.depends('inp  # <- Completes to 'input_file'
-    def process_data(self):
-        return f"Processing {self.input_file} with threshold {self.threshold}"
+    **Screenshot needed:** Parameter name completions within @param.depends decorator strings
 
-    @param.depends('input_file', 'thr  # <- Completes to 'threshold'
-    def advanced_processing(self):
-        pass
-```
+=== "Code"
+
+    ```python
+    import param
+
+    class DataProcessor(param.Parameterized):
+        input_file = param.String(default="data.csv")
+        threshold = param.Number(default=0.5)
+
+        @param.depends('inp  # <- Completes to 'input_file'
+        def process_data(self):
+            return f"Processing {self.input_file} with threshold {self.threshold}"
+
+        @param.depends('input_file', 'thr  # <- Completes to 'threshold'
+        def advanced_processing(self):
+            pass
+    ```
 
 **Features:**
 
@@ -89,24 +109,32 @@ class DataProcessor(param.Parameterized):
 
 Autocompletion includes parameters from parent classes:
 
-```python
-import param
+=== "Screenshot"
 
-class BaseWidget(param.Parameterized):
-    width = param.Integer(default=100)
-    height = param.Integer(default=50)
+    <!-- TODO: Add screenshot showing inheritance-aware parameter completion -->
 
-class Button(BaseWidget):
-    text = param.String(default="Click me")
-    disabled = param.Boolean(default=False)
+    **Screenshot needed:** Autocompletion showing both inherited and local parameters for Button class
 
-# Completion includes inherited parameters
-button = Button(
-    width=200,    # From BaseWidget
-    text="Submit", # From Button
-    # All available: width, height, text, disabled
-)
-```
+=== "Code"
+
+    ```python
+    import param
+
+    class BaseWidget(param.Parameterized):
+        width = param.Integer(default=100)
+        height = param.Integer(default=50)
+
+    class Button(BaseWidget):
+        text = param.String(default="Click me")
+        disabled = param.Boolean(default=False)
+
+    # Completion includes inherited parameters
+    button = Button(
+        width=200,    # From BaseWidget
+        text="Submit", # From Button
+        # All available: width, height, text, disabled
+    )
+    ```
 
 ## External Library Support
 
@@ -114,35 +142,51 @@ param-lsp provides intelligent completion for popular libraries:
 
 ### Panel Widgets
 
-```python
-import panel as pn
+=== "Screenshot"
 
-# param-lsp knows Panel parameter APIs
-slider = pn.widgets.IntSlider(
-    value=50,    # <- Autocompletion knows IntSlider parameters
-    start=0,     # <- Parameter bounds checking
-    end=100,     # <- Type validation
-    step=5       # <- Hover shows parameter documentation
-)
+    <!-- TODO: Add screenshot showing Panel widget parameter completion -->
 
-button = pn.widgets.Button(
-    name="Process",         # <- String parameter
-    button_type="primary"   # <- Selector validation
-)
-```
+    **Screenshot needed:** Intelligent completion for Panel widget parameters with type validation
+
+=== "Code"
+
+    ```python
+    import panel as pn
+
+    # param-lsp knows Panel parameter APIs
+    slider = pn.widgets.IntSlider(
+        value=50,    # <- Autocompletion knows IntSlider parameters
+        start=0,     # <- Parameter bounds checking
+        end=100,     # <- Type validation
+        step=5       # <- Hover shows parameter documentation
+    )
+
+    button = pn.widgets.Button(
+        name="Process",         # <- String parameter
+        button_type="primary"   # <- Selector validation
+    )
+    ```
 
 ### HoloViews Elements
 
-```python
-import holoviews as hv
+=== "Screenshot"
 
-# Smart completion for HoloViews elements
-scatter = hv.Scatter(data).opts(
-    size=10,           # <- Knows valid style options
-    color='blue',      # <- Type checking for color values
-    tools=['hover']    # <- Validates available tools
-)
-```
+    <!-- TODO: Add screenshot showing HoloViews element completion -->
+
+    **Screenshot needed:** Smart completion for HoloViews elements with style options validation
+
+=== "Code"
+
+    ```python
+    import holoviews as hv
+
+    # Smart completion for HoloViews elements
+    scatter = hv.Scatter(data).opts(
+        size=10,           # <- Knows valid style options
+        color='blue',      # <- Type checking for color values
+        tools=['hover']    # <- Validates available tools
+    )
+    ```
 
 ## Completion Filtering
 

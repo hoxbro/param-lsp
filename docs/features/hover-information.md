@@ -6,32 +6,38 @@ Rich documentation appears when hovering over parameters, classes, and methods i
 
 Hover over any parameter to see comprehensive information:
 
-```python
-import param
+=== "Screenshot"
 
-class VideoPlayer(param.Parameterized):
-    volume = param.Number(
-        default=0.5,
-        bounds=(0.0, 1.0),
-        doc="Audio volume level from 0.0 (mute) to 1.0 (maximum)"
-    )
+    <!-- TODO: Add screenshot showing hover tooltip for 'volume' parameter with:
+    - Type: param.Number
+    - Default: 0.5
+    - Bounds: (0.0, 1.0)
+    - Doc: "Audio volume level from 0.0 (mute) to 1.0 (maximum)"
+    -->
 
-    quality = param.Selector(
-        default="720p",
-        objects=["480p", "720p", "1080p", "4K"],
-        doc="Video quality setting"
-    )
+    **Screenshot needed:** Hover tooltip showing parameter type, default, bounds, and documentation
 
-# Hover over 'volume' or 'quality' to see:
-player = VideoPlayer(volume=0.8, quality="1080p")
-```
+=== "Code"
 
-<!-- TODO: Add screenshot showing hover tooltip for 'volume' parameter with:
-- Type: param.Number
-- Default: 0.5
-- Bounds: (0.0, 1.0)
-- Doc: "Audio volume level from 0.0 (mute) to 1.0 (maximum)"
--->
+    ```python
+    import param
+
+    class VideoPlayer(param.Parameterized):
+        volume = param.Number(
+            default=0.5,
+            bounds=(0.0, 1.0),
+            doc="Audio volume level from 0.0 (mute) to 1.0 (maximum)"
+        )
+
+        quality = param.Selector(
+            default="720p",
+            objects=["480p", "720p", "1080p", "4K"],
+            doc="Video quality setting"
+        )
+
+    # Hover over 'volume' or 'quality' to see:
+    player = VideoPlayer(volume=0.8, quality="1080p")
+    ```
 
 **Hover information includes:**
 
@@ -45,22 +51,30 @@ player = VideoPlayer(volume=0.8, quality="1080p")
 
 Hover over Parameterized class names for class-level information:
 
-```python
-import param
+=== "Screenshot"
 
-class MediaProcessor(param.Parameterized):
-    """
-    A media processing pipeline with configurable parameters.
+    <!-- TODO: Add screenshot showing class hover tooltip with docstring and parameter summary -->
 
-    This class handles various media formats and provides
-    real-time processing capabilities.
-    """
+    **Screenshot needed:** Class hover tooltip showing docstring and parameter summary
 
-    input_format = param.Selector(default="mp4", objects=["mp4", "avi", "mov"])
+=== "Code"
 
-# Hover over 'MediaProcessor' to see class docstring and parameter summary
-processor = MediaProcessor()
-```
+    ```python
+    import param
+
+    class MediaProcessor(param.Parameterized):
+        """
+        A media processing pipeline with configurable parameters.
+
+        This class handles various media formats and provides
+        real-time processing capabilities.
+        """
+
+        input_format = param.Selector(default="mp4", objects=["mp4", "avi", "mov"])
+
+    # Hover over 'MediaProcessor' to see class docstring and parameter summary
+    processor = MediaProcessor()
+    ```
 
 **Class hover shows:**
 
@@ -157,23 +171,31 @@ class AppSettings(param.Parameterized):
 
 Hover over methods with `@param.depends` to see dependency information:
 
-```python
-import param
+=== "Screenshot"
 
-class DataAnalyzer(param.Parameterized):
-    data_file = param.String(default="data.csv")
-    threshold = param.Number(default=0.5, bounds=(0, 1))
+    <!-- TODO: Add screenshot showing method hover with dependency information -->
 
-    @param.depends('data_file', 'threshold')
-    def analyze(self):
-        """Analyze data with current threshold."""
-        return f"Analyzing {self.data_file} with threshold {self.threshold}"
+    **Screenshot needed:** Method hover showing dependencies and documentation
 
-    # Hover over 'analyze' shows:
-    # - Method documentation
-    # - Parameter dependencies: data_file, threshold
-    # - Return type information
-```
+=== "Code"
+
+    ```python
+    import param
+
+    class DataAnalyzer(param.Parameterized):
+        data_file = param.String(default="data.csv")
+        threshold = param.Number(default=0.5, bounds=(0, 1))
+
+        @param.depends('data_file', 'threshold')
+        def analyze(self):
+            """Analyze data with current threshold."""
+            return f"Analyzing {self.data_file} with threshold {self.threshold}"
+
+        # Hover over 'analyze' shows:
+        # - Method documentation
+        # - Parameter dependencies: data_file, threshold
+        # - Return type information
+    ```
 
 **Method hover shows:**
 

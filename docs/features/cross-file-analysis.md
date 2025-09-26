@@ -6,39 +6,45 @@ param-lsp intelligently tracks parameter inheritance and usage across multiple f
 
 Track parameters across class hierarchies spanning multiple files:
 
-**base.py:**
+=== "Screenshot"
 
-```python
-import param
+    <!-- TODO: Add screenshot showing cross-file inheritance autocompletion for:
+    button = Button(|  # cursor showing completions including inherited params
+    with completions showing: width, height, visible (from BaseWidget) and text, disabled (from Button)
+    -->
 
-class BaseWidget(param.Parameterized):
-    width = param.Integer(default=100, bounds=(1, 1000))
-    height = param.Integer(default=50, bounds=(1, 1000))
-    visible = param.Boolean(default=True)
-```
+    **Screenshot needed:** Cross-file inheritance autocompletion showing inherited parameters
 
-**button.py:**
+=== "Code"
 
-```python
-from .base import BaseWidget
-import param
+    **base.py:**
 
-class Button(BaseWidget):
-    # Inherits: width, height, visible
-    text = param.String(default="Click me")
-    disabled = param.Boolean(default=False)
+    ```python
+    import param
 
-# Autocompletion includes inherited parameters:
-button = Button(
-    width=200,    # ✅ From BaseWidget
-    text="Submit" # ✅ From Button
-)
-```
+    class BaseWidget(param.Parameterized):
+        width = param.Integer(default=100, bounds=(1, 1000))
+        height = param.Integer(default=50, bounds=(1, 1000))
+        visible = param.Boolean(default=True)
+    ```
 
-<!-- TODO: Add screenshot showing cross-file inheritance autocompletion for:
-button = Button(|  # cursor showing completions including inherited params
-with completions showing: width, height, visible (from BaseWidget) and text, disabled (from Button)
--->
+    **button.py:**
+
+    ```python
+    from .base import BaseWidget
+    import param
+
+    class Button(BaseWidget):
+        # Inherits: width, height, visible
+        text = param.String(default="Click me")
+        disabled = param.Boolean(default=False)
+
+    # Autocompletion includes inherited parameters:
+    button = Button(
+        width=200,    # ✅ From BaseWidget
+        text="Submit" # ✅ From Button
+    )
+    ```
 
 **Features:**
 
@@ -55,22 +61,30 @@ param-lsp has built-in knowledge of popular HoloViz ecosystem libraries:
 
 Smart completion and validation for Panel widgets:
 
-```python
-import panel as pn
+=== "Screenshot"
 
-# param-lsp knows Panel parameter APIs
-widget = pn.widgets.IntSlider(
-    value=50,       # ✅ Autocompletion knows IntSlider parameters
-    start=0,        # ✅ Parameter bounds checking
-    end=100,        # ✅ Type validation
-    step=5          # ✅ Hover shows parameter documentation
-)
+    <!-- TODO: Add screenshot showing Panel widget parameter completion -->
 
-button = pn.widgets.Button(
-    name="Process",     # ✅ String parameter
-    button_type="primary"  # ✅ Selector validation
-)
-```
+    **Screenshot needed:** Panel widget parameter completion with type validation
+
+=== "Code"
+
+    ```python
+    import panel as pn
+
+    # param-lsp knows Panel parameter APIs
+    widget = pn.widgets.IntSlider(
+        value=50,       # ✅ Autocompletion knows IntSlider parameters
+        start=0,        # ✅ Parameter bounds checking
+        end=100,        # ✅ Type validation
+        step=5          # ✅ Hover shows parameter documentation
+    )
+
+    button = pn.widgets.Button(
+        name="Process",     # ✅ String parameter
+        button_type="primary"  # ✅ Selector validation
+    )
+    ```
 
 **Supported Panel widgets:**
 

@@ -6,18 +6,24 @@ param-lsp provides enhanced editor experience with visual feedback, quick fixes,
 
 Visual feedback directly in your editor:
 
-```python
-# Red squiggly lines under problematic code
-widget = MyWidget(
-    width=2000,    # 🔴 Bounds violation highlighted
-    invalid_param=True  # 🔴 Unknown parameter highlighted
-)
-```
+=== "Screenshot"
 
-<!-- TODO: Add screenshot showing IDE with error indicators:
-Code editor showing red squiggly lines under invalid parameter values
-with error tooltips displaying specific constraint violations
--->
+    <!-- TODO: Add screenshot showing IDE with error indicators:
+    Code editor showing red squiggly lines under invalid parameter values
+    with error tooltips displaying specific constraint violations
+    -->
+
+    **Screenshot needed:** IDE with error indicators showing red squiggly lines and error tooltips
+
+=== "Code"
+
+    ```python
+    # Red squiggly lines under problematic code
+    widget = MyWidget(
+        width=2000,    # 🔴 Bounds violation highlighted
+        invalid_param=True  # 🔴 Unknown parameter highlighted
+    )
+    ```
 
 **Error indicator types:**
 
@@ -31,20 +37,28 @@ Suggested fixes for common issues appear in context menus:
 
 ### Bound Violations
 
-```python
-import param
+=== "Screenshot"
 
-class Widget(param.Parameterized):
-    width = param.Integer(bounds=(10, 500))
+    <!-- TODO: Add screenshot showing quick fix suggestions for bounds violation -->
 
-# Problem: Value exceeds bounds
-widget = Widget(width=1000)  # 🔴 Error
+    **Screenshot needed:** Quick fix menu showing options for bounds violations
 
-# Quick fixes offered:
-# ✅ Set to maximum value (500)
-# ✅ Set to default value
-# ✅ Remove parameter (use default)
-```
+=== "Code"
+
+    ```python
+    import param
+
+    class Widget(param.Parameterized):
+        width = param.Integer(bounds=(10, 500))
+
+    # Problem: Value exceeds bounds
+    widget = Widget(width=1000)  # 🔴 Error
+
+    # Quick fixes offered:
+    # ✅ Set to maximum value (500)
+    # ✅ Set to default value
+    # ✅ Remove parameter (use default)
+    ```
 
 ### Type Errors
 
@@ -147,15 +161,23 @@ Enhanced syntax highlighting for param-specific constructs:
 
 ### Parameter Definitions
 
-```python
-import param
+=== "Screenshot"
 
-class Widget(param.Parameterized):
-    # Different colors for different parameter types
-    width = param.Integer(default=100)      # Blue for Integer
-    name = param.String(default="widget")   # Green for String
-    enabled = param.Boolean(default=True)   # Purple for Boolean
-```
+    <!-- TODO: Add screenshot showing syntax highlighting for different parameter types -->
+
+    **Screenshot needed:** Syntax highlighting showing different colors for parameter types
+
+=== "Code"
+
+    ```python
+    import param
+
+    class Widget(param.Parameterized):
+        # Different colors for different parameter types
+        width = param.Integer(default=100)      # Blue for Integer
+        name = param.String(default="widget")   # Green for String
+        enabled = param.Boolean(default=True)   # Purple for Boolean
+    ```
 
 ### Decorators
 
