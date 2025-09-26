@@ -932,9 +932,9 @@ class ParamAnalyzer:
             return param_info.bounds if param_info else None
 
         # Check external classes
-        external_class_info = self.external_param_classes.get(class_name)
-        if external_class_info:
-            param_info = external_class_info.get_parameter(param_name)
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
             return param_info.bounds if param_info else None
 
         return None
@@ -991,9 +991,9 @@ class ParamAnalyzer:
             return param_info.param_type if param_info else None
 
         # Check external classes
-        external_class_info = self.external_param_classes.get(class_name)
-        if external_class_info:
-            param_info = external_class_info.get_parameter(param_name)
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
             return param_info.param_type if param_info else None
 
         return None
@@ -1006,9 +1006,9 @@ class ParamAnalyzer:
             return param_info.allow_none if param_info else False
 
         # Check external classes
-        external_class_info = self.external_param_classes.get(class_name)
-        if external_class_info:
-            param_info = external_class_info.get_parameter(param_name)
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
             return param_info.allow_none if param_info else False
 
         return False
@@ -1754,9 +1754,9 @@ class ParamAnalyzer:
                         continue
 
                     # Introspect and cache the class
-                    external_class_info = self._introspect_param_class_for_cache(cls)
-                    if external_class_info:
-                        external_library_cache.set(library_name, full_path, external_class_info)
+                    class_info = self._introspect_param_class_for_cache(cls)
+                    if class_info:
+                        external_library_cache.set(library_name, full_path, class_info)
                         classes_cached += 1
 
             except (TypeError, AttributeError):
@@ -1893,12 +1893,10 @@ class ParamAnalyzer:
                         if alias in self.imports:
                             full_module = self.imports[alias]
                             full_class_path = f"{full_module}.{class_part}"
-                            external_class_info = self.external_param_classes.get(full_class_path)
-                            if external_class_info is None:
-                                external_class_info = self._analyze_external_class_ast(
-                                    full_class_path
-                                )
-                            if external_class_info:
+                            class_info = self.external_param_classes.get(full_class_path)
+                            if class_info is None:
+                                class_info = self._analyze_external_class_ast(full_class_path)
+                            if class_info:
                                 # Return the original dotted name for external class handling
                                 return assigned_class
 
