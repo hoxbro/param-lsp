@@ -1,6 +1,41 @@
-# Type Checking & Diagnostics
+# Type Validation & Diagnostics
 
 param-lsp provides real-time validation of parameter values, types, and constraints with immediate error feedback.
+
+## Type Validation
+
+Catch type mismatches before runtime:
+
+=== "Screenshot"
+
+    ![Parameter Assignment Error](../assets/parameter-assignment-error.png)
+
+    Error diagnostics with red squiggly lines under invalid values and error tooltips
+
+=== "Code"
+
+    ```python
+    import param
+
+    class MyClass(param.Parameterized):
+        title = param.String(default="Widget")
+        bad_title = param.String(default=1)
+
+
+    instance = MyClass(bad_title=2)
+
+    instance.bad_title = 3
+    ```
+
+**Supported type validations:**
+
+- **String**: Text values, optional regex patterns
+- **Integer**: Whole numbers with optional bounds
+- **Number**: Numeric values (int/float) with optional bounds
+- **Boolean**: True/False values
+- **List**: List objects with optional item type checking
+- **Dict**: Dictionary objects
+- **Tuple**: Tuple objects with optional element validation
 
 ## Bounds Checking
 
@@ -8,12 +43,9 @@ Immediate feedback when parameter values violate bounds:
 
 === "Screenshot"
 
-    <!-- TODO: Add screenshot showing error diagnostics for:
-    widget = Widget(width=1000, opacity=1.5)
-    with red squiggly lines under the invalid values and error tooltips
-    Suggested filename: bounds-validation-errors.png -->
+    ![Bounds Validation Errors](../assets/bounds-validation-errors.png)
 
-    **Screenshot needed:** Error diagnostics with red squiggly lines under invalid values and error tooltips
+    Error diagnostics with red squiggly lines under invalid values and error tooltips
 
 === "Code"
 
@@ -42,36 +74,6 @@ Immediate feedback when parameter values violate bounds:
 - Specific bound violation details
 - Expected range information
 - Suggested valid values
-
-## Type Validation
-
-Catch type mismatches before runtime:
-
-```python
-import param
-
-class Config(param.Parameterized):
-    name = param.String(default="app")
-    count = param.Integer(default=10)
-    enabled = param.Boolean(default=True)
-
-# These will show error diagnostics:
-config = Config(
-    name=123,          # ❌ Error: Expected string, got integer
-    count="not_int",   # ❌ Error: Expected integer, got string
-    enabled="yes"      # ❌ Error: Expected boolean, got string
-)
-```
-
-**Supported type validations:**
-
-- **String**: Text values, optional regex patterns
-- **Integer**: Whole numbers with optional bounds
-- **Number**: Numeric values (int/float) with optional bounds
-- **Boolean**: True/False values
-- **List**: List objects with optional item type checking
-- **Dict**: Dictionary objects
-- **Tuple**: Tuple objects with optional element validation
 
 ## Selector Validation
 
@@ -188,132 +190,3 @@ range_obj = Range(
     max_value=30  # ❌ Error: min_value >= max_value
 )
 ```
-
-## Real-Time Validation
-
-param-lsp provides validation as you type:
-
-### Immediate Feedback
-
-- **Red squiggly lines** under invalid values
-- **Error tooltips** with detailed messages
-- **Quick fixes** suggesting corrections
-
-### Validation Timing
-
-- **On save**: Full validation when file is saved
-- **On type**: Basic validation while typing
-- **On hover**: Detailed validation information
-
-## Error Severity Levels
-
-Different types of validation errors:
-
-### Errors (Red)
-
-```python
-# Bound violations, type mismatches, invalid choices
-widget = Widget(width=2000)  # ❌ Exceeds bounds
-```
-
-### Warnings (Yellow)
-
-```python
-# Deprecated parameters, unusual values
-widget = Widget(width=999)   # ⚠️ Close to upper bound
-```
-
-### Information (Blue)
-
-```python
-# Suggestions, best practices
-widget = Widget()  # ℹ️ Using default values
-```
-
-## Configuration Options
-
-Customize type checking behavior:
-
-```json
-{
-  "param-lsp": {
-    "diagnostics": {
-      "enable": true,
-      "bounds_checking": true,
-      "type_validation": true,
-      "regex_validation": true,
-      "unknown_parameters": "error"
-    }
-  }
-}
-```
-
-**Options:**
-
-- `enable` - Enable/disable all diagnostics
-- `bounds_checking` - Validate numeric bounds
-- `type_validation` - Check parameter types
-- `regex_validation` - Validate regex patterns
-- `unknown_parameters` - `"error"`, `"warning"`, or `"ignore"`
-
-## Performance Considerations
-
-Type checking is optimized for responsiveness:
-
-- **Incremental validation**: Only re-check changed code
-- **Background processing**: Heavy validation runs in background
-- **Caching**: Results cached for unchanged code
-- **Configurable limits**: Set maximum validation scope
-
-## Troubleshooting Type Checking
-
-If type checking isn't working:
-
-1. **Check diagnostics enabled**: Verify settings allow error reporting
-2. **Verify parameter definitions**: Ensure parameters have proper constraints
-3. **Check editor support**: Confirm your editor displays LSP diagnostics
-4. **Test with simple examples**: Use obvious errors to verify functionality
-
-Common issues:
-
-- **No error indicators**: Check editor LSP diagnostic display
-- **Incorrect error messages**: Verify parameter definitions
-- **Slow validation**: Adjust performance settings
-
-## Advanced Validation
-
-### Custom Validators
-
-```python
-import param
-
-def positive_validator(value):
-    if value <= 0:
-        raise ValueError("Value must be positive")
-
-class Model(param.Parameterized):
-    value = param.Number(
-        default=1.0,
-        validator=positive_validator
-    )
-```
-
-### Conditional Validation
-
-```python
-import param
-
-class ConditionalWidget(param.Parameterized):
-    mode = param.Selector(default="auto", objects=["auto", "manual"])
-    manual_value = param.Number(default=0)
-
-    @param.depends('mode')
-    def _validate_manual_value(self):
-        if self.mode == "manual" and self.manual_value == 0:
-            raise ValueError("manual_value required when mode='manual'")
-```
-
-## Next Steps
-
-- [Hover Information](hover-information.md) - Explore documentation features
-- [Autocompletion](autocompletion.md) - Learn about intelligent code completion

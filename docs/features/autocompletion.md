@@ -8,12 +8,9 @@ When creating instances of Parameterized classes, param-lsp provides intelligent
 
 === "Screenshot"
 
-    <!-- TODO: Add screenshot showing autocompletion dropdown for:
-    MyClass(w|  # cursor position, showing width, height completions
-    )
-    Suggested filename: parameter-constructor-completion.png -->
+    ![Parameter Constructor Completion](../assets/parameter-constructor-completion.png)
 
-    **Screenshot needed:** Autocompletion dropdown showing parameter suggestions for MyClass constructor
+    Autocompletion dropdown showing parameter suggestions for MyClass constructor
 
 === "Code"
 
@@ -75,7 +72,9 @@ Smart completion for dependency decorators:
 
 === "Screenshot"
 
-    **Screenshot needed:** Parameter name completions within @param.depends decorator strings
+    ![Param Depends Completion](../assets/param-depends-completion.png)
+
+    Parameter name completions within @param.depends decorator strings
 
 === "Code"
 
@@ -108,7 +107,9 @@ Autocompletion includes parameters from parent classes:
 
 === "Screenshot"
 
-    **Screenshot needed:** Autocompletion showing both inherited and local parameters for Button class
+    ![Cross-file Inheritance Completion](../assets/cross-file-inheritance-completion.png)
+
+    Autocompletion showing both inherited and local parameters for Button class
 
 === "Code"
 

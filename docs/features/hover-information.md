@@ -8,14 +8,9 @@ Hover over any parameter to see comprehensive information:
 
 === "Screenshot"
 
-    <!-- TODO: Add screenshot showing hover tooltip for 'volume' parameter with:
-    - Type: param.Number
-    - Default: 0.5
-    - Bounds: (0.0, 1.0)
-    - Doc: "Audio volume level from 0.0 (mute) to 1.0 (maximum)"
-    Suggested filename: parameter-hover-tooltip.png -->
+    ![Parameter Hover Tooltip](../assets/parameter-hover-tooltip.png)
 
-    **Screenshot needed:** Hover tooltip showing parameter type, default, bounds, and documentation
+    Hover tooltip showing parameter type, default, bounds, and documentation
 
 === "Code"
 
