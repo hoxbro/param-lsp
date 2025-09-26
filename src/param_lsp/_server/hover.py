@@ -40,7 +40,7 @@ class HoverMixin(LSPServerBase):
                 return rx_method_info
 
             # Check if it's a parameter type
-            if hasattr(self, "clss") and word in self.clss:
+            if hasattr(self, "classes") and word in self.classes:
                 if param:
                     param_class = getattr(param, word, None)
                     if param_class and hasattr(param_class, "__doc__"):

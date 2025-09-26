@@ -24,22 +24,22 @@ class LSPServerBase(LanguageServer):
         self.workspace_root: str | None = None
         self.analyzer = ParamAnalyzer()
         self.document_cache: dict[str, dict[str, Any]] = {}
-        self.clss = self._get_clss()
+        self.classes = self._get_classes()
 
     def _uri_to_path(self, uri: str) -> str:
         """Convert URI to file path."""
         return urlsplit(uri).path
 
-    def _get_clss(self) -> list[str]:
+    def _get_classes(self) -> list[str]:
         """Get available Param parameter types."""
 
         # Get actual param types from the module
-        clss = []
+        classes = []
         for name in dir(param):
             obj = getattr(param, name)
             if inspect.isclass(obj) and issubclass(obj, param.Parameter):
-                clss.append(name)
-        return clss
+                classes.append(name)
+        return classes
 
     def _get_python_type_name(self, cls: str, allow_None: bool = False) -> str:
         """Map param type to Python type name for display using existing param_type_map."""

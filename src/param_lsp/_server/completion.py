@@ -63,7 +63,7 @@ class CompletionMixin(LSPServerBase):
         if match:
             cls = match.group(1)
             # Check if it's a valid param type
-            return cls in self.clss
+            return cls in self.classes
 
         return False
 
@@ -74,7 +74,7 @@ class CompletionMixin(LSPServerBase):
         before_cursor = line[:character]
         if before_cursor.rstrip().endswith("param."):
             completions = []
-            for cls in self.clss:
+            for cls in self.classes:
                 documentation = f"Param parameter type: {cls}"
 
                 # Try to get actual documentation from param module

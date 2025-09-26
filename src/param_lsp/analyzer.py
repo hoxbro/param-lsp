@@ -481,21 +481,21 @@ class ParamAnalyzer:
                 param_module = param_class_info.get("module")
 
                 # Use param types from constants
-                clss = PARAM_TYPES
+                classes = PARAM_TYPES
 
                 # If we have module info, verify it's from param
                 if param_module and "param" in param_module:
-                    return cls in clss
+                    return cls in classes
                 # If no module but type matches and we have param imports, likely a param type
                 elif (
                     param_module is None
-                    and cls in clss
+                    and cls in classes
                     and any("param" in imp for imp in self.imports.values())
                 ):
                     return True
                 # Direct param.X() call
                 elif param_module == "param":
-                    return cls in clss
+                    return cls in classes
 
         return False
 
