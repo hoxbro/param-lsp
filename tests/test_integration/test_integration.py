@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from param_lsp.models import convert_to_legacy_format
-
 
 class TestIntegration:
     """Integration tests covering complete workflows."""
@@ -59,13 +57,14 @@ example.count = 0               # Bounds violation
 example.ratio = 0               # Exclusive bounds violation
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Verify class detection
         assert "CompleteExample" in result["param_classes"]
+        complete_class = result["param_classes"]["CompleteExample"]
 
         # Verify parameter extraction
-        params = result["param_parameters"]["CompleteExample"]
+        params = list(complete_class.parameters.keys())
         expected_params = [
             "name",
             "count",
@@ -79,24 +78,21 @@ example.ratio = 0               # Exclusive bounds violation
         assert all(param in params for param in expected_params)
 
         # Verify type extraction
-        types = result["param_parameter_types"]["CompleteExample"]
-        assert types["name"] == "String"
-        assert types["count"] == "Integer"
-        assert types["enabled"] == "Boolean"
-        assert types["ratio"] == "Number"
+        assert complete_class.parameters["name"].param_type == "String"
+        assert complete_class.parameters["count"].param_type == "Integer"
+        assert complete_class.parameters["enabled"].param_type == "Boolean"
+        assert complete_class.parameters["ratio"].param_type == "Number"
 
         # Verify documentation extraction
-        docs = result["param_parameter_docs"]["CompleteExample"]
-        assert "name" in docs
-        assert "The name of the example" in docs["name"]
-        assert "count" in docs
-        assert "enabled" in docs
-        assert "ratio" in docs
+        assert complete_class.parameters["name"].doc is not None
+        assert "The name of the example" in complete_class.parameters["name"].doc
+        assert complete_class.parameters["count"].doc is not None
+        assert complete_class.parameters["enabled"].doc is not None
+        assert complete_class.parameters["ratio"].doc is not None
 
         # Verify bounds extraction
-        bounds = result["param_parameter_bounds"]["CompleteExample"]
-        assert "count" in bounds
-        assert "ratio" in bounds
+        assert complete_class.parameters["count"].bounds is not None
+        assert complete_class.parameters["ratio"].bounds is not None
 
         # Count and categorize errors
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
@@ -174,13 +170,13 @@ processor.learning_rate = 1.5       # Bounds error
 processor.use_gpu = 1              # Boolean type error
 '''
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Verify comprehensive analysis
         assert "DataProcessor" in result["param_classes"]
+        data_processor_class = result["param_classes"]["DataProcessor"]
 
         # Check all parameter types are detected
-        types = result["param_parameter_types"]["DataProcessor"]
         expected_types = {
             "input_file": "Filename",
             "output_dir": "Foldername",
@@ -192,17 +188,16 @@ processor.use_gpu = 1              # Boolean type error
         }
 
         for param_name, expected_type in expected_types.items():
-            assert param_name in types
-            assert types[param_name] == expected_type
+            assert param_name in data_processor_class.parameters
+            assert data_processor_class.parameters[param_name].param_type == expected_type
 
         # Check documentation is extracted
-        docs = result["param_parameter_docs"]["DataProcessor"]
-        assert len(docs) == 7  # All parameters have docs
+        docs_count = sum(1 for p in data_processor_class.parameters.values() if p.doc is not None)
+        assert docs_count == 7  # All parameters have docs
 
         # Check bounds are extracted
-        bounds = result["param_parameter_bounds"]["DataProcessor"]
-        assert "batch_size" in bounds
-        assert "learning_rate" in bounds
+        assert data_processor_class.parameters["batch_size"].bounds is not None
+        assert data_processor_class.parameters["learning_rate"].bounds is not None
 
         # Check runtime errors are detected
         runtime_errors = [e for e in result["type_errors"] if "runtime" in e["code"]]
@@ -247,21 +242,21 @@ edge.extreme_bounds = 1e9        # Valid (within bounds)
 edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Verify all edge cases are handled
         assert "EdgeCases" in result["param_classes"]
+        edge_cases_class = result["param_classes"]["EdgeCases"]
 
         # Check documentation extraction handles long text and special characters
-        docs = result["param_parameter_docs"]["EdgeCases"]
-        assert "long_doc" in docs
-        assert "café" in docs["long_doc"]
-        assert "!@#$%^&*()" in docs["long_doc"]
+        long_doc_param = edge_cases_class.parameters["long_doc"]
+        assert long_doc_param.doc is not None
+        assert "café" in long_doc_param.doc
+        assert "!@#$%^&*()" in long_doc_param.doc
 
         # Check bounds handling with extreme values
-        bounds = result["param_parameter_bounds"]["EdgeCases"]
-        assert "extreme_bounds" in bounds
-        assert "precise_bounds" in bounds
+        assert edge_cases_class.parameters["extreme_bounds"].bounds is not None
+        assert edge_cases_class.parameters["precise_bounds"].bounds is not None
 
         # Check precise bounds violation is detected
         bounds_violations = [e for e in result["type_errors"] if e["code"] == "bounds-violation"]
@@ -281,8 +276,9 @@ class ValidClass(param.Parameterized):
 """
 
         # This should not crash the analyzer
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         # Should still extract the valid parts
         assert "ValidClass" in result["param_classes"]
-        assert result["param_parameter_types"]["ValidClass"]["valid_param"] == "String"
+        valid_class = result["param_classes"]["ValidClass"]
+        assert valid_class.parameters["valid_param"].param_type == "String"
