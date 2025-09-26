@@ -13,12 +13,46 @@ param-lsp provides IDE support for Python codebases that use Param, offering:
 
 ## Getting Started
 
-Documentation coming soon...
+New to param-lsp? Start with our comprehensive [User Guide](user-guide.md) that covers:
+
+- Installation instructions for all major editors
+- Step-by-step configuration examples
+- Getting started tutorial with sample code
+- Basic usage patterns
 
 ## Features
 
-Documentation coming soon...
+Explore param-lsp's powerful IDE features in our [Features documentation](features.md):
 
-## API Reference
+- **Autocompletion** - Context-aware parameter completions
+- **Type Checking** - Real-time validation with error diagnostics
+- **Hover Information** - Rich parameter documentation
+- **Cross-File Analysis** - Intelligent inheritance tracking
 
-Documentation coming soon...
+## Need Help?
+
+Having issues? Check our [Troubleshooting Guide](troubleshooting.md) for:
+
+- Common installation problems and solutions
+- Editor-specific configuration issues
+- Performance optimization tips
+- FAQ and community resources
+
+## Quick Example
+
+```python
+import param
+
+class MyWidget(param.Parameterized):
+    width = param.Integer(default=100, bounds=(1, 1000))
+    title = param.String(default="My Widget")
+
+# Get autocompletion, hover docs, and error checking:
+widget = MyWidget(width=200, title="Dashboard")
+```
+
+## Community & Support
+
+- **GitHub**: [Report issues and contribute](https://github.com/hoxbro/param-lsp)
+- **HoloViz Discord**: [Join the community](https://discord.gg/UXdtYyC)
+- **Documentation**: You're reading it!

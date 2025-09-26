@@ -9,6 +9,9 @@ docs_dir: .
 
 nav:
   - Home: index.md
+  - User Guide: user-guide.md
+  - Features: features.md
+  - Troubleshooting: troubleshooting.md
 
 theme:
   name: material
