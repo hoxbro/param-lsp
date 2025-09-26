@@ -221,9 +221,7 @@ class CompletionMixin(LSPServerBase):
                         display_value = self._format_default_for_display(default_value, cls)
 
                         # Build documentation for this specific parameter
-                        documentation = self._build_parameter_documentation_from_info(
-                            param_info, class_name
-                        )
+                        documentation = self._build_parameter_documentation(param_info, class_name)
 
                         completions.append(
                             CompletionItem(
@@ -256,9 +254,7 @@ class CompletionMixin(LSPServerBase):
                             continue
 
                         # Build documentation for the parameter
-                        documentation = self._build_parameter_documentation_from_info(
-                            param_info, class_name
-                        )
+                        documentation = self._build_parameter_documentation(param_info, class_name)
 
                         # Create insert text with default value if available
                         if param_info.default is not None:
@@ -305,7 +301,7 @@ class CompletionMixin(LSPServerBase):
                             continue
 
                         # Build documentation for external parameter
-                        documentation = self._build_parameter_documentation_from_info(
+                        documentation = self._build_parameter_documentation(
                             param_info, full_class_path or class_name
                         )
 
@@ -404,9 +400,7 @@ class CompletionMixin(LSPServerBase):
                 continue
 
             # Build documentation for the parameter
-            documentation = self._build_parameter_documentation_from_info(
-                param_info, containing_class
-            )
+            documentation = self._build_parameter_documentation(param_info, containing_class)
 
             # Create completion item with quoted string for param.depends
             completions.append(
@@ -656,9 +650,7 @@ class CompletionMixin(LSPServerBase):
                 continue
 
             # Build documentation for the parameter
-            documentation = self._build_parameter_documentation_from_info(
-                param_info, class_info.name
-            )
+            documentation = self._build_parameter_documentation(param_info, class_info.name)
 
             completions.append(
                 CompletionItem(
@@ -1000,9 +992,7 @@ class CompletionMixin(LSPServerBase):
                 continue
 
             # Build documentation for the parameter
-            documentation = self._build_parameter_documentation_from_info(
-                param_info, class_info.name
-            )
+            documentation = self._build_parameter_documentation(param_info, class_info.name)
 
             # Create insert text with default value if available
             if param_info.default is not None:
@@ -1128,59 +1118,7 @@ class CompletionMixin(LSPServerBase):
         after_cursor = line[character:].lstrip()
         return not after_cursor.startswith("()")
 
-    def _build_parameter_documentation(
-        self,
-        param_name: str,
-        class_name: str,
-        parameter_types: dict[str, str],
-        parameter_docs: dict[str, str],
-        parameter_bounds: dict[str, tuple],
-        parameter_allow_None: dict[str, bool] | None = None,
-        parameter_defaults: dict[str, str] | None = None,
-    ) -> str:
-        """Build standardized parameter documentation."""
-        doc_parts = []
-
-        # Add parameter type info
-        cls = parameter_types.get(param_name)
-        if cls:
-            python_type = self._get_python_type_name(cls)
-            doc_parts.append(f"Type: {cls} ({python_type})")
-
-        # Add bounds info
-        bounds = parameter_bounds.get(param_name)
-        if bounds:
-            if len(bounds) == 2:
-                min_val, max_val = bounds
-                doc_parts.append(f"Bounds: [{min_val}, {max_val}]")
-            elif len(bounds) == 4:
-                min_val, max_val, left_inclusive, right_inclusive = bounds
-                left_bracket = "[" if left_inclusive else "("
-                right_bracket = "]" if right_inclusive else ")"
-                doc_parts.append(f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}")
-
-        # Add allow_None info
-        if parameter_allow_None:
-            allow_None = parameter_allow_None.get(param_name, False)
-            if allow_None:
-                doc_parts.append("Allows None")
-
-        # Add parameter-specific documentation
-        param_doc = parameter_docs.get(param_name)
-        if param_doc:
-            doc_parts.append(f"Description: {param_doc}")
-
-        # Add default value info
-        if parameter_defaults:
-            default_value = parameter_defaults.get(param_name)
-            if default_value:
-                doc_parts.append(f"Default: {default_value}")
-
-        return "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
-
-    def _build_parameter_documentation_from_info(
-        self, param_info: ParameterInfo, class_name: str
-    ) -> str:
+    def _build_parameter_documentation(self, param_info: ParameterInfo, class_name: str) -> str:
         """Build standardized parameter documentation from ParameterInfo dataclass."""
         doc_parts = []
 
