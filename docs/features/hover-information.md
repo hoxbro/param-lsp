@@ -13,7 +13,7 @@ Hover over any parameter to see comprehensive information:
     - Default: 0.5
     - Bounds: (0.0, 1.0)
     - Doc: "Audio volume level from 0.0 (mute) to 1.0 (maximum)"
-    -->
+    Suggested filename: parameter-hover-tooltip.png -->
 
     **Screenshot needed:** Hover tooltip showing parameter type, default, bounds, and documentation
 

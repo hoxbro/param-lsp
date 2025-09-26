@@ -10,7 +10,8 @@ When creating instances of Parameterized classes, param-lsp provides intelligent
 
     <!-- TODO: Add screenshot showing autocompletion dropdown for:
     MyClass(w|  # cursor position, showing width, height completions
-    ) -->
+    )
+    Suggested filename: parameter-constructor-completion.png -->
 
     **Screenshot needed:** Autocompletion dropdown showing parameter suggestions for MyClass constructor
 

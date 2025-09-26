@@ -11,7 +11,7 @@ Track parameters across class hierarchies spanning multiple files:
     <!-- TODO: Add screenshot showing cross-file inheritance autocompletion for:
     button = Button(|  # cursor showing completions including inherited params
     with completions showing: width, height, visible (from BaseWidget) and text, disabled (from Button)
-    -->
+    Suggested filename: cross-file-inheritance-completion.png -->
 
     **Screenshot needed:** Cross-file inheritance autocompletion showing inherited parameters
 

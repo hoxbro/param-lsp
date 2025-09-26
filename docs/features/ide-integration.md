@@ -11,7 +11,7 @@ Visual feedback directly in your editor:
     <!-- TODO: Add screenshot showing IDE with error indicators:
     Code editor showing red squiggly lines under invalid parameter values
     with error tooltips displaying specific constraint violations
-    -->
+    Suggested filename: ide-error-indicators.png -->
 
     **Screenshot needed:** IDE with error indicators showing red squiggly lines and error tooltips
 

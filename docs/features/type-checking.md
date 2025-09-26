@@ -11,7 +11,7 @@ Immediate feedback when parameter values violate bounds:
     <!-- TODO: Add screenshot showing error diagnostics for:
     widget = Widget(width=1000, opacity=1.5)
     with red squiggly lines under the invalid values and error tooltips
-    -->
+    Suggested filename: bounds-validation-errors.png -->
 
     **Screenshot needed:** Error diagnostics with red squiggly lines under invalid values and error tooltips
 
