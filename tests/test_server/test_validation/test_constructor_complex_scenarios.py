@@ -154,11 +154,10 @@ Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer val
 
         # Verify the analyzer chose one consistent type for 'shared'
         combined_class = result["param_classes"]["Combined"]
-        param_types = {p.name: p.param_type for p in combined_class.parameters.values()}
-        assert "shared" in param_types
+        assert "shared" in combined_class.parameters
 
         # Currently uses "last wins" - MixinB's Integer type should win
-        assert param_types["shared"] == "Integer"
+        assert combined_class.parameters["shared"].param_type == "Integer"
 
         # Should have 1 error for the string assignment to Integer parameter
         assert len(errors) == 1
