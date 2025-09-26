@@ -316,5 +316,4 @@ class ConditionalWidget(param.Parameterized):
 ## Next Steps
 
 - [Hover Information](hover-information.md) - Explore documentation features
-- [Cross-File Analysis](cross-file-analysis.md) - Learn about inheritance tracking
-- [Configuration](../configuration.md) - Customize validation behavior
+- [Autocompletion](autocompletion.md) - Learn about intelligent code completion

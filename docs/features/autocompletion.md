@@ -133,7 +133,7 @@ Autocompletion includes parameters from parent classes:
 
 ## External Library Support
 
-param-lsp provides intelligent completion for popular libraries:
+param-lsp provides intelligent completion for other HoloViz libraries, Panel and HoloViews.
 
 ### Panel Widgets
 
@@ -157,25 +157,6 @@ param-lsp provides intelligent completion for popular libraries:
     button = pn.widgets.Button(
         name="Process",         # <- String parameter
         button_type="primary"   # <- Selector validation
-    )
-    ```
-
-### HoloViews Elements
-
-=== "Screenshot"
-
-    **Screenshot needed:** Smart completion for HoloViews elements with style options validation
-
-=== "Code"
-
-    ```python
-    import holoviews as hv
-
-    # Smart completion for HoloViews elements
-    scatter = hv.Scatter(data).opts(
-        size=10,           # <- Knows valid style options
-        color='blue',      # <- Type checking for color values
-        tools=['hover']    # <- Validates available tools
     )
     ```
 
@@ -216,46 +197,3 @@ model = Model(
     batch  # <- 'batch_size' suggested first
 )
 ```
-
-## Configuration Options
-
-Customize autocompletion behavior:
-
-```json
-{
-  "param-lsp": {
-    "completion": {
-      "include_inherited": true,
-      "show_parameter_docs": true,
-      "external_libraries": ["panel", "holoviews"],
-      "max_completions": 50,
-      "sort_by_relevance": true
-    }
-  }
-}
-```
-
-**Options:**
-
-- `include_inherited` - Show parameters from parent classes
-- `show_parameter_docs` - Include documentation in completion details
-- `external_libraries` - Libraries to analyze for completions
-- `max_completions` - Maximum number of completion items
-- `sort_by_relevance` - Sort by usage frequency and context
-
-## Troubleshooting Autocompletion
-
-If autocompletion isn't working:
-
-1. **Check file is Python**: Verify syntax highlighting and file association
-2. **Verify param import**: Ensure `import param` is present
-3. **Check class inheritance**: Class must inherit from `param.Parameterized`
-4. **Restart language server**: Reload your editor or restart LSP client
-
-See [Troubleshooting](../troubleshooting/) for more detailed solutions.
-
-## Next Steps
-
-- [Type Checking](type-checking.md) - Learn about error detection
-- [Hover Information](hover-information.md) - Explore documentation features
-- [Configuration](../configuration.md) - Customize completion behavior

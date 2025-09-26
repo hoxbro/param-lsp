@@ -25,16 +25,12 @@ Explore param-lsp's powerful IDE features:
 - **[Autocompletion](features/autocompletion.md)** - Context-aware parameter completions
 - **[Type Checking](features/type-checking.md)** - Real-time validation with error diagnostics
 - **[Hover Information](features/hover-information.md)** - Rich parameter documentation
-- **[Cross-File Analysis](features/cross-file-analysis.md)** - Intelligent inheritance tracking
-- **[IDE Integration](features/ide-integration.md)** - Enhanced editor experience
 
 ## Need Help?
 
-Having issues? Check our organized troubleshooting guides:
+Having issues? Check our getting started guide:
 
-- **[Installation Issues](troubleshooting/installation-issues.md)** - Setup and installation problems
-- **[Usage Issues](troubleshooting/usage-issues.md)** - Feature and functionality problems
-- **[Troubleshooting Overview](troubleshooting/)** - Complete troubleshooting guide
+- **[Getting Started](getting-started.md)** - Learn basic usage with practical examples
 
 ## Quick Example
 

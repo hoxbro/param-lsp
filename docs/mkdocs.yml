@@ -17,12 +17,6 @@ nav:
       - Autocompletion: features/autocompletion.md
       - Type Checking: features/type-checking.md
       - Hover Information: features/hover-information.md
-      - Cross-File Analysis: features/cross-file-analysis.md
-      - IDE Integration: features/ide-integration.md
-  - Troubleshooting:
-      - Overview: troubleshooting/index.md
-      - Installation Issues: troubleshooting/installation-issues.md
-      - Usage Issues: troubleshooting/usage-issues.md
 
 theme:
   name: material
