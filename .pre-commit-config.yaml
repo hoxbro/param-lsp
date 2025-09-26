@@ -51,3 +51,11 @@ repos:
     hooks:
       - id: stylua-github
         name: stylua
+        args:
+          [
+            --line-endings=Unix,
+            --indent-type=Spaces,
+            --indent-width=4,
+            --collapse-simple-statement=Always,
+            --sort-requires,
+          ]
