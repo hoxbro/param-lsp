@@ -311,7 +311,21 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data = {"parameters": ["value"]}
+            # Create test data using dataclass format
+            param_class_info = ParamClassInfo(name="TestClass")
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    param_type="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data = ExternalClassInfo(
+                class_name="TestClass", param_class_info=param_class_info
+            )
 
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
                 # Set cache data for multiple libraries

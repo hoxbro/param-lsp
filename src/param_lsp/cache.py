@@ -93,9 +93,7 @@ class ExternalLibraryCache:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
-    def set(
-        self, library_name: str, class_path: str, data: ExternalClassInfo | dict[str, Any]
-    ) -> None:
+    def set(self, library_name: str, class_path: str, data: ExternalClassInfo) -> None:
         """Cache introspection data for a library class."""
         if not self._caching_enabled:
             return
@@ -121,11 +119,7 @@ class ExternalLibraryCache:
                 pass
 
         # Serialize the dataclass to dict format
-        if isinstance(data, ExternalClassInfo):
-            serialized_data = self._serialize_external_class_info(data)
-        else:
-            # Legacy dict format - use as is but migrate structure
-            serialized_data = data
+        serialized_data = self._serialize_external_class_info(data)
 
         # Update with new data
         cache_data["classes"][class_path] = serialized_data
@@ -151,7 +145,7 @@ class ExternalLibraryCache:
 
     def _is_cache_valid(self, cache_data: dict[str, Any], library_name: str, version: str) -> bool:
         """Validate cache data format and version compatibility."""
-        # Check if this is old format (classes directly at root)
+        # Only accept new format with metadata
         if "metadata" not in cache_data:
             return False
 
@@ -161,10 +155,12 @@ class ExternalLibraryCache:
         if metadata.get("library_name") != library_name:
             return False
 
-        if tuple(metadata.get("library_version")) != parse_version(version):
+        # Check library version match
+        if tuple(metadata.get("library_version", ())) != parse_version(version):
             return False
 
-        return tuple(metadata.get("cache_version")) >= CACHE_VERSION
+        # Only accept exact cache version match (no backward compatibility)
+        return tuple(metadata.get("cache_version", ())) == CACHE_VERSION
 
     def _serialize_external_class_info(
         self, external_class_info: ExternalClassInfo
@@ -190,7 +186,7 @@ class ExternalLibraryCache:
             "parameters": parameters_data,
         }
 
-    def _deserialize_external_class_info(self, data: dict[str, Any]) -> ExternalClassInfo:
+    def _deserialize_external_class_info(self, data: dict[str, Any]) -> ExternalClassInfo | None:
         """Deserialize dictionary format back to ExternalClassInfo."""
         # Handle new dataclass format
         if "class_name" in data and "parameters" in data and isinstance(data["parameters"], dict):
@@ -214,11 +210,10 @@ class ExternalLibraryCache:
 
             return ExternalClassInfo(class_name=class_name, param_class_info=param_class_info)
 
-        # Handle legacy format - use from_legacy_dict
+        # Legacy format no longer supported - cache will be regenerated
         else:
-            # We need a class name - extract from context if possible
-            class_name = "Unknown"
-            return ExternalClassInfo.from_legacy_dict(class_name, data)
+            logger.debug("Legacy cache format detected, will regenerate cache")
+            return None
 
     def clear(self, library_name: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
