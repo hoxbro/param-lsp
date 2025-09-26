@@ -38,6 +38,7 @@ dev = [
     "holoviews; python_version != '3.14'",
     "panel; python_version != '3.14'",
 ]
+docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
 
 [tool.hatch.version]
 source = "vcs"
