@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
-from param_lsp.models import convert_to_legacy_format
 
 
 class TestUserExample:
@@ -46,14 +45,15 @@ S().x = "a"  # This should now trigger a type error!
         with open(example_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(example_file)))
+        result = analyzer.analyze_file(content, str(example_file))
 
         # Verify S is detected as a param class
         assert "S" in result["param_classes"], "Class S should be detected as a param class"
+        s_class = result["param_classes"]["S"]
 
         # Verify S inherits parameters from P
-        assert "x" in result["param_parameters"]["S"], "S should inherit parameter 'x' from P"
-        assert result["param_parameter_types"]["S"]["x"] == "Integer", (
+        assert "x" in s_class.parameters, "S should inherit parameter 'x' from P"
+        assert s_class.parameters["x"].param_type == "Integer", (
             "Parameter 'x' should be of type Integer"
         )
 
@@ -95,12 +95,13 @@ S().b = "a"
         with open(child_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(child_file)))
+        result = analyzer.analyze_file(content, str(child_file))
 
         # Verify the inheritance works
         assert "S" in result["param_classes"], "Class S should be detected as a param class"
-        assert "b" in result["param_parameters"]["S"], "S should have parameter 'b'"
-        assert result["param_parameter_types"]["S"]["b"] == "Boolean", (
+        s_class = result["param_classes"]["S"]
+        assert "b" in s_class.parameters, "S should have parameter 'b'"
+        assert s_class.parameters["b"].param_type == "Boolean", (
             "Parameter 'b' should be Boolean type"
         )
 
@@ -157,25 +158,31 @@ obj.final_bool = "xyz"  # Error: Boolean parameter
         with open(final_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(final_file)))
+        result = analyzer.analyze_file(content, str(final_file))
 
         # Verify complete inheritance chain
         assert "Final" in result["param_classes"], (
             "Class Final should be detected as a param class"
         )
+        final_class = result["param_classes"]["Final"]
 
         # Check all inherited parameters
         expected_params = {"base_str", "middle_int", "final_bool"}
-        actual_params = set(result["param_parameters"]["Final"])
+        actual_params = set(final_class.parameters.keys())
         assert actual_params == expected_params, (
             f"Final should inherit all parameters: expected {expected_params}, got {actual_params}"
         )
 
         # Check parameter types
-        param_types = result["param_parameter_types"]["Final"]
-        assert param_types["base_str"] == "String", "base_str should be String type"
-        assert param_types["middle_int"] == "Integer", "middle_int should be Integer type"
-        assert param_types["final_bool"] == "Boolean", "final_bool should be Boolean type"
+        assert final_class.parameters["base_str"].param_type == "String", (
+            "base_str should be String type"
+        )
+        assert final_class.parameters["middle_int"].param_type == "Integer", (
+            "middle_int should be Integer type"
+        )
+        assert final_class.parameters["final_bool"].param_type == "Boolean", (
+            "final_bool should be Boolean type"
+        )
 
         # Verify all type errors are detected
         assert len(result["type_errors"]) == 3, "Should detect exactly three type errors"
@@ -224,33 +231,24 @@ D().d_param = "wrong"   # Error: Number
         with open(test_file) as f:
             content = f.read()
 
-        result = convert_to_legacy_format(analyzer.analyze_file(content, str(test_file)))
+        result = analyzer.analyze_file(content, str(test_file))
 
         # Verify both classes are detected
         assert "C" in result["param_classes"], "Class C should be detected"
         assert "D" in result["param_classes"], "Class D should be detected"
 
+        c_class = result["param_classes"]["C"]
+        d_class = result["param_classes"]["D"]
+
         # Verify inheritance for C
-        assert set(result["param_parameters"]["C"]) == {"a_param", "c_param"}, (
-            "C should inherit from A"
-        )
-        assert result["param_parameter_types"]["C"]["a_param"] == "String", (
-            "a_param should be String"
-        )
-        assert result["param_parameter_types"]["C"]["c_param"] == "Boolean", (
-            "c_param should be Boolean"
-        )
+        assert set(c_class.parameters.keys()) == {"a_param", "c_param"}, "C should inherit from A"
+        assert c_class.parameters["a_param"].param_type == "String", "a_param should be String"
+        assert c_class.parameters["c_param"].param_type == "Boolean", "c_param should be Boolean"
 
         # Verify inheritance for D
-        assert set(result["param_parameters"]["D"]) == {"b_param", "d_param"}, (
-            "D should inherit from B"
-        )
-        assert result["param_parameter_types"]["D"]["b_param"] == "Integer", (
-            "b_param should be Integer"
-        )
-        assert result["param_parameter_types"]["D"]["d_param"] == "Number", (
-            "d_param should be Number"
-        )
+        assert set(d_class.parameters.keys()) == {"b_param", "d_param"}, "D should inherit from B"
+        assert d_class.parameters["b_param"].param_type == "Integer", "b_param should be Integer"
+        assert d_class.parameters["d_param"].param_type == "Number", "d_param should be Number"
 
         # Verify all type errors are detected
         assert len(result["type_errors"]) == 4, "Should detect four type errors"
