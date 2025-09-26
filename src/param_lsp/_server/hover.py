@@ -87,7 +87,7 @@ class HoverMixin(LSPServerBase):
             ]
         else:
             header_parts = [f"**{param_info.param_type} Parameter '{param_name}'**"]
-        python_type = self._get_python_type_name(param_info.param_type, param_info.allow_none)
+        python_type = self._get_python_type_name(param_info.param_type, param_info.allow_None)
         header_parts.append(f"Allowed types: {python_type}")
 
         # Add bounds information to header section

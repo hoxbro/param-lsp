@@ -263,7 +263,7 @@ obj.unknown_param = "value"  # This parameter doesn't exist
         hover_known = server._get_hover_info(uri, "obj.known_param = 'value'", "known_param")
         assert hover_known is not None, "Should provide hover info for known parameter"
 
-    def test_hover_inherited_parameter_with_allow_none(self, tmp_path):
+    def test_hover_inherited_parameter_with_allow_None(self, tmp_path):
         """Test hover information for inherited parameters with allow_None."""
         # Create parent module with allow_None parameter
         parent_file = tmp_path / "parent.py"

@@ -172,7 +172,7 @@ class ExternalLibraryCache:
                 "param_type": param_info.param_type,
                 "bounds": param_info.bounds,
                 "doc": param_info.doc,
-                "allow_none": param_info.allow_none,
+                "allow_None": param_info.allow_None,
                 "default": param_info.default,
                 "location": param_info.location,
             }
@@ -197,7 +197,7 @@ class ExternalLibraryCache:
                     param_type=param_data["param_type"],
                     bounds=param_data.get("bounds"),
                     doc=param_data.get("doc"),
-                    allow_none=param_data.get("allow_none", False),
+                    allow_None=param_data.get("allow_None", False),
                     default=param_data.get("default"),
                     location=param_data.get("location"),
                 )

@@ -14,7 +14,7 @@ class ParameterInfo:
     param_type: str
     bounds: tuple | None = None
     doc: str | None = None
-    allow_none: bool = False
+    allow_None: bool = False
     default: str | None = None
     location: dict[str, Any] | None = None
 

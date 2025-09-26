@@ -1141,7 +1141,7 @@ class CompletionMixin(LSPServerBase):
         parameter_types: dict[str, str],
         parameter_docs: dict[str, str],
         parameter_bounds: dict[str, tuple],
-        parameter_allow_none: dict[str, bool] | None = None,
+        parameter_allow_None: dict[str, bool] | None = None,
         parameter_defaults: dict[str, str] | None = None,
     ) -> str:
         """Build standardized parameter documentation."""
@@ -1166,9 +1166,9 @@ class CompletionMixin(LSPServerBase):
                 doc_parts.append(f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}")
 
         # Add allow_None info
-        if parameter_allow_none:
-            allow_none = parameter_allow_none.get(param_name, False)
-            if allow_none:
+        if parameter_allow_None:
+            allow_None = parameter_allow_None.get(param_name, False)
+            if allow_None:
                 doc_parts.append("Allows None")
 
         # Add parameter-specific documentation
@@ -1216,8 +1216,8 @@ class CompletionMixin(LSPServerBase):
         if param_info.doc:
             doc_parts.append(f"Description: {param_info.doc}")
 
-        # Add allow_none info if not default
-        if param_info.allow_none is not None and param_info.allow_none:
+        # Add allow_None info if not default
+        if param_info.allow_None is not None and param_info.allow_None:
             doc_parts.append("Allows None: Yes")
 
         # Add default value info

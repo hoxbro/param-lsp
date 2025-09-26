@@ -304,7 +304,7 @@ class ParamAnalyzer:
                         param_type = ""
                         bounds = None
                         doc = None
-                        allow_none = False
+                        allow_None = False
                         default = None
                         location = None
 
@@ -341,7 +341,7 @@ class ParamAnalyzer:
                             doc = self._extract_doc_from_call(item.value)
 
                             # Get allow_None if present
-                            allow_none_value = self._extract_allow_none_from_call(item.value)
+                            allow_None_value = self._extract_allow_None_from_call(item.value)
                             default_value = self._extract_default_from_call(item.value)
 
                             # Store default value as a string representation
@@ -350,9 +350,9 @@ class ParamAnalyzer:
 
                             # Param automatically sets allow_None=True when default=None
                             if default_value is not None and self._is_none_value(default_value):
-                                allow_none = True
-                            elif allow_none_value is not None:
-                                allow_none = allow_none_value
+                                allow_None = True
+                            elif allow_None_value is not None:
+                                allow_None = allow_None_value
 
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
@@ -360,7 +360,7 @@ class ParamAnalyzer:
                             param_type=param_type or "Unknown",
                             bounds=bounds,
                             doc=doc,
-                            allow_none=allow_none,
+                            allow_None=allow_None,
                             default=default,
                             location=location,
                         )
@@ -405,7 +405,7 @@ class ParamAnalyzer:
                 return self._extract_string_value(keyword.value)
         return None
 
-    def _extract_allow_none_from_call(self, call_node: ast.Call) -> bool | None:
+    def _extract_allow_None_from_call(self, call_node: ast.Call) -> bool | None:
         """Extract allow_None from a parameter call."""
         for keyword in call_node.keywords:
             if keyword.arg == "allow_None":
@@ -552,8 +552,8 @@ class ParamAnalyzer:
             # Check if None is allowed for this parameter
             inferred_type = self._infer_value_type(param_value)
             if inferred_type is type(None):  # None value
-                allow_none = self._get_parameter_allow_none(class_name, param_name)
-                if allow_none:
+                allow_None = self._get_parameter_allow_None(class_name, param_name)
+                if allow_None:
                     continue  # None is allowed, skip further validation
                 # If allow_None is False or not specified, continue with normal type checking
 
@@ -691,16 +691,16 @@ class ParamAnalyzer:
 
         # Get default value and allow_None from keyword arguments
         default_value = None
-        allow_none = None
+        allow_None = None
         for keyword in node.value.keywords:
             if keyword.arg == "default":
                 default_value = keyword.value
             elif keyword.arg == "allow_None":
-                allow_none = self._extract_boolean_value(keyword.value)
+                allow_None = self._extract_boolean_value(keyword.value)
 
         # Param automatically sets allow_None=True when default=None
         if default_value is not None and self._is_none_value(default_value):
-            allow_none = True
+            allow_None = True
 
         if param_type and default_value and param_type in self.param_type_map:
             expected_types = self.param_type_map[param_type]
@@ -710,7 +710,7 @@ class ParamAnalyzer:
             inferred_type = self._infer_value_type(default_value)
 
             # Check if None is allowed for this parameter
-            if allow_none and inferred_type is type(None):
+            if allow_None and inferred_type is type(None):
                 return  # None is allowed, skip further validation
                 # If allow_None is False or not specified, continue with normal type checking
 
@@ -810,8 +810,8 @@ class ParamAnalyzer:
 
             # Check if None is allowed for this parameter
             if inferred_type is type(None):  # None value
-                allow_none = self._get_parameter_allow_none(instance_class, param_name)
-                if allow_none:
+                allow_None = self._get_parameter_allow_None(instance_class, param_name)
+                if allow_None:
                     return  # None is allowed, skip further validation
                 # If allow_None is False or not specified, continue with normal type checking
 
@@ -998,18 +998,18 @@ class ParamAnalyzer:
 
         return None
 
-    def _get_parameter_allow_none(self, class_name: str, param_name: str) -> bool:
+    def _get_parameter_allow_None(self, class_name: str, param_name: str) -> bool:
         """Get the allow_None setting for a parameter from a class definition."""
         # Check local classes first
         if class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.allow_none if param_info else False
+            return param_info.allow_None if param_info else False
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
         if class_info:
             param_info = class_info.get_parameter(param_name)
-            return param_info.allow_none if param_info else False
+            return param_info.allow_None if param_info else False
 
         return False
 
@@ -1444,7 +1444,7 @@ class ParamAnalyzer:
                         )
 
                         # Get allow_None
-                        allow_none = (
+                        allow_None = (
                             param_obj.allow_None if hasattr(param_obj, "allow_None") else False
                         )
 
@@ -1469,7 +1469,7 @@ class ParamAnalyzer:
                             param_type=param_type_name,
                             bounds=bounds,
                             doc=doc,
-                            allow_none=allow_none,
+                            allow_None=allow_None,
                             default=default,
                             location=location,
                         )
@@ -1837,7 +1837,7 @@ class ParamAnalyzer:
                         )
 
                         # Get allow_None
-                        allow_none = (
+                        allow_None = (
                             param_obj.allow_None if hasattr(param_obj, "allow_None") else False
                         )
 
@@ -1850,7 +1850,7 @@ class ParamAnalyzer:
                             param_type=param_type_name,
                             bounds=bounds,
                             doc=doc,
-                            allow_none=allow_none,
+                            allow_None=allow_None,
                             default=default,
                             location=None,  # No location for external classes
                         )
