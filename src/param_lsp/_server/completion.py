@@ -294,39 +294,30 @@ class CompletionMixin(LSPServerBase):
                     external_class_info = analyzer._analyze_external_class_ast(full_class_path)
 
                 if external_class_info:
-                    # External class info is already an ExternalClassInfo object from analyzer
-                    legacy_format = external_class_info.to_legacy_dict()
-
-                    parameters = legacy_format["parameters"]
-                    parameter_types = legacy_format["parameter_types"]
-                    parameter_docs = legacy_format["parameter_docs"]
-                    parameter_bounds = legacy_format["parameter_bounds"]
-                    parameter_allow_none = legacy_format["parameter_allow_none"]
-                    parameter_defaults = legacy_format["parameter_defaults"]
+                    # External class info contains a ParamClassInfo object
+                    external_class_info_obj = external_class_info.param_class_info
 
                     used_params = set()
                     used_matches = _re_constructor_param_assignment.findall(before_cursor)
                     used_params.update(used_matches)
 
-                    for param_name in parameters:
+                    for param_name in external_class_info_obj.get_parameter_names():
                         if param_name in used_params or param_name == "name":
                             continue
 
+                        param_info = external_class_info_obj.parameters.get(param_name)
+                        if not param_info:
+                            continue
+
                         # Build documentation for external parameter
-                        documentation = self._build_parameter_documentation(
-                            param_name,
-                            full_class_path or class_name,
-                            parameter_types,
-                            parameter_docs,
-                            parameter_bounds,
-                            parameter_allow_none,
-                            parameter_defaults,
+                        documentation = self._build_parameter_documentation_from_info(
+                            param_info, full_class_path or class_name
                         )
 
                         # Create insert text with default value if available
-                        default_value = parameter_defaults.get(param_name)
-                        if default_value is not None:
-                            param_type = parameter_types.get(param_name)
+                        if param_info.default is not None:
+                            default_value = param_info.default
+                            param_type = param_info.param_type
                             display_value = self._format_default_for_display(
                                 default_value, param_type
                             )
