@@ -72,7 +72,7 @@ class MyClass(param.Parameterized):
     width = param.Integer(default=100)
 
 # Problem: Typo in parameter name
-instance = MyClass(widht=200)  # 🔴 Error (intentional typo example)  # codespell:ignore widht
+instance = MyClass(widht=200)  # 🔴 Error should have been width
 
 # Quick fixes offered:
 # ✅ Fix typo: width=200
