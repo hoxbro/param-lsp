@@ -183,11 +183,11 @@ ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        #
 
         # Verify bounds are correctly extracted including None bounds
         complex_bounds_class = result["param_classes"]["ComplexBounds"]
-        bounds = {p.name: p.bounds for p in complex_bounds_class.parameters.values() if p.bounds}
-        assert bounds["percentage"] == (0, 100, False, True)  # (0, 100]
-        assert bounds["angle"] == (-180, 180, True, False)  # [-180, 180)
-        assert bounds["probability"] == (0, 1, True, True)  # [0, 1]
-        assert bounds["positive_int"] == (1, None, True, True)  # [1, ∞]
+        p = complex_bounds_class.parameters
+        assert p["percentage"].bounds == (0, 100, False, True)  # (0, 100]
+        assert p["angle"].bounds == (-180, 180, True, False)  # [-180, 180)
+        assert p["probability"].bounds == (0, 1, True, True)  # [0, 1]
+        assert p["positive_int"].bounds == (1, None, True, True)  # [1, ∞]
 
         # Should have 4 bounds violations
         assert len(errors) == 4
