@@ -210,11 +210,6 @@ class ExternalLibraryCache:
 
             return ExternalClassInfo(class_name=class_name, param_class_info=param_class_info)
 
-        # Legacy format no longer supported - cache will be regenerated
-        else:
-            logger.debug("Legacy cache format detected, will regenerate cache")
-            return None
-
     def clear(self, library_name: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
         if library_name:
