@@ -19,7 +19,7 @@ import param
 
 from .cache import external_library_cache
 from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
-from .models import ExternalClassInfo, ParamClassInfo, ParameterInfo
+from .models import ParamClassInfo, ParameterInfo
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class ParamAnalyzer:
 
         # Cache for external Parameterized classes (AST-based detection)
         self.external_param_classes: dict[
-            str, ExternalClassInfo | None
+            str, ParamClassInfo | None
         ] = {}  # full_class_path -> class_info
 
         # Populate external library cache on initialization
@@ -932,9 +932,9 @@ class ParamAnalyzer:
             return param_info.bounds if param_info else None
 
         # Check external classes
-        external_class_info = self.external_param_classes.get(class_name)
-        if external_class_info:
-            param_info = external_class_info.get_parameter(param_name)
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
             return param_info.bounds if param_info else None
 
         return None
@@ -991,9 +991,9 @@ class ParamAnalyzer:
             return param_info.param_type if param_info else None
 
         # Check external classes
-        external_class_info = self.external_param_classes.get(class_name)
-        if external_class_info:
-            param_info = external_class_info.get_parameter(param_name)
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
             return param_info.param_type if param_info else None
 
         return None
@@ -1006,9 +1006,9 @@ class ParamAnalyzer:
             return param_info.allow_none if param_info else False
 
         # Check external classes
-        external_class_info = self.external_param_classes.get(class_name)
-        if external_class_info:
-            param_info = external_class_info.get_parameter(param_name)
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
             return param_info.allow_none if param_info else False
 
         return False
@@ -1329,7 +1329,7 @@ class ParamAnalyzer:
             return -val if val is not None else None
         return None
 
-    def _analyze_external_class_ast(self, full_class_path: str) -> ExternalClassInfo | None:
+    def _analyze_external_class_ast(self, full_class_path: str) -> ParamClassInfo | None:
         """Analyze external classes using runtime introspection for allowed libraries."""
         if full_class_path in self.external_param_classes:
             return self.external_param_classes[full_class_path]
@@ -1379,7 +1379,7 @@ class ParamAnalyzer:
 
         return "\n".join(fixed_lines)
 
-    def _introspect_external_class_runtime(self, full_class_path: str) -> ExternalClassInfo | None:
+    def _introspect_external_class_runtime(self, full_class_path: str) -> ParamClassInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
 
         # Get the root library name for cache lookup
@@ -1475,12 +1475,11 @@ class ParamAnalyzer:
                         )
                         class_info.add_parameter(param_info)
 
-            # Create ExternalClassInfo and cache it
-            external_class_info = ExternalClassInfo.from_param_class_info(class_info)
-            external_library_cache.set(root_library, full_class_path, external_class_info)
+            # Cache the class info directly
+            external_library_cache.set(root_library, full_class_path, class_info)
             logger.debug(f"Cached introspection result for {full_class_path}")
 
-            return external_class_info
+            return class_info
 
         except Exception as e:
             logger.debug(f"Failed to introspect external class {full_class_path}: {e}")
@@ -1755,9 +1754,9 @@ class ParamAnalyzer:
                         continue
 
                     # Introspect and cache the class
-                    external_class_info = self._introspect_param_class_for_cache(cls)
-                    if external_class_info:
-                        external_library_cache.set(library_name, full_path, external_class_info)
+                    class_info = self._introspect_param_class_for_cache(cls)
+                    if class_info:
+                        external_library_cache.set(library_name, full_path, class_info)
                         classes_cached += 1
 
             except (TypeError, AttributeError):
@@ -1805,8 +1804,8 @@ class ParamAnalyzer:
 
         return classes
 
-    def _introspect_param_class_for_cache(self, cls) -> ExternalClassInfo | None:
-        """Introspect a param.Parameterized class and return ExternalClassInfo."""
+    def _introspect_param_class_for_cache(self, cls) -> ParamClassInfo | None:
+        """Introspect a param.Parameterized class and return ParamClassInfo."""
         try:
             class_name = getattr(cls, "__name__", "Unknown")
             param_class_info = ParamClassInfo(name=class_name)
@@ -1857,7 +1856,7 @@ class ParamAnalyzer:
                         )
                         param_class_info.add_parameter(param_info)
 
-            return ExternalClassInfo.from_param_class_info(param_class_info)
+            return param_class_info
 
         except Exception:
             return None
@@ -1894,12 +1893,10 @@ class ParamAnalyzer:
                         if alias in self.imports:
                             full_module = self.imports[alias]
                             full_class_path = f"{full_module}.{class_part}"
-                            external_class_info = self.external_param_classes.get(full_class_path)
-                            if external_class_info is None:
-                                external_class_info = self._analyze_external_class_ast(
-                                    full_class_path
-                                )
-                            if external_class_info:
+                            class_info = self.external_param_classes.get(full_class_path)
+                            if class_info is None:
+                                class_info = self._analyze_external_class_ast(full_class_path)
+                            if class_info:
                                 # Return the original dotted name for external class handling
                                 return assigned_class
 

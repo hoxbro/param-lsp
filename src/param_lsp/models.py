@@ -43,33 +43,3 @@ class ParamClassInfo:
         for name, param_info in other_params.items():
             if name not in self.parameters:
                 self.parameters[name] = param_info
-
-
-@dataclass
-class ExternalClassInfo:
-    """Wrapper for external class parameter information.
-
-    This class provides a clean interface for working with external Param classes
-    using structured dataclass models.
-    """
-
-    class_name: str
-    param_class_info: ParamClassInfo
-
-    @classmethod
-    def from_param_class_info(cls, param_class_info: ParamClassInfo) -> ExternalClassInfo:
-        """Create from a ParamClassInfo object."""
-        return cls(class_name=param_class_info.name, param_class_info=param_class_info)
-
-    def get_parameter_names(self) -> list[str]:
-        """Get list of parameter names."""
-        return self.param_class_info.get_parameter_names()
-
-    @property
-    def parameters(self) -> dict[str, ParameterInfo]:
-        """Get parameters dict for direct access."""
-        return self.param_class_info.parameters
-
-    def get_parameter(self, name: str) -> ParameterInfo | None:
-        """Get parameter info by name."""
-        return self.param_class_info.get_parameter(name)
