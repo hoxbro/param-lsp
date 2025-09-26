@@ -51,30 +51,22 @@ Hover over any parameter to see comprehensive information:
 
 Hover over Parameterized class names for class-level information:
 
-=== "Screenshot"
+```python
+import param
 
-    <!-- TODO: Add screenshot showing class hover tooltip with docstring and parameter summary -->
+class MediaProcessor(param.Parameterized):
+    """
+    A media processing pipeline with configurable parameters.
 
-    **Screenshot needed:** Class hover tooltip showing docstring and parameter summary
+    This class handles various media formats and provides
+    real-time processing capabilities.
+    """
 
-=== "Code"
+    input_format = param.Selector(default="mp4", objects=["mp4", "avi", "mov"])
 
-    ```python
-    import param
-
-    class MediaProcessor(param.Parameterized):
-        """
-        A media processing pipeline with configurable parameters.
-
-        This class handles various media formats and provides
-        real-time processing capabilities.
-        """
-
-        input_format = param.Selector(default="mp4", objects=["mp4", "avi", "mov"])
-
-    # Hover over 'MediaProcessor' to see class docstring and parameter summary
-    processor = MediaProcessor()
-    ```
+# Hover over 'MediaProcessor' to see class docstring and parameter summary
+processor = MediaProcessor()
+```
 
 **Class hover shows:**
 
@@ -171,31 +163,23 @@ class AppSettings(param.Parameterized):
 
 Hover over methods with `@param.depends` to see dependency information:
 
-=== "Screenshot"
+```python
+import param
 
-    <!-- TODO: Add screenshot showing method hover with dependency information -->
+class DataAnalyzer(param.Parameterized):
+    data_file = param.String(default="data.csv")
+    threshold = param.Number(default=0.5, bounds=(0, 1))
 
-    **Screenshot needed:** Method hover showing dependencies and documentation
+    @param.depends('data_file', 'threshold')
+    def analyze(self):
+        """Analyze data with current threshold."""
+        return f"Analyzing {self.data_file} with threshold {self.threshold}"
 
-=== "Code"
-
-    ```python
-    import param
-
-    class DataAnalyzer(param.Parameterized):
-        data_file = param.String(default="data.csv")
-        threshold = param.Number(default=0.5, bounds=(0, 1))
-
-        @param.depends('data_file', 'threshold')
-        def analyze(self):
-            """Analyze data with current threshold."""
-            return f"Analyzing {self.data_file} with threshold {self.threshold}"
-
-        # Hover over 'analyze' shows:
-        # - Method documentation
-        # - Parameter dependencies: data_file, threshold
-        # - Return type information
-    ```
+    # Hover over 'analyze' shows:
+    # - Method documentation
+    # - Parameter dependencies: data_file, threshold
+    # - Return type information
+```
 
 **Method hover shows:**
 

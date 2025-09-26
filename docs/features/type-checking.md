@@ -47,29 +47,21 @@ Immediate feedback when parameter values violate bounds:
 
 Catch type mismatches before runtime:
 
-=== "Screenshot"
+```python
+import param
 
-    <!-- TODO: Add screenshot showing type validation errors -->
+class Config(param.Parameterized):
+    name = param.String(default="app")
+    count = param.Integer(default=10)
+    enabled = param.Boolean(default=True)
 
-    **Screenshot needed:** Type validation errors with specific type mismatch messages
-
-=== "Code"
-
-    ```python
-    import param
-
-    class Config(param.Parameterized):
-        name = param.String(default="app")
-        count = param.Integer(default=10)
-        enabled = param.Boolean(default=True)
-
-    # These will show error diagnostics:
-    config = Config(
-        name=123,          # ❌ Error: Expected string, got integer
-        count="not_int",   # ❌ Error: Expected integer, got string
-        enabled="yes"      # ❌ Error: Expected boolean, got string
-    )
-    ```
+# These will show error diagnostics:
+config = Config(
+    name=123,          # ❌ Error: Expected string, got integer
+    count="not_int",   # ❌ Error: Expected integer, got string
+    enabled="yes"      # ❌ Error: Expected boolean, got string
+)
+```
 
 **Supported type validations:**
 
@@ -85,39 +77,31 @@ Catch type mismatches before runtime:
 
 Validation for parameter choices:
 
-=== "Screenshot"
+```python
+import param
 
-    <!-- TODO: Add screenshot showing selector validation errors -->
-
-    **Screenshot needed:** Selector validation errors showing invalid choice messages
-
-=== "Code"
-
-    ```python
-    import param
-
-    class Theme(param.Parameterized):
-        style = param.Selector(
-            default="light",
-            objects=["light", "dark", "auto"]
-        )
-        size = param.Selector(
-            default="medium",
-            objects=["small", "medium", "large"]
-        )
-
-    # This will show error diagnostics:
-    theme = Theme(
-        style="blue",      # ❌ Error: 'blue' not in allowed objects
-        size="tiny"        # ❌ Error: 'tiny' not in allowed objects
+class Theme(param.Parameterized):
+    style = param.Selector(
+        default="light",
+        objects=["light", "dark", "auto"]
+    )
+    size = param.Selector(
+        default="medium",
+        objects=["small", "medium", "large"]
     )
 
-    # This is valid:
-    theme = Theme(
-        style="dark",      # ✅ Valid: In allowed objects
-        size="large"       # ✅ Valid: In allowed objects
-    )
-    ```
+# This will show error diagnostics:
+theme = Theme(
+    style="blue",      # ❌ Error: 'blue' not in allowed objects
+    size="tiny"        # ❌ Error: 'tiny' not in allowed objects
+)
+
+# This is valid:
+theme = Theme(
+    style="dark",      # ✅ Valid: In allowed objects
+    size="large"       # ✅ Valid: In allowed objects
+)
+```
 
 **Selector features:**
 

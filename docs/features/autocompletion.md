@@ -43,8 +43,6 @@ When defining new Parameterized classes, get completions for parameter types:
 
 === "Screenshot"
 
-    <!-- TODO: Add screenshot showing parameter type completions when typing 'param.' -->
-
     **Screenshot needed:** Parameter type completions when typing 'param.' in class definitions
 
 === "Code"
@@ -75,8 +73,6 @@ When defining new Parameterized classes, get completions for parameter types:
 Smart completion for dependency decorators:
 
 === "Screenshot"
-
-    <!-- TODO: Add screenshot showing parameter name completions within @param.depends decorator -->
 
     **Screenshot needed:** Parameter name completions within @param.depends decorator strings
 
@@ -111,8 +107,6 @@ Autocompletion includes parameters from parent classes:
 
 === "Screenshot"
 
-    <!-- TODO: Add screenshot showing inheritance-aware parameter completion -->
-
     **Screenshot needed:** Autocompletion showing both inherited and local parameters for Button class
 
 === "Code"
@@ -144,8 +138,6 @@ param-lsp provides intelligent completion for popular libraries:
 
 === "Screenshot"
 
-    <!-- TODO: Add screenshot showing Panel widget parameter completion -->
-
     **Screenshot needed:** Intelligent completion for Panel widget parameters with type validation
 
 === "Code"
@@ -170,8 +162,6 @@ param-lsp provides intelligent completion for popular libraries:
 ### HoloViews Elements
 
 === "Screenshot"
-
-    <!-- TODO: Add screenshot showing HoloViews element completion -->
 
     **Screenshot needed:** Smart completion for HoloViews elements with style options validation
 

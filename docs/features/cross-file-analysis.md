@@ -61,30 +61,22 @@ param-lsp has built-in knowledge of popular HoloViz ecosystem libraries:
 
 Smart completion and validation for Panel widgets:
 
-=== "Screenshot"
+```python
+import panel as pn
 
-    <!-- TODO: Add screenshot showing Panel widget parameter completion -->
+# param-lsp knows Panel parameter APIs
+widget = pn.widgets.IntSlider(
+    value=50,       # ✅ Autocompletion knows IntSlider parameters
+    start=0,        # ✅ Parameter bounds checking
+    end=100,        # ✅ Type validation
+    step=5          # ✅ Hover shows parameter documentation
+)
 
-    **Screenshot needed:** Panel widget parameter completion with type validation
-
-=== "Code"
-
-    ```python
-    import panel as pn
-
-    # param-lsp knows Panel parameter APIs
-    widget = pn.widgets.IntSlider(
-        value=50,       # ✅ Autocompletion knows IntSlider parameters
-        start=0,        # ✅ Parameter bounds checking
-        end=100,        # ✅ Type validation
-        step=5          # ✅ Hover shows parameter documentation
-    )
-
-    button = pn.widgets.Button(
-        name="Process",     # ✅ String parameter
-        button_type="primary"  # ✅ Selector validation
-    )
-    ```
+button = pn.widgets.Button(
+    name="Process",     # ✅ String parameter
+    button_type="primary"  # ✅ Selector validation
+)
+```
 
 **Supported Panel widgets:**
 

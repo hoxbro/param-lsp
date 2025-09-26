@@ -37,28 +37,20 @@ Suggested fixes for common issues appear in context menus:
 
 ### Bound Violations
 
-=== "Screenshot"
+```python
+import param
 
-    <!-- TODO: Add screenshot showing quick fix suggestions for bounds violation -->
+class Widget(param.Parameterized):
+    width = param.Integer(bounds=(10, 500))
 
-    **Screenshot needed:** Quick fix menu showing options for bounds violations
+# Problem: Value exceeds bounds
+widget = Widget(width=1000)  # 🔴 Error
 
-=== "Code"
-
-    ```python
-    import param
-
-    class Widget(param.Parameterized):
-        width = param.Integer(bounds=(10, 500))
-
-    # Problem: Value exceeds bounds
-    widget = Widget(width=1000)  # 🔴 Error
-
-    # Quick fixes offered:
-    # ✅ Set to maximum value (500)
-    # ✅ Set to default value
-    # ✅ Remove parameter (use default)
-    ```
+# Quick fixes offered:
+# ✅ Set to maximum value (500)
+# ✅ Set to default value
+# ✅ Remove parameter (use default)
+```
 
 ### Type Errors
 
@@ -161,23 +153,15 @@ Enhanced syntax highlighting for param-specific constructs:
 
 ### Parameter Definitions
 
-=== "Screenshot"
+```python
+import param
 
-    <!-- TODO: Add screenshot showing syntax highlighting for different parameter types -->
-
-    **Screenshot needed:** Syntax highlighting showing different colors for parameter types
-
-=== "Code"
-
-    ```python
-    import param
-
-    class Widget(param.Parameterized):
-        # Different colors for different parameter types
-        width = param.Integer(default=100)      # Blue for Integer
-        name = param.String(default="widget")   # Green for String
-        enabled = param.Boolean(default=True)   # Purple for Boolean
-    ```
+class Widget(param.Parameterized):
+    # Different colors for different parameter types
+    width = param.Integer(default=100)      # Blue for Integer
+    name = param.String(default="widget")   # Green for String
+    enabled = param.Boolean(default=True)   # Purple for Boolean
+```
 
 ### Decorators
 
