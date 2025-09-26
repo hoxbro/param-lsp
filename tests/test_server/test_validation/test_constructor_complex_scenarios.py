@@ -157,7 +157,7 @@ Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer val
         assert "shared" in combined_class.parameters
 
         # Currently uses "last wins" - MixinB's Integer type should win
-        assert combined_class.parameters["shared"].param_type == "Integer"
+        assert combined_class.parameters["shared"].cls == "Integer"
 
         # Should have 1 error for the string assignment to Integer parameter
         assert len(errors) == 1
@@ -319,8 +319,8 @@ Outer.Inner(inner_param="bad")                # Should error
         assert list(inner_class.parameters.keys()) == ["inner_param"]
 
         # Verify parameter types
-        assert outer_class.parameters["outer_param"].param_type == "String"
-        assert inner_class.parameters["inner_param"].param_type == "Integer"
+        assert outer_class.parameters["outer_param"].cls == "String"
+        assert inner_class.parameters["inner_param"].cls == "Integer"
 
         # Should have 2 constructor errors
         assert len(errors) == 2

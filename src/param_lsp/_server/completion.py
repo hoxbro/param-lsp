@@ -61,9 +61,9 @@ class CompletionMixin(LSPServerBase):
         match = param_def_pattern.search(before_cursor)
 
         if match:
-            param_type = match.group(1)
+            cls = match.group(1)
             # Check if it's a valid param type
-            return param_type in self.param_types
+            return cls in self.classes
 
         return False
 
@@ -74,13 +74,13 @@ class CompletionMixin(LSPServerBase):
         before_cursor = line[:character]
         if before_cursor.rstrip().endswith("param."):
             completions = []
-            for param_type in self.param_types:
-                documentation = f"Param parameter type: {param_type}"
+            for cls in self.classes:
+                documentation = f"Param parameter type: {cls}"
 
                 # Try to get actual documentation from param module
                 if param:
                     try:
-                        param_class = getattr(param, param_type, None)
+                        param_class = getattr(param, cls, None)
                         if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
                             # Extract first line of docstring for concise documentation
                             doc_lines = param_class.__doc__.strip().split("\n")
@@ -91,9 +91,9 @@ class CompletionMixin(LSPServerBase):
 
                 completions.append(
                     CompletionItem(
-                        label=param_type,
+                        label=cls,
                         kind=CompletionItemKind.Class,
-                        detail=f"param.{param_type}",
+                        detail=f"param.{cls}",
                         documentation=documentation,
                     )
                 )
@@ -217,8 +217,8 @@ class CompletionMixin(LSPServerBase):
 
                     if param_info and param_info.default is not None:
                         default_value = param_info.default
-                        param_type = param_info.param_type
-                        display_value = self._format_default_for_display(default_value, param_type)
+                        cls = param_info.cls
+                        display_value = self._format_default_for_display(default_value, cls)
 
                         # Build documentation for this specific parameter
                         documentation = self._build_parameter_documentation_from_info(
@@ -263,10 +263,8 @@ class CompletionMixin(LSPServerBase):
                         # Create insert text with default value if available
                         if param_info.default is not None:
                             default_value = param_info.default
-                            param_type = param_info.param_type
-                            display_value = self._format_default_for_display(
-                                default_value, param_type
-                            )
+                            cls = param_info.cls
+                            display_value = self._format_default_for_display(default_value, cls)
                             insert_text = f"{param_name}={display_value}"
                             label = f"{param_name}={display_value}"
                         else:
@@ -314,10 +312,8 @@ class CompletionMixin(LSPServerBase):
                         # Create insert text with default value if available
                         if param_info.default is not None:
                             default_value = param_info.default
-                            param_type = param_info.param_type
-                            display_value = self._format_default_for_display(
-                                default_value, param_type
-                            )
+                            cls = param_info.cls
+                            display_value = self._format_default_for_display(default_value, cls)
                             insert_text = f"{param_name}={display_value}"
                             label = f"{param_name}={display_value}"
                         else:
@@ -742,7 +738,7 @@ class CompletionMixin(LSPServerBase):
 
         # Get the parameter type to provide appropriate completions
         param_info = class_info.parameters[param_name]
-        param_type = param_info.param_type or "Parameter"
+        cls = param_info.cls or "Parameter"
 
         # Extract partial text being typed after the parameter name
         partial_text = ""
@@ -753,13 +749,13 @@ class CompletionMixin(LSPServerBase):
         # Type-specific attributes
         type_specific_attributes = {}
 
-        if param_type in NUMERIC_PARAMETER_TYPES:
+        if cls in NUMERIC_PARAMETER_TYPES:
             type_specific_attributes.update(TYPE_SPECIFIC_PARAMETER_ATTRIBUTES["numeric"])
 
-        if param_type == "String":
+        if cls == "String":
             type_specific_attributes.update(TYPE_SPECIFIC_PARAMETER_ATTRIBUTES["string"])
 
-        if param_type in CONTAINER_PARAMETER_TYPES:
+        if cls in CONTAINER_PARAMETER_TYPES:
             type_specific_attributes.update(TYPE_SPECIFIC_PARAMETER_ATTRIBUTES["container"])
 
         # Combine all available attributes
@@ -782,7 +778,7 @@ class CompletionMixin(LSPServerBase):
                     label=f"{method_name}()",
                     kind=CompletionItemKind.Method,
                     detail=f"Parameter.{method_name}()",
-                    documentation=f"{method_doc}\n\nParameter type: {param_type}",
+                    documentation=f"{method_doc}\n\nParameter type: {cls}",
                     insert_text=insert_text,
                     filter_text=method_name,
                     sort_text=f"0_{method_name}",  # Sort methods before properties
@@ -800,7 +796,7 @@ class CompletionMixin(LSPServerBase):
                     label=attr_name,
                     kind=CompletionItemKind.Property,
                     detail=f"Parameter.{attr_name}",
-                    documentation=f"{attr_doc}\n\nParameter type: {param_type}",
+                    documentation=f"{attr_doc}\n\nParameter type: {cls}",
                     insert_text=attr_name,
                     filter_text=attr_name,
                     sort_text=f"{attr_name:0>3}",
@@ -1011,8 +1007,8 @@ class CompletionMixin(LSPServerBase):
             # Create insert text with default value if available
             if param_info.default is not None:
                 default_value = param_info.default
-                param_type = param_info.param_type
-                display_value = self._format_default_for_display(default_value, param_type)
+                cls = param_info.cls
+                display_value = self._format_default_for_display(default_value, cls)
                 insert_text = f"{param_name}={display_value}"
                 label = f"{param_name}={display_value}"
             else:
@@ -1034,9 +1030,7 @@ class CompletionMixin(LSPServerBase):
 
         return completions
 
-    def _format_default_for_display(
-        self, default_value: str, param_type: str | None = None
-    ) -> str:
+    def _format_default_for_display(self, default_value: str, cls: str | None = None) -> str:
         """Format default value for autocomplete display."""
         # Check if the default value is a string literal (regardless of parameter type)
         is_string_literal = False
@@ -1141,17 +1135,17 @@ class CompletionMixin(LSPServerBase):
         parameter_types: dict[str, str],
         parameter_docs: dict[str, str],
         parameter_bounds: dict[str, tuple],
-        parameter_allow_none: dict[str, bool] | None = None,
+        parameter_allow_None: dict[str, bool] | None = None,
         parameter_defaults: dict[str, str] | None = None,
     ) -> str:
         """Build standardized parameter documentation."""
         doc_parts = []
 
         # Add parameter type info
-        param_type = parameter_types.get(param_name)
-        if param_type:
-            python_type = self._get_python_type_name(param_type)
-            doc_parts.append(f"Type: {param_type} ({python_type})")
+        cls = parameter_types.get(param_name)
+        if cls:
+            python_type = self._get_python_type_name(cls)
+            doc_parts.append(f"Type: {cls} ({python_type})")
 
         # Add bounds info
         bounds = parameter_bounds.get(param_name)
@@ -1166,9 +1160,9 @@ class CompletionMixin(LSPServerBase):
                 doc_parts.append(f"Bounds: {left_bracket}{min_val}, {max_val}{right_bracket}")
 
         # Add allow_None info
-        if parameter_allow_none:
-            allow_none = parameter_allow_none.get(param_name, False)
-            if allow_none:
+        if parameter_allow_None:
+            allow_None = parameter_allow_None.get(param_name, False)
+            if allow_None:
                 doc_parts.append("Allows None")
 
         # Add parameter-specific documentation
@@ -1191,9 +1185,9 @@ class CompletionMixin(LSPServerBase):
         doc_parts = []
 
         # Add parameter type info
-        if param_info.param_type:
-            python_type = self._get_python_type_name(param_info.param_type)
-            doc_parts.append(f"Type: {param_info.param_type} ({python_type})")
+        if param_info.cls:
+            python_type = self._get_python_type_name(param_info.cls)
+            doc_parts.append(f"Type: {param_info.cls} ({python_type})")
 
         # Add bounds info
         if param_info.bounds:
@@ -1216,8 +1210,8 @@ class CompletionMixin(LSPServerBase):
         if param_info.doc:
             doc_parts.append(f"Description: {param_info.doc}")
 
-        # Add allow_none info if not default
-        if param_info.allow_none is not None and param_info.allow_none:
+        # Add allow_None info if not default
+        if param_info.allow_None is not None and param_info.allow_None:
             doc_parts.append("Allows None: Yes")
 
         # Add default value info

@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
-from param_lsp.models import ParamClassInfo, ParameterInfo
+from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
 @pytest.fixture
@@ -100,24 +100,24 @@ class TestExternalLibraryCache:
             cache.cache_dir = Path(temp_dir)
 
             # Create test data using dataclass format
-            param_class_info = ParamClassInfo(name="IntSlider")
+            param_class_info = ParameterizedInfo(name="IntSlider")
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="name",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
@@ -152,25 +152,25 @@ class TestExternalLibraryCache:
             cache.cache_dir = Path(temp_dir)
 
             # Create test data using dataclass format
-            param_class_info1 = ParamClassInfo(name="IntSlider")
+            param_class_info1 = ParameterizedInfo(name="IntSlider")
             param_class_info1.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
-            param_class_info2 = ParamClassInfo(name="TextInput")
+            param_class_info2 = ParameterizedInfo(name="TextInput")
             param_class_info2.add_parameter(
                 ParameterInfo(
                     name="text",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
@@ -199,27 +199,27 @@ class TestExternalLibraryCache:
             cache.cache_dir = Path(temp_dir)
 
             # Create test data using dataclass format for version 1
-            param_class_info_v1 = ParamClassInfo(name="Widget")
+            param_class_info_v1 = ParameterizedInfo(name="Widget")
             param_class_info_v1.add_parameter(
                 ParameterInfo(
                     name="old_param",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
 
             # Create test data using dataclass format for version 2
-            param_class_info_v2 = ParamClassInfo(name="Widget")
+            param_class_info_v2 = ParameterizedInfo(name="Widget")
             param_class_info_v2.add_parameter(
                 ParameterInfo(
                     name="new_param",
-                    param_type="String",
+                    cls="String",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
@@ -253,14 +253,14 @@ class TestExternalLibraryCache:
             cache.cache_dir = Path(temp_dir)
 
             # Create test data using dataclass format
-            param_class_info = ParamClassInfo(name="IntSlider")
+            param_class_info = ParameterizedInfo(name="IntSlider")
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
@@ -288,14 +288,14 @@ class TestExternalLibraryCache:
             cache.cache_dir = Path(temp_dir)
 
             # Create test data using dataclass format
-            param_class_info = ParamClassInfo(name="TestClass")
+            param_class_info = ParameterizedInfo(name="TestClass")
             param_class_info.add_parameter(
                 ParameterInfo(
                     name="value",
-                    param_type="Integer",
+                    cls="Integer",
                     bounds=None,
                     doc=None,
-                    allow_none=False,
+                    allow_None=False,
                     default=None,
                 )
             )
@@ -330,14 +330,14 @@ class TestExternalLibraryCache:
                 assert result is None
 
                 # Setting should overwrite the corrupted file
-                param_class_info = ParamClassInfo(name="IntSlider")
+                param_class_info = ParameterizedInfo(name="IntSlider")
                 param_class_info.add_parameter(
                     ParameterInfo(
                         name="value",
-                        param_type="Integer",
+                        cls="Integer",
                         bounds=None,
                         doc=None,
-                        allow_none=False,
+                        allow_None=False,
                         default=None,
                     )
                 )
@@ -358,15 +358,15 @@ class TestCacheIntegration:
 
     def test_analyzer_uses_cache(self, analyzer, enable_cache_for_test):
         """Test that the analyzer uses the cache for external classes."""
-        # Mock the cache to return predefined ParamClassInfo data
-        param_class_info = ParamClassInfo(name="IntSlider")
+        # Mock the cache to return predefined ParameterizedInfo data
+        param_class_info = ParameterizedInfo(name="IntSlider")
         param_class_info.add_parameter(
             ParameterInfo(
                 name="value",
-                param_type="Integer",
+                cls="Integer",
                 bounds=None,
                 doc=None,
-                allow_none=False,
+                allow_None=False,
                 default=None,
             )
         )
@@ -408,6 +408,6 @@ w = pn.widgets.IntSlider()
         # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
         assert cached_data is not None
-        assert isinstance(cached_data, ParamClassInfo)
+        assert isinstance(cached_data, ParameterizedInfo)
         assert cached_data.name == "IntSlider"
         assert "value" in cached_data.parameters

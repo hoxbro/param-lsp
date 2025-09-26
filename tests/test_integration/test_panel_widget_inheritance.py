@@ -43,7 +43,7 @@ class T(pn.widgets.IntSlider):
         # Note: 'name' parameter is excluded from autocompletion
 
         # Verify parameter types are correctly inherited
-        assert t_class.parameters["value"].param_type == "Integer"
+        assert t_class.parameters["value"].cls == "Integer"
 
     def test_panel_widget_chain_inheritance(self):
         """Test inheritance chain through Panel widgets."""

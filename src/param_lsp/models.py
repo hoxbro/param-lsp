@@ -11,16 +11,16 @@ class ParameterInfo:
     """Information about a single parameter."""
 
     name: str
-    param_type: str
+    cls: str
     bounds: tuple | None = None
     doc: str | None = None
-    allow_none: bool = False
+    allow_None: bool = False
     default: str | None = None
     location: dict[str, Any] | None = None
 
 
 @dataclass
-class ParamClassInfo:
+class ParameterizedInfo:
     """Information about a Parameterized class."""
 
     name: str

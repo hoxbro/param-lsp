@@ -48,7 +48,7 @@ class ValidationMixin(LSPServerBase):
             f"  Parameters: {[{name: info.get_parameter_names() for name, info in param_classes.items()}]}"
         )
         logger.info(
-            f"  Parameter types: {[{name: {p.name: p.param_type for p in info.parameters.values()} for name, info in param_classes.items()}]}"
+            f"  Parameter types: {[{name: {p.name: p.cls for p in info.parameters.values()} for name, info in param_classes.items()}]}"
         )
         logger.info(f"  Type errors: {analysis.get('type_errors', [])}")
 

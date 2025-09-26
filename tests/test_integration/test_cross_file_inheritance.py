@@ -47,9 +47,9 @@ S().name = 123         # Should error - inherited String
         assert "S" in result["param_classes"]
         s_class = result["param_classes"]["S"]
         assert set(s_class.parameters.keys()) == {"x", "name", "b"}
-        assert s_class.parameters["x"].param_type == "Integer"
-        assert s_class.parameters["name"].param_type == "String"
-        assert s_class.parameters["b"].param_type == "Boolean"
+        assert s_class.parameters["x"].cls == "Integer"
+        assert s_class.parameters["name"].cls == "String"
+        assert s_class.parameters["b"].cls == "Boolean"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -111,9 +111,9 @@ obj.final_bool = "invalid"  # Error - Boolean
         }
 
         # Check inherited types
-        assert final_class.parameters["base_value"].param_type == "String"
-        assert final_class.parameters["intermediate_num"].param_type == "Number"
-        assert final_class.parameters["final_bool"].param_type == "Boolean"
+        assert final_class.parameters["base_value"].cls == "String"
+        assert final_class.parameters["intermediate_num"].cls == "Number"
+        assert final_class.parameters["final_bool"].cls == "Boolean"
 
         # Check inherited bounds
         assert final_class.parameters["intermediate_num"].bounds is not None
@@ -154,7 +154,7 @@ Child().value = 123  # Should error - expecting string now
         assert "Child" in result["param_classes"]
         child_class = result["param_classes"]["Child"]
         # Child should override parent parameter type
-        assert child_class.parameters["value"].param_type == "String"
+        assert child_class.parameters["value"].cls == "String"
 
         # Should detect type error based on child class type
         assert len(result["type_errors"]) == 1

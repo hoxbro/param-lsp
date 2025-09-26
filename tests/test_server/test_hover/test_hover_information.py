@@ -291,7 +291,7 @@ class TestClass(param.Parameterized):
         sections = hover_info.split("\n\n")
         assert len(sections) >= 2  # At least header and documentation
 
-    def test_hover_with_allow_none(self, lsp_server):
+    def test_hover_with_allow_None(self, lsp_server):
         """Test hover information for parameters with allow_None=True."""
         code_py = """\
 import param
@@ -340,7 +340,7 @@ class TestClass(param.Parameterized):
         )  # Should include None due to default=None
         assert "Number with default=None" in hover_info
 
-    def test_hover_allow_none_with_bounds(self, lsp_server):
+    def test_hover_allow_None_with_bounds(self, lsp_server):
         """Test hover information for parameters with both allow_None and bounds."""
         code_py = """\
 import param
