@@ -571,41 +571,15 @@ class ParamAnalyzer:
                         isinstance(param_value, ast.Constant)
                         and isinstance(param_value.value, bool)
                     ):
-                        self.type_errors.append(
-                            {
-                                "line": node.lineno - 1,  # Convert to 0-based
-                                "col": node.col_offset,
-                                "end_line": node.end_lineno - 1
-                                if node.end_lineno
-                                else node.lineno - 1,
-                                "end_col": node.end_col_offset
-                                if node.end_col_offset
-                                else node.col_offset,
-                                "message": f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)",
-                                "severity": "error",
-                                "code": "constructor-boolean-type-mismatch",
-                            }
-                        )
+                        message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)"
+                        self._create_type_error(node, message, "constructor-boolean-type-mismatch")
                 elif inferred_type and not any(
                     (isinstance(inferred_type, type) and issubclass(inferred_type, t))
                     or inferred_type == t
                     for t in expected_types
                 ):
-                    self.type_errors.append(
-                        {
-                            "line": node.lineno - 1,  # Convert to 0-based
-                            "col": node.col_offset,
-                            "end_line": node.end_lineno - 1
-                            if node.end_lineno
-                            else node.lineno - 1,
-                            "end_col": node.end_col_offset
-                            if node.end_col_offset
-                            else node.col_offset,
-                            "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})",
-                            "severity": "error",
-                            "code": "constructor-type-mismatch",
-                        }
-                    )
+                    message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
+                    self._create_type_error(node, message, "constructor-type-mismatch")
 
             # Check bounds for numeric parameters in constructor calls
             self._check_constructor_bounds(node, class_name, param_name, cls, param_value)
@@ -664,17 +638,8 @@ class ParamAnalyzer:
             min_str = str(min_val) if min_val is not None else "-∞"
             max_str = str(max_val) if max_val is not None else "∞"
             bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
-            self.type_errors.append(
-                {
-                    "line": node.lineno - 1,
-                    "col": node.col_offset,
-                    "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                    "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                    "message": f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}",
-                    "severity": "error",
-                    "code": "constructor-bounds-violation",
-                }
-            )
+            message = f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}"
+            self._create_type_error(node, message, "constructor-bounds-violation")
 
     def _check_parameter_default_type(self, node: ast.Assign, param_name: str, lines: list[str]):
         """Check if parameter default value matches declared type."""
@@ -721,37 +686,15 @@ class ParamAnalyzer:
                     isinstance(default_value, ast.Constant)
                     and isinstance(default_value.value, bool)
                 ):
-                    self.type_errors.append(
-                        {
-                            "line": node.lineno - 1,  # Convert to 0-based
-                            "col": node.col_offset,
-                            "end_line": node.end_lineno - 1
-                            if node.end_lineno
-                            else node.lineno - 1,
-                            "end_col": node.end_col_offset
-                            if node.end_col_offset
-                            else node.col_offset,
-                            "message": f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}",
-                            "severity": "error",
-                            "code": "boolean-type-mismatch",
-                        }
-                    )
+                    message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}"
+                    self._create_type_error(node, message, "boolean-type-mismatch")
             elif inferred_type and not any(
                 (isinstance(inferred_type, type) and issubclass(inferred_type, t))
                 or inferred_type == t
                 for t in expected_types
             ):
-                self.type_errors.append(
-                    {
-                        "line": node.lineno - 1,  # Convert to 0-based
-                        "col": node.col_offset,
-                        "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                        "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                        "message": f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}",
-                        "severity": "error",
-                        "code": "type-mismatch",
-                    }
-                )
+                message = f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}"
+                self._create_type_error(node, message, "type-mismatch")
 
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
@@ -822,37 +765,15 @@ class ParamAnalyzer:
                     isinstance(assigned_value, ast.Constant)
                     and isinstance(assigned_value.value, bool)
                 ):
-                    self.type_errors.append(
-                        {
-                            "line": node.lineno - 1,  # Convert to 0-based
-                            "col": node.col_offset,
-                            "end_line": node.end_lineno - 1
-                            if node.end_lineno
-                            else node.lineno - 1,
-                            "end_col": node.end_col_offset
-                            if node.end_col_offset
-                            else node.col_offset,
-                            "message": f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)",
-                            "severity": "error",
-                            "code": "runtime-boolean-type-mismatch",
-                        }
-                    )
+                    message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)"
+                    self._create_type_error(node, message, "runtime-boolean-type-mismatch")
             elif inferred_type and not any(
                 (isinstance(inferred_type, type) and issubclass(inferred_type, t))
                 or inferred_type == t
                 for t in expected_types
             ):
-                self.type_errors.append(
-                    {
-                        "line": node.lineno - 1,  # Convert to 0-based
-                        "col": node.col_offset,
-                        "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                        "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                        "message": f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})",
-                        "severity": "error",
-                        "code": "runtime-type-mismatch",
-                    }
-                )
+                message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})"
+                self._create_type_error(node, message, "runtime-type-mismatch")
 
         # Check bounds for numeric parameters
         self._check_runtime_bounds(node, instance_class, param_name, cls, assigned_value)
@@ -912,17 +833,8 @@ class ParamAnalyzer:
         bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
 
         if violates_lower or violates_upper:
-            self.type_errors.append(
-                {
-                    "line": node.lineno - 1,
-                    "col": node.col_offset,
-                    "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                    "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
-                    "message": f"Value {assigned_numeric} for parameter '{param_name}' is outside bounds {bound_description}",
-                    "severity": "error",
-                    "code": "bounds-violation",
-                }
-            )
+            message = f"Value {assigned_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
+            self._create_type_error(node, message, "bounds-violation")
 
     def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
         """Get parameter bounds from a class definition."""
@@ -1044,6 +956,22 @@ class ParamAnalyzer:
             type_names = [t.__name__ for t in expected_types]
             return " or ".join(type_names)
 
+    def _create_type_error(
+        self, node: ast.Call | ast.Assign, message: str, code: str, severity: str = "error"
+    ) -> None:
+        """Helper function to create and append a type error."""
+        self.type_errors.append(
+            {
+                "line": node.lineno - 1,  # Convert to 0-based
+                "col": node.col_offset,
+                "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
+                "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                "message": message,
+                "severity": severity,
+                "code": code,
+            }
+        )
+
     def _infer_value_type(self, node: ast.expr) -> type | None:
         """Infer Python type from AST node."""
         if isinstance(node, ast.Constant):
@@ -1104,21 +1032,8 @@ class ParamAnalyzer:
                     max_val = self._extract_numeric_value(bounds.elts[1])
 
                     if min_val is not None and max_val is not None and min_val >= max_val:
-                        self.type_errors.append(
-                            {
-                                "line": node.lineno - 1,
-                                "col": node.col_offset,
-                                "end_line": node.end_lineno - 1
-                                if node.end_lineno
-                                else node.lineno - 1,
-                                "end_col": node.end_col_offset
-                                if node.end_col_offset
-                                else node.col_offset,
-                                "message": f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})",
-                                "severity": "error",
-                                "code": "invalid-bounds",
-                            }
-                        )
+                        message = f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})"
+                        self._create_type_error(node, message, "invalid-bounds")
 
                     # Check if default value violates bounds
                     if default_value is not None and min_val is not None and max_val is not None:
@@ -1140,21 +1055,8 @@ class ParamAnalyzer:
 
                             if violates_lower or violates_upper:
                                 bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
-                                self.type_errors.append(
-                                    {
-                                        "line": node.lineno - 1,
-                                        "col": node.col_offset,
-                                        "end_line": node.end_lineno - 1
-                                        if node.end_lineno
-                                        else node.lineno - 1,
-                                        "end_col": node.end_col_offset
-                                        if node.end_col_offset
-                                        else node.col_offset,
-                                        "message": f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}",
-                                        "severity": "error",
-                                        "code": "default-bounds-violation",
-                                    }
-                                )
+                                message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
+                                self._create_type_error(node, message, "default-bounds-violation")
 
                 except (ValueError, TypeError):
                     pass
@@ -1169,20 +1071,11 @@ class ParamAnalyzer:
                     # This is usually fine, but flag if bounds are specified
                     bounds_specified = any(kw.arg == "bounds" for kw in node.value.keywords)
                     if bounds_specified:
-                        self.type_errors.append(
-                            {
-                                "line": node.lineno - 1,
-                                "col": node.col_offset,
-                                "end_line": node.end_lineno - 1
-                                if node.end_lineno
-                                else node.lineno - 1,
-                                "end_col": node.end_col_offset
-                                if node.end_col_offset
-                                else node.col_offset,
-                                "message": f"Parameter '{param_name}' has empty default but bounds specified",
-                                "severity": "warning",
-                                "code": "empty-default-with-bounds",
-                            }
+                        message = (
+                            f"Parameter '{param_name}' has empty default but bounds specified"
+                        )
+                        self._create_type_error(
+                            node, message, "empty-default-with-bounds", "warning"
                         )
 
     def _resolve_module_path(
