@@ -5,6 +5,8 @@ site_url: https://param-lsp.readthedocs.io/
 repo_name: param-lsp
 repo_url: https://github.com/hoxbro/param-lsp
 
+docs_dir: .
+
 nav:
   - Home: index.md
 
