@@ -136,7 +136,7 @@ def convert_to_legacy_format(result):
     return {
         "param_classes": set(param_classes_dict.keys()),
         "param_parameters": {
-            name: info.get_parameter_names() for name, info in param_classes_dict.items()
+            name: list(info.parameters.keys()) for name, info in param_classes_dict.items()
         },
         "param_parameter_types": {
             name: {p.name: p.param_type for p in info.parameters.values()}

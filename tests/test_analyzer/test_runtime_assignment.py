@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from param_lsp.models import convert_to_legacy_format
-
 
 class TestRuntimeAssignmentChecking:
     """Test runtime parameter assignment validation."""
@@ -28,7 +26,7 @@ instance.bool_param = False
 TestClass().string_param = "direct"
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [e for e in result["type_errors"] if e["code"].startswith("runtime")]
         assert len(runtime_errors) == 0
@@ -47,7 +45,7 @@ instance.string_param = 123      # Error: int to String
 instance.int_param = "not_int"   # Error: str to Integer
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
         assert len(runtime_errors) == 2
@@ -71,7 +69,7 @@ instance.bool_param = "yes"    # Error: str not allowed for Boolean
 TestClass().bool_param = []    # Error: list not allowed for Boolean
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         boolean_errors = [
             e for e in result["type_errors"] if e["code"] == "runtime-boolean-type-mismatch"
@@ -98,7 +96,7 @@ instance.number_param = 0.5    # Error: below minimum
 instance.number_param = 6.0    # Error: above maximum
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         bounds_errors = [e for e in result["type_errors"] if e["code"] == "bounds-violation"]
         assert len(bounds_errors) == 4
@@ -125,7 +123,7 @@ instance.mixed_param = 0        # Valid: at inclusive minimum
 instance.mixed_param = 5        # Error: at exclusive maximum
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         bounds_errors = [e for e in result["type_errors"] if e["code"] == "bounds-violation"]
         assert len(bounds_errors) == 3  # Three violations
@@ -150,7 +148,7 @@ TestClass().int_param = -5          # Error: bounds violation
 TestClass().string_param = "valid"  # Valid
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [
             e
@@ -175,7 +173,7 @@ instance.test_param = 123
 TestClass().test_param = 456
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
         assert len(runtime_errors) == 2
@@ -202,7 +200,7 @@ a_instance.param_a = "valid"
 b_instance.param_b = 42
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
         assert len(runtime_errors) == 2
@@ -230,7 +228,7 @@ regular.new_attr = "anything"
 param_obj.param_attr = 456
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
         assert len(runtime_errors) == 1
@@ -258,7 +256,7 @@ instance.dict_param = []            # Error: wrong type
 instance.number_param = -5          # Error: bounds violation
 """
 
-        result = convert_to_legacy_format(analyzer.analyze_file(code_py))
+        result = analyzer.analyze_file(code_py)
 
         runtime_errors = [
             e
