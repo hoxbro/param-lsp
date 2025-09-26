@@ -1,4 +1,4 @@
-# param-lsp
+# Param LSP
 
 A Language Server Protocol (LSP) implementation for the HoloViz Param library.
 
@@ -6,7 +6,7 @@ A Language Server Protocol (LSP) implementation for the HoloViz Param library.
 
 param-lsp provides IDE support for Python codebases that use Param, offering:
 
-- **Autocompletion**: Context-aware completions for Param class constructors, parameter definitions, and @param.depends decorators
+- **Autocompletion**: Context-aware completions for Param class constructors, parameter definitions, and `@param.depends` decorators
 - **Type checking**: Real-time validation of parameter types, bounds, and constraints with error diagnostics
 - **Hover information**: Rich documentation for Param parameters including types, bounds, descriptions, and default values
 - **Cross-file analysis**: Intelligent parameter inheritance tracking across local and external Param classes (Panel, HoloViews, etc.)
@@ -17,7 +17,6 @@ New to param-lsp? Follow our step-by-step guides:
 
 - **[Installation](installation.md)** - Install and configure param-lsp for your editor
 - **[Getting Started](getting-started.md)** - Learn basic usage with practical examples
-- **[Configuration](configuration.md)** - Customize param-lsp for your workflow
 
 ## Features
 
@@ -42,16 +41,12 @@ Having issues? Check our organized troubleshooting guides:
 ```python
 import param
 
+
 class MyWidget(param.Parameterized):
     width = param.Integer(default=100, bounds=(1, 1000))
     title = param.String(default="My Widget")
 
+
 # Get autocompletion, hover docs, and error checking:
 widget = MyWidget(width=200, title="Dashboard")
 ```
-
-## Community & Support
-
-- **GitHub**: [Report issues and contribute](https://github.com/hoxbro/param-lsp)
-- **HoloViz Discord**: [Join the community](https://discord.gg/UXdtYyC)
-- **Documentation**: You're reading it!
