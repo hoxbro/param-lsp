@@ -13,30 +13,29 @@ param-lsp provides IDE support for Python codebases that use Param, offering:
 
 ## Getting Started
 
-New to param-lsp? Start with our comprehensive [User Guide](user-guide.md) that covers:
+New to param-lsp? Follow our step-by-step guides:
 
-- Installation instructions for all major editors
-- Step-by-step configuration examples
-- Getting started tutorial with sample code
-- Basic usage patterns
+- **[Installation](installation.md)** - Install and configure param-lsp for your editor
+- **[Getting Started](getting-started.md)** - Learn basic usage with practical examples
+- **[Configuration](configuration.md)** - Customize param-lsp for your workflow
 
 ## Features
 
-Explore param-lsp's powerful IDE features in our [Features documentation](features.md):
+Explore param-lsp's powerful IDE features:
 
-- **Autocompletion** - Context-aware parameter completions
-- **Type Checking** - Real-time validation with error diagnostics
-- **Hover Information** - Rich parameter documentation
-- **Cross-File Analysis** - Intelligent inheritance tracking
+- **[Autocompletion](features/autocompletion.md)** - Context-aware parameter completions
+- **[Type Checking](features/type-checking.md)** - Real-time validation with error diagnostics
+- **[Hover Information](features/hover-information.md)** - Rich parameter documentation
+- **[Cross-File Analysis](features/cross-file-analysis.md)** - Intelligent inheritance tracking
+- **[IDE Integration](features/ide-integration.md)** - Enhanced editor experience
 
 ## Need Help?
 
-Having issues? Check our [Troubleshooting Guide](troubleshooting.md) for:
+Having issues? Check our organized troubleshooting guides:
 
-- Common installation problems and solutions
-- Editor-specific configuration issues
-- Performance optimization tips
-- FAQ and community resources
+- **[Installation Issues](troubleshooting/installation-issues.md)** - Setup and installation problems
+- **[Usage Issues](troubleshooting/usage-issues.md)** - Feature and functionality problems
+- **[Troubleshooting Overview](troubleshooting/)** - Complete troubleshooting guide
 
 ## Quick Example
 
