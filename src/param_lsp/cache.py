@@ -14,7 +14,7 @@ from typing import Any
 
 import platformdirs
 
-from .models import ExternalClassInfo, ParamClassInfo, ParameterInfo
+from .models import ParamClassInfo, ParameterInfo
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class ExternalLibraryCache:
         """Get the version of an installed library."""
         return _get_version(library_name)
 
-    def get(self, library_name: str, class_path: str) -> ExternalClassInfo | None:
+    def get(self, library_name: str, class_path: str) -> ParamClassInfo | None:
         """Get cached introspection data for a library class."""
         if not self._caching_enabled:
             return None
@@ -87,13 +87,13 @@ class ExternalLibraryCache:
             classes_data = cache_data.get("classes", {})
             class_data = classes_data.get(class_path)
             if class_data:
-                return self._deserialize_external_class_info(class_data)
+                return self._deserialize_param_class_info(class_data)
             return None
         except (json.JSONDecodeError, OSError) as e:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
-    def set(self, library_name: str, class_path: str, data: ExternalClassInfo) -> None:
+    def set(self, library_name: str, class_path: str, data: ParamClassInfo) -> None:
         """Cache introspection data for a library class."""
         if not self._caching_enabled:
             return
@@ -119,7 +119,7 @@ class ExternalLibraryCache:
                 pass
 
         # Serialize the dataclass to dict format
-        serialized_data = self._serialize_external_class_info(data)
+        serialized_data = self._serialize_param_class_info(data)
 
         # Update with new data
         cache_data["classes"][class_path] = serialized_data
@@ -162,11 +162,8 @@ class ExternalLibraryCache:
         # Only accept exact cache version match (no backward compatibility)
         return tuple(metadata.get("cache_version", ())) == CACHE_VERSION
 
-    def _serialize_external_class_info(
-        self, external_class_info: ExternalClassInfo
-    ) -> dict[str, Any]:
-        """Serialize ExternalClassInfo to dictionary format for JSON storage."""
-        param_class_info = external_class_info.param_class_info
+    def _serialize_param_class_info(self, param_class_info: ParamClassInfo) -> dict[str, Any]:
+        """Serialize ParamClassInfo to dictionary format for JSON storage."""
         parameters_data = {}
 
         for param_name, param_info in param_class_info.parameters.items():
@@ -181,20 +178,18 @@ class ExternalLibraryCache:
             }
 
         return {
-            "class_name": external_class_info.class_name,
-            "param_class_name": param_class_info.name,
+            "class_name": param_class_info.name,
             "parameters": parameters_data,
         }
 
-    def _deserialize_external_class_info(self, data: dict[str, Any]) -> ExternalClassInfo | None:
-        """Deserialize dictionary format back to ExternalClassInfo."""
+    def _deserialize_param_class_info(self, data: dict[str, Any]) -> ParamClassInfo | None:
+        """Deserialize dictionary format back to ParamClassInfo."""
         # Handle new dataclass format
         if "class_name" in data and "parameters" in data and isinstance(data["parameters"], dict):
             class_name = data["class_name"]
-            param_class_name = data.get("param_class_name", class_name)
             parameters_data = data["parameters"]
 
-            param_class_info = ParamClassInfo(name=param_class_name)
+            param_class_info = ParamClassInfo(name=class_name)
 
             for param_data in parameters_data.values():
                 param_info = ParameterInfo(
@@ -208,7 +203,7 @@ class ExternalLibraryCache:
                 )
                 param_class_info.add_parameter(param_info)
 
-            return ExternalClassInfo(class_name=class_name, param_class_info=param_class_info)
+            return param_class_info
 
     def clear(self, library_name: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
