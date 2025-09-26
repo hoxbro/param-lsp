@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
+from param_lsp.models import ExternalClassInfo, ParamClassInfo, ParameterInfo
 
 
 @pytest.fixture
@@ -98,14 +99,31 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data = {
-                "parameters": ["value", "name"],
-                "parameter_types": {"value": "Integer", "name": "String"},
-                "parameter_bounds": {},
-                "parameter_docs": {},
-                "parameter_allow_none": {},
-                "parameter_defaults": {},
-            }
+            # Create test data using dataclass format
+            param_class_info = ParamClassInfo(name="IntSlider")
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    param_type="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="name",
+                    param_type="String",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data = ExternalClassInfo(
+                class_name="IntSlider", param_class_info=param_class_info
+            )
 
             # Mock library version
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
@@ -115,7 +133,12 @@ class TestExternalLibraryCache:
                 # Get cache data
                 result = cache.get("panel", "panel.widgets.IntSlider")
 
-                assert result == test_data
+                assert result is not None
+                assert result.class_name == test_data.class_name
+                assert result.param_class_info.name == test_data.param_class_info.name
+                assert len(result.parameters) == len(test_data.parameters)
+                assert "value" in result.parameters
+                assert "name" in result.parameters
 
     def test_cache_get_nonexistent(self, enable_cache_for_test):
         """Test getting data that doesn't exist in cache."""
@@ -133,8 +156,36 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data1 = {"parameters": ["value"], "parameter_types": {"value": "Integer"}}
-            test_data2 = {"parameters": ["text"], "parameter_types": {"text": "String"}}
+            # Create test data using dataclass format
+            param_class_info1 = ParamClassInfo(name="IntSlider")
+            param_class_info1.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    param_type="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data1 = ExternalClassInfo(
+                class_name="IntSlider", param_class_info=param_class_info1
+            )
+
+            param_class_info2 = ParamClassInfo(name="TextInput")
+            param_class_info2.add_parameter(
+                ParameterInfo(
+                    name="text",
+                    param_type="String",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data2 = ExternalClassInfo(
+                class_name="TextInput", param_class_info=param_class_info2
+            )
 
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
                 # Set data for two different classes
@@ -145,8 +196,15 @@ class TestExternalLibraryCache:
                 result1 = cache.get("panel", "panel.widgets.IntSlider")
                 result2 = cache.get("panel", "panel.widgets.TextInput")
 
-                assert result1 == test_data1
-                assert result2 == test_data2
+                assert result1 is not None
+                assert result1.class_name == test_data1.class_name
+                assert result1.param_class_info.name == test_data1.param_class_info.name
+                assert "value" in result1.parameters
+
+                assert result2 is not None
+                assert result2.class_name == test_data2.class_name
+                assert result2.param_class_info.name == test_data2.param_class_info.name
+                assert "text" in result2.parameters
 
     def test_cache_version_isolation(self, enable_cache_for_test):
         """Test that different versions create separate cache files."""
@@ -154,8 +212,37 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data_v1 = {"parameters": ["old_param"]}
-            test_data_v2 = {"parameters": ["new_param"]}
+            # Create test data using dataclass format for version 1
+            param_class_info_v1 = ParamClassInfo(name="Widget")
+            param_class_info_v1.add_parameter(
+                ParameterInfo(
+                    name="old_param",
+                    param_type="String",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data_v1 = ExternalClassInfo(
+                class_name="Widget", param_class_info=param_class_info_v1
+            )
+
+            # Create test data using dataclass format for version 2
+            param_class_info_v2 = ParamClassInfo(name="Widget")
+            param_class_info_v2.add_parameter(
+                ParameterInfo(
+                    name="new_param",
+                    param_type="String",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data_v2 = ExternalClassInfo(
+                class_name="Widget", param_class_info=param_class_info_v2
+            )
 
             # Cache data for version 1.0.0
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
@@ -172,8 +259,12 @@ class TestExternalLibraryCache:
             with patch.object(cache, "_get_library_version", return_value="2.0.0"):
                 result_v2 = cache.get("panel", "panel.widgets.Widget")
 
-            assert result_v1 == test_data_v1
-            assert result_v2 == test_data_v2
+            assert result_v1 is not None
+            assert result_v1.class_name == test_data_v1.class_name
+            assert "old_param" in result_v1.parameters
+            assert result_v2 is not None
+            assert result_v2.class_name == test_data_v2.class_name
+            assert "new_param" in result_v2.parameters
 
     def test_cache_clear_specific_library(self, enable_cache_for_test):
         """Test clearing cache for a specific library."""
@@ -181,7 +272,21 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data = {"parameters": ["value"]}
+            # Create test data using dataclass format
+            param_class_info = ParamClassInfo(name="IntSlider")
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    param_type="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data = ExternalClassInfo(
+                class_name="IntSlider", param_class_info=param_class_info
+            )
 
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
                 # Set cache data
@@ -189,7 +294,9 @@ class TestExternalLibraryCache:
 
                 # Verify it's there
                 result = cache.get("panel", "panel.widgets.IntSlider")
-                assert result == test_data
+                assert result is not None
+                assert result.class_name == test_data.class_name
+                assert "value" in result.parameters
 
                 # Clear the cache
                 cache.clear("panel")
@@ -204,7 +311,21 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            test_data = {"parameters": ["value"]}
+            # Create test data using dataclass format
+            param_class_info = ParamClassInfo(name="TestClass")
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    param_type="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_none=False,
+                    default=None,
+                )
+            )
+            test_data = ExternalClassInfo(
+                class_name="TestClass", param_class_info=param_class_info
+            )
 
             with patch.object(cache, "_get_library_version", return_value="1.0.0"):
                 # Set cache data for multiple libraries
@@ -237,12 +358,27 @@ class TestExternalLibraryCache:
                 assert result is None
 
                 # Setting should overwrite the corrupted file
-                test_data = {"parameters": ["value"]}
+                param_class_info = ParamClassInfo(name="IntSlider")
+                param_class_info.add_parameter(
+                    ParameterInfo(
+                        name="value",
+                        param_type="Integer",
+                        bounds=None,
+                        doc=None,
+                        allow_none=False,
+                        default=None,
+                    )
+                )
+                test_data = ExternalClassInfo(
+                    class_name="IntSlider", param_class_info=param_class_info
+                )
                 cache.set("panel", "panel.widgets.IntSlider", test_data)
 
                 # Now get should work
                 result = cache.get("panel", "panel.widgets.IntSlider")
-                assert result == test_data
+                assert result is not None
+                assert result.class_name == test_data.class_name
+                assert "value" in result.parameters
 
 
 class TestCacheIntegration:
@@ -253,15 +389,19 @@ class TestCacheIntegration:
 
     def test_analyzer_uses_cache(self, analyzer, enable_cache_for_test):
         """Test that the analyzer uses the cache for external classes."""
-        # Mock the cache to return predefined data
-        test_data = {
-            "parameters": ["value"],
-            "parameter_types": {"value": "Integer"},
-            "parameter_bounds": {},
-            "parameter_docs": {},
-            "parameter_allow_none": {},
-            "parameter_defaults": {},
-        }
+        # Mock the cache to return predefined ExternalClassInfo data
+        param_class_info = ParamClassInfo(name="IntSlider")
+        param_class_info.add_parameter(
+            ParameterInfo(
+                name="value",
+                param_type="Integer",
+                bounds=None,
+                doc=None,
+                allow_none=False,
+                default=None,
+            )
+        )
+        test_data = ExternalClassInfo(class_name="IntSlider", param_class_info=param_class_info)
 
         original_get = external_library_cache.get
         external_library_cache.get = Mock(return_value=test_data)
@@ -301,5 +441,6 @@ w = pn.widgets.IntSlider()
         # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
         assert cached_data is not None
-        assert isinstance(cached_data, dict)
-        assert "parameters" in cached_data
+        assert isinstance(cached_data, ExternalClassInfo)
+        assert cached_data.class_name == "IntSlider"
+        assert "value" in cached_data.parameters

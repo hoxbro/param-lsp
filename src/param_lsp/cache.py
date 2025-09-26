@@ -14,6 +14,8 @@ from typing import Any
 
 import platformdirs
 
+from .models import ExternalClassInfo, ParamClassInfo, ParameterInfo
+
 logger = logging.getLogger(__name__)
 
 # Current cache version
@@ -59,7 +61,7 @@ class ExternalLibraryCache:
         """Get the version of an installed library."""
         return _get_version(library_name)
 
-    def get(self, library_name: str, class_path: str) -> dict[str, Any] | None:
+    def get(self, library_name: str, class_path: str) -> ExternalClassInfo | None:
         """Get cached introspection data for a library class."""
         if not self._caching_enabled:
             return None
@@ -83,12 +85,15 @@ class ExternalLibraryCache:
 
             # Check if this specific class path is in the cache
             classes_data = cache_data.get("classes", {})
-            return classes_data.get(class_path)
+            class_data = classes_data.get(class_path)
+            if class_data:
+                return self._deserialize_external_class_info(class_data)
+            return None
         except (json.JSONDecodeError, OSError) as e:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
-    def set(self, library_name: str, class_path: str, data: dict[str, Any]) -> None:
+    def set(self, library_name: str, class_path: str, data: ExternalClassInfo) -> None:
         """Cache introspection data for a library class."""
         if not self._caching_enabled:
             return
@@ -113,8 +118,11 @@ class ExternalLibraryCache:
                 # If we can't read existing cache, start fresh
                 pass
 
+        # Serialize the dataclass to dict format
+        serialized_data = self._serialize_external_class_info(data)
+
         # Update with new data
-        cache_data["classes"][class_path] = data
+        cache_data["classes"][class_path] = serialized_data
 
         # Save updated cache
         try:
@@ -137,7 +145,7 @@ class ExternalLibraryCache:
 
     def _is_cache_valid(self, cache_data: dict[str, Any], library_name: str, version: str) -> bool:
         """Validate cache data format and version compatibility."""
-        # Check if this is old format (classes directly at root)
+        # Only accept new format with metadata
         if "metadata" not in cache_data:
             return False
 
@@ -147,10 +155,60 @@ class ExternalLibraryCache:
         if metadata.get("library_name") != library_name:
             return False
 
-        if tuple(metadata.get("library_version")) != parse_version(version):
+        # Check library version match
+        if tuple(metadata.get("library_version", ())) != parse_version(version):
             return False
 
-        return tuple(metadata.get("cache_version")) >= CACHE_VERSION
+        # Only accept exact cache version match (no backward compatibility)
+        return tuple(metadata.get("cache_version", ())) == CACHE_VERSION
+
+    def _serialize_external_class_info(
+        self, external_class_info: ExternalClassInfo
+    ) -> dict[str, Any]:
+        """Serialize ExternalClassInfo to dictionary format for JSON storage."""
+        param_class_info = external_class_info.param_class_info
+        parameters_data = {}
+
+        for param_name, param_info in param_class_info.parameters.items():
+            parameters_data[param_name] = {
+                "name": param_info.name,
+                "param_type": param_info.param_type,
+                "bounds": param_info.bounds,
+                "doc": param_info.doc,
+                "allow_none": param_info.allow_none,
+                "default": param_info.default,
+                "location": param_info.location,
+            }
+
+        return {
+            "class_name": external_class_info.class_name,
+            "param_class_name": param_class_info.name,
+            "parameters": parameters_data,
+        }
+
+    def _deserialize_external_class_info(self, data: dict[str, Any]) -> ExternalClassInfo | None:
+        """Deserialize dictionary format back to ExternalClassInfo."""
+        # Handle new dataclass format
+        if "class_name" in data and "parameters" in data and isinstance(data["parameters"], dict):
+            class_name = data["class_name"]
+            param_class_name = data.get("param_class_name", class_name)
+            parameters_data = data["parameters"]
+
+            param_class_info = ParamClassInfo(name=param_class_name)
+
+            for param_data in parameters_data.values():
+                param_info = ParameterInfo(
+                    name=param_data["name"],
+                    param_type=param_data["param_type"],
+                    bounds=param_data.get("bounds"),
+                    doc=param_data.get("doc"),
+                    allow_none=param_data.get("allow_none", False),
+                    default=param_data.get("default"),
+                    location=param_data.get("location"),
+                )
+                param_class_info.add_parameter(param_info)
+
+            return ExternalClassInfo(class_name=class_name, param_class_info=param_class_info)
 
     def clear(self, library_name: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
