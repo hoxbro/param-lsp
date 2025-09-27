@@ -652,7 +652,7 @@ class ParamAnalyzer:
                 for child in bounds_node.children:
                     if child.type == "testlist_comp":
                         elements = [
-                            c for c in child.children if c.type in ("number", "name", "factor")
+                            c for c in child.children if c.type in ("number", "name", "factor", "keyword")
                         ]
                         if len(elements) >= 2:
                             min_val = self._extract_numeric_value(elements[0])
@@ -1701,7 +1701,7 @@ class ParamAnalyzer:
                     return int(node.value)
             except ValueError:
                 return None
-        elif hasattr(node, "type") and node.type == "name" and node.value == "None":
+        elif hasattr(node, "type") and node.type in ("name", "keyword") and node.value == "None":
             return None  # Explicitly handle None
         elif (
             hasattr(node, "type")
