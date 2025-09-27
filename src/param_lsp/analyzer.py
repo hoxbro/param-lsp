@@ -289,7 +289,9 @@ class ParamAnalyzer:
         """Handle 'from ... import ...' statements (parso node)."""
         # For parso import_from nodes, parse the from...import statement
         module_name = None
+        import_names = []
 
+        # First pass: find module name and collect import names
         for child in node.children:
             if (
                 child.type == "name"
@@ -309,15 +311,20 @@ class ParamAnalyzer:
                                     import_name = part.value
                                 else:
                                     alias_name = part.value
-                        if import_name and module_name:
-                            full_name = f"{module_name}.{import_name}"
-                            self.imports[alias_name or import_name] = full_name
+                        if import_name:
+                            import_names.append((import_name, alias_name))
                     elif name_child.type == "name":
                         # Handle "from module import name"
-                        import_name = name_child.value
-                        if module_name:
-                            full_name = f"{module_name}.{import_name}"
-                            self.imports[import_name] = full_name
+                        import_names.append((name_child.value, None))
+            elif child.type == "name" and child.value not in ("from", "import") and module_name is not None:
+                # Handle simple "from module import name" where name is a direct child
+                import_names.append((child.value, None))
+
+        # Second pass: register all imports
+        if module_name:
+            for import_name, alias_name in import_names:
+                full_name = f"{module_name}.{import_name}"
+                self.imports[alias_name or import_name] = full_name
 
     def _handle_class_def(self, node):
         """Handle class definitions that might inherit from param.Parameterized (parso node)."""
