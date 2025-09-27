@@ -207,19 +207,22 @@ class ParamAnalyzer:
         return False
 
     def _is_parameter_call_parso(self, node):
-        """Check if a parso power node represents a parameter type call."""
+        """Check if a parso power/atom_expr node represents a parameter type call."""
         # Extract the function name and check if it's a param type
         func_name = None
+
+        # Look through children to find the actual function being called
         for child in node.children:
             if child.type == "name":
-                func_name = child.value
-                break
+                # This might be the module name (e.g., "param")
+                continue
             elif child.type == "trailer":
                 # Handle dotted calls like param.Integer
                 for trailer_child in child.children:
                     if trailer_child.type == "name":
                         func_name = trailer_child.value
                         break
+                # If we found a function name in a trailer, that's likely the param type
                 if func_name:
                     break
 
@@ -446,7 +449,146 @@ class ParamAnalyzer:
 
     def _extract_parameters(self, node) -> list[ParameterInfo]:
         """Extract parameter definitions from a Param class (parso node)."""
-        return []
+        parameters = []
+
+        # Find the suite (class body) in the class definition
+        for child in node.children:
+            if child.type == "suite":
+                for item in child.children:
+                    if item.type == "expr_stmt" and self._is_assignment_stmt(item):
+                        target_name = self._get_assignment_target_name(item)
+                        if target_name and self._is_parameter_assignment_parso(item):
+                            # Extract parameter information
+                            param_info = self._extract_parameter_info_from_assignment(item, target_name)
+                            if param_info:
+                                parameters.append(param_info)
+                    elif item.type == "simple_stmt":
+                        # Also check within simple statements for other formats
+                        for stmt_child in item.children:
+                            if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(stmt_child):
+                                target_name = self._get_assignment_target_name(stmt_child)
+                                if target_name and self._is_parameter_assignment_parso(stmt_child):
+                                    # Extract parameter information
+                                    param_info = self._extract_parameter_info_from_assignment(stmt_child, target_name)
+                                    if param_info:
+                                        parameters.append(param_info)
+
+        return parameters
+
+    def _extract_parameter_info_from_assignment(self, assignment_node, param_name: str) -> ParameterInfo | None:
+        """Extract parameter info from a parso assignment statement."""
+        # Initialize parameter info
+        cls = ""
+        bounds = None
+        doc = None
+        allow_None = False
+        default = None
+        location = None
+
+        # Get the parameter call (right-hand side of assignment)
+        param_call = None
+        found_equals = False
+        for child in assignment_node.children:
+            if child.type == "operator" and child.value == "=":
+                found_equals = True
+            elif found_equals and child.type in ("power", "atom_expr"):
+                param_call = child
+                break
+
+        if param_call:
+            # Get parameter type from the function call
+            param_class_info = self._resolve_parameter_class_parso(param_call)
+            if param_class_info:
+                cls = param_class_info["type"]
+
+            # Extract parameter arguments (bounds, doc, default, etc.)
+            # Find the argument list in the function call
+            for call_child in param_call.children:
+                if call_child.type == "trailer" and call_child.children and call_child.children[0].value == "(":
+                    # This is the function call arguments
+                    bounds = self._extract_bounds_from_call_parso(call_child)
+                    doc = self._extract_doc_from_call_parso(call_child)
+                    allow_None_value = self._extract_allow_None_from_call_parso(call_child)
+                    default_value = self._extract_default_from_call_parso(call_child)
+
+                    # Store default value as a string representation
+                    if default_value is not None:
+                        default = self._format_default_value_parso(default_value)
+
+                    # Param automatically sets allow_None=True when default=None
+                    if default_value is not None and self._is_none_value_parso(default_value):
+                        allow_None = True
+                    elif allow_None_value is not None:
+                        allow_None = allow_None_value
+
+                    break
+
+        # Create ParameterInfo object
+        return ParameterInfo(
+            name=param_name,
+            cls=cls or "Unknown",
+            bounds=bounds,
+            doc=doc,
+            allow_None=allow_None,
+            default=default,
+            location=location,
+        )
+
+    def _resolve_parameter_class_parso(self, param_call):
+        """Resolve parameter class from a parso power node like param.Integer()."""
+        # Extract the function name from the call
+        func_name = None
+        module_name = None
+
+        for child in param_call.children:
+            if child.type == "name":
+                # Simple case: Integer()
+                func_name = child.value
+                break
+            elif child.type == "trailer":
+                # Handle dotted calls like param.Integer
+                for trailer_child in child.children:
+                    if trailer_child.type == "name":
+                        if module_name is None:
+                            module_name = func_name  # Previous name becomes module
+                        func_name = trailer_child.value
+
+        if func_name:
+            return PARAM_TYPE_MAP.get(func_name)
+        return None
+
+    def _extract_bounds_from_call_parso(self, call_trailer):
+        """Extract bounds from parameter call trailer (parso node)."""
+        # Look for bounds=(...) in the argument list
+        # Implementation depends on parsing the arguments within the trailer
+        return None
+
+    def _extract_doc_from_call_parso(self, call_trailer):
+        """Extract doc from parameter call trailer (parso node)."""
+        # Look for doc="..." in the argument list
+        return None
+
+    def _extract_allow_None_from_call_parso(self, call_trailer):
+        """Extract allow_None from parameter call trailer (parso node)."""
+        # Look for allow_None=True/False in the argument list
+        return None
+
+    def _extract_default_from_call_parso(self, call_trailer):
+        """Extract default from parameter call trailer (parso node)."""
+        # Look for default=value in the argument list
+        return None
+
+    def _format_default_value_parso(self, default_value):
+        """Format default value from parso node."""
+        # Convert parso node to string representation
+        if hasattr(default_value, 'get_code'):
+            return default_value.get_code()
+        return str(default_value)
+
+    def _is_none_value_parso(self, value):
+        """Check if parso node represents None value."""
+        return (hasattr(value, 'type') and value.type == 'name' and
+                hasattr(value, 'value') and value.value == 'None')
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
         """Extract bounds from a parameter call."""
