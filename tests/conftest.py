@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from param_lsp import ParamLanguageServer
+from param_lsp._server.server import ParamLanguageServer
 from param_lsp.analyzer import ParamAnalyzer
 
 
