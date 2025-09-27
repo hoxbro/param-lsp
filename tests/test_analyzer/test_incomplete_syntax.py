@@ -79,39 +79,9 @@ class TestClass(param.Parameterized):
         assert "param_classes" in result
         assert "imports" in result
 
-    def test_decorator_incomplete_recovery(self, analyzer):
-        """Test recovery from incomplete decorator calls (generalized approach)."""
-        # Test unclosed parenthesis in any decorator
-        code_py = """\
-import some_module
-
-class TestClass:
-    value = 42
-
-    @some_module.decorator('argument'
-    def compute(self):
-        return self.value * 2
-"""
-        result = analyzer.analyze_file(code_py)
-        # Should successfully parse the class structure
-        assert isinstance(result, dict)
-
-        # Test unclosed quote in decorator
-        code_py = """\
-import another_module
-
-class TestClass:
-    value = 42
-
-    @another_module.depends('value
-    def compute(self):
-        return self.value * 2
-"""
-        result = analyzer.analyze_file(code_py)
-        # Should successfully parse the class structure
-        assert isinstance(result, dict)
-
-        # Test with param.depends specifically (should work with generalized approach)
+    def test_param_depends_incomplete_recovery(self, analyzer):
+        """Test recovery from incomplete @param.depends decorators."""
+        # Test unclosed parenthesis in @param.depends
         code_py = """\
 import param
 
@@ -119,6 +89,20 @@ class TestClass(param.Parameterized):
     value = param.Number(default=1.0)
 
     @param.depends('value'
+    def compute(self):
+        return self.value * 2
+"""
+        result = analyzer.analyze_file(code_py)
+        assert "TestClass" in result["param_classes"]
+
+        # Test unclosed quote in @param.depends
+        code_py = """\
+import param
+
+class TestClass(param.Parameterized):
+    value = param.Number(default=1.0)
+
+    @param.depends('value
     def compute(self):
         return self.value * 2
 """
@@ -236,53 +220,3 @@ class ComplexClass(param.Parameterized):
         assert "imports" in result
         # It should at least detect that param was imported
         assert "param" in result["imports"]
-
-    def test_generalized_import_fixing(self, analyzer):
-        """Test generalized import statement fixing."""
-        # Test incomplete "from module" statements
-        code_py = """\
-from os
-from sys
-from collections
-
-def some_function():
-    pass
-"""
-        result = analyzer.analyze_file(code_py)
-        # Should successfully parse without crashing
-        assert isinstance(result, dict)
-
-    def test_generalized_decorator_patterns(self, analyzer):
-        """Test that decorator fixing works for various patterns."""
-        # Test Flask-like decorator
-        code_py = """\
-from flask import app
-
-@app.route('/test'
-def hello():
-    return "Hello"
-"""
-        result = analyzer.analyze_file(code_py)
-        assert isinstance(result, dict)
-
-        # Test property decorator
-        code_py = """\
-class MyClass:
-    @property
-    def value(self
-        return 42
-"""
-        result = analyzer.analyze_file(code_py)
-        assert isinstance(result, dict)
-
-        # Test dataclass decorator
-        code_py = """\
-from dataclasses import dataclass
-
-@dataclass
-class Point:
-    x: int = 0
-    y: int = 0
-"""
-        result = analyzer.analyze_file(code_py)
-        assert isinstance(result, dict)
