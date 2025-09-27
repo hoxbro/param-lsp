@@ -51,6 +51,11 @@ class ParamAnalyzer:
             str, ParameterizedInfo | None
         ] = {}  # full_class_path -> class_info
 
+        # Memory system for tracking last successful file states
+        self._last_successful_file_states: dict[
+            str, dict[str, Any]
+        ] = {}  # file_path -> file_state
+
         # Populate external library cache on initialization
         self._populate_external_library_cache()
 
@@ -63,23 +68,27 @@ class ParamAnalyzer:
             self._current_file_path = file_path
             self._current_file_content = content
         except SyntaxError:
-            # Try to handle incomplete code (e.g., unclosed parentheses during typing)
-            lines = content.split("\n")
+            # Try memory-based approach first if we have a successful previous state
+            if file_path and file_path in self._last_successful_file_states:
+                tree = self._try_memory_based_recovery(content, file_path)
 
-            # First, try to fix common incomplete syntax patterns
-            fixed_content = self._try_fix_incomplete_syntax(lines)
-            if fixed_content != content:
-                try:
-                    tree = ast.parse(fixed_content)
-                    self._reset_analysis()
-                    self._current_file_path = file_path
-                    logger.info("Successfully parsed after fixing incomplete syntax")
-                    # Continue with the fixed content
-                except SyntaxError:
-                    pass  # Fall back to line removal approach
+            # If memory-based approach didn't work, try to fix common incomplete syntax patterns
+            if tree is None:
+                lines = content.split("\n")
+                fixed_content = self._try_fix_incomplete_syntax(lines)
+                if fixed_content != content:
+                    try:
+                        tree = ast.parse(fixed_content)
+                        self._reset_analysis()
+                        self._current_file_path = file_path
+                        logger.info("Successfully parsed after fixing incomplete syntax")
+                        # Continue with the fixed content
+                    except SyntaxError:
+                        pass  # Fall back to line removal approach
 
             # If fixing didn't work, try removing lines with incomplete syntax from the end
             if tree is None:
+                lines = content.split("\n")
                 for i in range(1, len(lines) + 1):
                     # Try parsing without the last i lines
                     truncated_content = "\n".join(lines[:-i] if i < len(lines) else [])
@@ -158,11 +167,17 @@ class ParamAnalyzer:
         # Perform type inference after parsing
         self._check_parameter_types(tree, content.split("\n"))
 
-        return {
+        # Store successful file state for future memory-based recovery
+        result = {
             "param_classes": self.param_classes,
             "imports": self.imports,
             "type_errors": self.type_errors,
         }
+
+        if file_path:
+            self._store_successful_file_state(file_path, content, result)
+
+        return result
 
     def _reset_analysis(self):
         """Reset analysis state."""
@@ -1268,10 +1283,12 @@ class ParamAnalyzer:
 
         for line in lines:
             fixed_line = line
+            line_fixed = False
 
             # Fix incomplete imports like "from param" -> "import param"
             if line.strip().startswith("from param") and " import " not in line:
                 fixed_line = "import param"
+                line_fixed = True
 
             # Fix incomplete @param.depends( by adding closing parenthesis and quotes
             elif "@param.depends(" in line and ")" not in line:
@@ -1285,11 +1302,150 @@ class ParamAnalyzer:
                 else:
                     # No quotes or balanced quotes, just add closing parenthesis
                     fixed_line = line + ")"
+                line_fixed = True
 
             # Fix incomplete function definitions after @param.depends
             elif line.strip().startswith("def ") and line.endswith(": ..."):
                 # Make it a proper function definition
                 fixed_line = line.replace(": ...", ":\n        pass")
+                line_fixed = True
+
+            # If line wasn't specifically fixed, check for general syntax issues
+            if not line_fixed:
+                fixed_line = self._fix_line_syntax_issues(line)
+
+            fixed_lines.append(fixed_line)
+
+        # Check if we have too many syntax issues for safe fixing
+        full_content = "\n".join(fixed_lines)
+        if self._has_too_many_syntax_issues(full_content):
+            # Fall back to conservative line-by-line fixing
+            return self._conservative_line_fixing(lines)
+
+        # Try to fix multi-line incomplete syntax by analyzing the whole content
+        return self._fix_global_syntax_issues(full_content)
+
+    def _fix_line_syntax_issues(self, line: str) -> str:
+        """Fix common syntax issues in a single line."""
+        fixed_line = line
+
+        # Count quotes in the line
+        double_quotes = line.count('"') - line.count('\\"')  # Exclude escaped quotes
+        single_quotes = line.count("'") - line.count("\\'")  # Exclude escaped quotes
+
+        # Fix unclosed quotes (simple cases) - only handle quotes at line level
+        # Let global syntax fixing handle brackets to avoid order issues
+        if double_quotes % 2 == 1 and single_quotes % 2 == 0:
+            # Odd number of double quotes, even single quotes
+            fixed_line = line + '"'
+        elif single_quotes % 2 == 1 and double_quotes % 2 == 0:
+            # Odd number of single quotes, even double quotes
+            fixed_line = line + "'"
+
+        return fixed_line
+
+    def _fix_global_syntax_issues(self, content: str) -> str:
+        """Fix multi-line syntax issues across the entire content."""
+        # Track open brackets/quotes across all lines with a stack to maintain order
+        bracket_stack = []  # Stack to track opening brackets
+        in_string = False
+        string_char = None
+
+        # Analyze the entire content character by character
+        i = 0
+        while i < len(content):
+            char = content[i]
+
+            # Handle string literals
+            if char in ('"', "'") and (i == 0 or content[i - 1] != "\\"):
+                if not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char:
+                    in_string = False
+                    string_char = None
+
+            # Skip counting if we're inside a string
+            elif not in_string:
+                if char in "([{":
+                    bracket_stack.append(char)
+                elif char in ")]}" and bracket_stack:
+                    # Pop from stack if it matches
+                    opening = bracket_stack[-1]
+                    if (
+                        (char == ")" and opening == "(")
+                        or (char == "]" and opening == "[")
+                        or (char == "}" and opening == "{")
+                    ):
+                        bracket_stack.pop()
+
+            i += 1
+
+        # Add closing tokens if needed
+        closing_tokens = []
+
+        # Close unclosed strings
+        if in_string and string_char:
+            closing_tokens.append(string_char)
+
+        # Close unclosed brackets in reverse order (LIFO)
+        bracket_map = {"(": ")", "[": "]", "{": "}"}
+        while bracket_stack:
+            opening_bracket = bracket_stack.pop()
+            closing_tokens.append(bracket_map[opening_bracket])
+
+        if closing_tokens:
+            content += "".join(closing_tokens)
+
+        return content
+
+    def _has_too_many_syntax_issues(self, content: str) -> bool:
+        """Check if content has too many syntax issues for safe automatic fixing."""
+        # Count unclosed quotes across multiple lines
+        unclosed_quotes = 0
+        for char in ['"', "'"]:
+            count = content.count(char) - content.count(f"\\{char}")
+            if count % 2 == 1:
+                unclosed_quotes += 1
+
+        # Count unclosed brackets
+        bracket_issues = 0
+        for open_b, close_b in [("(", ")"), ("[", "]"), ("{", "}")]:
+            open_count = content.count(open_b)
+            close_count = content.count(close_b)
+            if open_count != close_count:
+                bracket_issues += 1
+
+        # If there are multiple different types of syntax issues, be conservative
+        return (unclosed_quotes + bracket_issues) > 2
+
+    def _conservative_line_fixing(self, lines: list[str]) -> str:
+        """Apply conservative line-by-line fixing without global bracket fixing."""
+        fixed_lines = []
+
+        for line in lines:
+            fixed_line = line
+
+            # Only fix very specific, safe patterns
+            # Fix incomplete imports
+            if line.strip().startswith("from param") and " import " not in line:
+                fixed_line = "import param"
+
+            # Fix @param.depends patterns
+            elif "@param.depends(" in line and ")" not in line:
+                if '"' in line and line.count('"') % 2 == 1:
+                    fixed_line = line + '")'
+                elif "'" in line and line.count("'") % 2 == 1:
+                    fixed_line = line + "')"
+                else:
+                    fixed_line = line + ")"
+
+            # Fix simple unclosed quotes at end of line (only if it's clearly safe)
+            elif (line.strip().endswith('"') and line.count('"') % 2 == 1) or (
+                line.strip().endswith("'") and line.count("'") % 2 == 1
+            ):
+                # Don't fix - too risky with multiple issues
+                pass
 
             fixed_lines.append(fixed_line)
 
@@ -1817,3 +1973,119 @@ class ParamAnalyzer:
                                 return assigned_class
 
         return None
+
+    def _try_memory_based_recovery(self, current_content: str, file_path: str) -> ast.AST | None:
+        """Try to recover from syntax errors using memory of last successful file state."""
+        last_state = self._last_successful_file_states.get(file_path)
+        if not last_state:
+            return None
+
+        last_content = last_state.get("content", "")
+        if not last_content:
+            return None
+
+        logger.info("Attempting memory-based syntax recovery")
+
+        # Find differences between current and last successful content
+        current_lines = current_content.split("\n")
+        last_lines = last_content.split("\n")
+
+        # Try to identify the problematic range by finding where they differ
+        diff_start, diff_end = self._find_content_difference_range(current_lines, last_lines)
+
+        if diff_start is not None and diff_end is not None:
+            # Try replacing the problematic range with the last successful version
+            recovered_lines = current_lines.copy()
+
+            # Replace the changed range with the corresponding range from last successful state
+            last_start = min(diff_start, len(last_lines))
+            last_end = min(diff_end, len(last_lines))
+
+            # Replace the problematic section
+            recovered_lines[diff_start:diff_end] = last_lines[last_start:last_end]
+            recovered_content = "\n".join(recovered_lines)
+
+            try:
+                tree = ast.parse(recovered_content)
+                self._reset_analysis()
+                self._current_file_path = file_path
+                logger.info(
+                    f"Successfully recovered using memory-based approach (lines {diff_start}-{diff_end})"
+                )
+                return tree
+            except SyntaxError:
+                pass
+
+            # Try with just the last successful content up to the difference
+            if diff_start > 0:
+                partial_recovery = last_lines[:diff_start] + current_lines[diff_start:]
+                try:
+                    tree = ast.parse("\n".join(partial_recovery))
+                    self._reset_analysis()
+                    self._current_file_path = file_path
+                    logger.info(
+                        f"Successfully recovered using partial memory-based approach (up to line {diff_start})"
+                    )
+                    return tree
+                except SyntaxError:
+                    pass
+
+        return None
+
+    def _find_content_difference_range(
+        self, current_lines: list[str], last_lines: list[str]
+    ) -> tuple[int | None, int | None]:
+        """Find the range of lines where current content differs from last successful content."""
+        min_len = min(len(current_lines), len(last_lines))
+        max_len = max(len(current_lines), len(last_lines))
+
+        # Find first difference
+        diff_start = None
+        for i in range(min_len):
+            if current_lines[i] != last_lines[i]:
+                diff_start = i
+                break
+
+        if diff_start is None and len(current_lines) != len(last_lines):
+            # Content is identical up to the shorter length, difference is in length
+            diff_start = min_len
+
+        if diff_start is None:
+            return None, None
+
+        # Find last difference (search backwards)
+        diff_end = max_len
+        current_len = len(current_lines)
+        last_len = len(last_lines)
+
+        # Compare from the end
+        for i in range(1, min_len + 1):
+            current_idx = current_len - i
+            last_idx = last_len - i
+            if (
+                current_idx >= 0
+                and last_idx >= 0
+                and current_lines[current_idx] == last_lines[last_idx]
+            ):
+                diff_end = current_len - i + 1
+                break
+
+        # Ensure diff_end is not beyond the actual difference
+        if diff_start is not None:
+            # Find the actual end of the different region
+            for i in range(diff_start + 1, min_len):
+                if current_lines[i] == last_lines[i]:
+                    diff_end = i
+                    break
+
+        return diff_start, diff_end
+
+    def _store_successful_file_state(
+        self, file_path: str, content: str, analysis_result: dict[str, Any]
+    ) -> None:
+        """Store the current file state as a successful state for future recovery."""
+        self._last_successful_file_states[file_path] = {
+            "content": content,
+            "timestamp": __import__("time").time(),
+            "analysis_result": analysis_result,
+        }
