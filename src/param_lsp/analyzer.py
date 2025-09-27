@@ -230,13 +230,13 @@ class ParamAnalyzer:
     def _has_attribute_target(self, node):
         """Check if assignment has an attribute target (like obj.attr = value)."""
         for child in node.children:
-            if child.type == "power":
-                # Check if this power node has attribute access (trailer with '.')
-                for power_child in child.children:
+            if child.type in ("power", "atom_expr"):
+                # Check if this node has attribute access (trailer with '.')
+                for sub_child in child.children:
                     if (
-                        power_child.type == "trailer"
-                        and power_child.children
-                        and power_child.children[0].value == "."
+                        sub_child.type == "trailer"
+                        and sub_child.children
+                        and sub_child.children[0].value == "."
                     ):
                         return True
             elif child.type == "operator" and child.value == "=":
@@ -735,11 +735,10 @@ class ParamAnalyzer:
                                                     stmt_child, target_name, lines
                                                 )
 
-            # TODO: Check runtime parameter assignments like obj.param = value
-            # This needs to be converted from AST to parso - temporarily disabled
-            # elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
-            #     if self._has_attribute_target(node):
-            #         self._check_runtime_parameter_assignment(node, None, lines)
+            # Check runtime parameter assignments like obj.param = value
+            elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
+                if self._has_attribute_target(node):
+                    self._check_runtime_parameter_assignment_parso(node, lines)
 
             # Check constructor calls like MyClass(x="A")
             elif node.type == "power" and self._is_function_call(node):
@@ -1000,6 +999,191 @@ class ParamAnalyzer:
 
         # Check bounds for numeric parameters
         self._check_runtime_bounds(node, instance_class, param_name, cls, assigned_value)
+
+    def _check_runtime_parameter_assignment_parso(self, node, lines: list[str]):
+        """Check runtime parameter assignments like obj.param = value (parso version)."""
+        # Extract target and assigned value from parso expr_stmt node
+        target = None
+        assigned_value = None
+
+        # Look for attribute target and assigned value
+        for child in node.children:
+            if child.type in ("power", "atom_expr"):
+                # Check if this is an attribute access (obj.attr)
+                has_attribute = False
+                for sub_child in child.children:
+                    if (
+                        sub_child.type == "trailer"
+                        and sub_child.children
+                        and sub_child.children[0].value == "."
+                    ):
+                        has_attribute = True
+                        break
+                if has_attribute:
+                    target = child
+            elif child.type == "operator" and child.value == "=":
+                # Next non-operator child should be the assigned value
+                continue
+            elif target is not None and child.type != "operator":
+                assigned_value = child
+                break
+
+        if not target or not assigned_value:
+            return
+
+        # Extract parameter name from the attribute access
+        param_name = None
+        for child in target.children:
+            if (
+                child.type == "trailer"
+                and len(child.children) >= 2
+                and child.children[0].value == "."
+                and child.children[1].type == "name"
+            ):
+                param_name = child.children[1].value
+                break
+
+        if not param_name:
+            return
+
+        # Determine the instance class
+        instance_class = None
+
+        # Check if this is a direct instantiation (has parentheses before the dot)
+        has_call = False
+        for child in target.children:
+            if (
+                child.type == "trailer"
+                and len(child.children) >= 2
+                and child.children[0].value == "("
+                and child.children[-1].value == ")"
+            ):
+                has_call = True
+                break
+
+        if has_call:
+            # Case: MyClass().param = value (direct instantiation)
+            instance_class = self._get_instance_class(target)
+        else:
+            # Case: instance_var.param = value
+            # Try to find which param class has this parameter
+            for class_name, class_info in self.param_classes.items():
+                if param_name in class_info.parameters:
+                    instance_class = class_name
+                    break
+
+            # If not found in local classes, check external param classes
+            if not instance_class:
+                for class_name, class_info in self.external_param_classes.items():
+                    if class_info and param_name in class_info.parameters:
+                        instance_class = class_name
+                        break
+
+        if not instance_class:
+            return
+
+        # Check if this is a valid param class
+        is_valid_param_class = instance_class in self.param_classes or (
+            instance_class in self.external_param_classes
+            and self.external_param_classes[instance_class]
+        )
+
+        if not is_valid_param_class:
+            return
+
+        # Get the parameter type from the class definition
+        cls = self._get_parameter_type_from_class(instance_class, param_name)
+        if not cls:
+            return
+
+        # Check if assigned value matches expected type
+        if cls in self.param_type_map:
+            expected_types = self.param_type_map[cls]
+            if not isinstance(expected_types, tuple):
+                expected_types = (expected_types,)
+
+            inferred_type = self._infer_value_type(assigned_value)
+
+            # Check if None is allowed for this parameter
+            if inferred_type is type(None):  # None value
+                allow_None = self._get_parameter_allow_None(instance_class, param_name)
+                if allow_None:
+                    return  # None is allowed, skip further validation
+
+            # Special handling for Boolean parameters
+            if cls == "Boolean" and inferred_type and inferred_type is not bool:
+                # For Boolean parameters, only accept actual boolean values
+                if not self._is_boolean_literal(assigned_value):
+                    message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)"
+                    self._create_type_error(node, message, "runtime-boolean-type-mismatch")
+            elif inferred_type and not any(
+                (isinstance(inferred_type, type) and issubclass(inferred_type, t))
+                or inferred_type == t
+                for t in expected_types
+            ):
+                message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})"
+                self._create_type_error(node, message, "runtime-type-mismatch")
+
+        # Check bounds for numeric parameters
+        self._check_runtime_bounds_parso(node, instance_class, param_name, cls, assigned_value)
+
+    def _is_boolean_literal(self, node):
+        """Check if a parso node represents a boolean literal (True/False)."""
+        return (node.type == "name" and node.value in ("True", "False")) or (
+            node.type == "keyword" and node.value in ("True", "False")
+        )
+
+    def _check_runtime_bounds_parso(
+        self, node, instance_class: str, param_name: str, cls: str, assigned_value
+    ):
+        """Check if assigned value is within parameter bounds (parso version)."""
+        # Only check bounds for numeric types
+        if cls not in ["Number", "Integer"]:
+            return
+
+        # Get bounds for this parameter
+        bounds = self._get_parameter_bounds(instance_class, param_name)
+        if not bounds:
+            return
+
+        # Extract numeric value from assigned value
+        assigned_numeric = self._extract_numeric_value(assigned_value)
+        if assigned_numeric is None:
+            return
+
+        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
+        if len(bounds) == 2:
+            min_val, max_val = bounds
+            left_inclusive, right_inclusive = True, True  # Default to inclusive
+        elif len(bounds) == 4:
+            min_val, max_val, left_inclusive, right_inclusive = bounds
+        else:
+            return
+
+        # Check if value is within bounds based on inclusivity
+        violates_lower = False
+        violates_upper = False
+
+        if min_val is not None:
+            if left_inclusive:
+                violates_lower = assigned_numeric < min_val
+            else:
+                violates_lower = assigned_numeric <= min_val
+
+        if max_val is not None:
+            if right_inclusive:
+                violates_upper = assigned_numeric > max_val
+            else:
+                violates_upper = assigned_numeric >= max_val
+
+        # Format bounds description with proper None handling
+        min_str = str(min_val) if min_val is not None else "-∞"
+        max_str = str(max_val) if max_val is not None else "∞"
+        bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
+
+        if violates_lower or violates_upper:
+            message = f"Value {assigned_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
+            self._create_type_error(node, message, "bounds-violation")
 
     def _check_runtime_bounds(
         self,
