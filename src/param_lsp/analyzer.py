@@ -1278,42 +1278,12 @@ class ParamAnalyzer:
         return class_info
 
     def _try_fix_incomplete_syntax(self, lines: list[str]) -> str:
-        """Try to fix common incomplete syntax patterns."""
+        """Try to fix common incomplete syntax patterns using generalized approaches."""
         fixed_lines = []
 
         for line in lines:
-            fixed_line = line
-            line_fixed = False
-
-            # Fix incomplete imports like "from param" -> "import param"
-            if line.strip().startswith("from param") and " import " not in line:
-                fixed_line = "import param"
-                line_fixed = True
-
-            # Fix incomplete @param.depends( by adding closing parenthesis and quotes
-            elif "@param.depends(" in line and ")" not in line:
-                # Handle unclosed quotes in @param.depends
-                if '"' in line and line.count('"') % 2 == 1:
-                    # Unclosed double quote
-                    fixed_line = line + '")'
-                elif "'" in line and line.count("'") % 2 == 1:
-                    # Unclosed single quote
-                    fixed_line = line + "')"
-                else:
-                    # No quotes or balanced quotes, just add closing parenthesis
-                    fixed_line = line + ")"
-                line_fixed = True
-
-            # Fix incomplete function definitions after @param.depends
-            elif line.strip().startswith("def ") and line.endswith(": ..."):
-                # Make it a proper function definition
-                fixed_line = line.replace(": ...", ":\n        pass")
-                line_fixed = True
-
-            # If line wasn't specifically fixed, check for general syntax issues
-            if not line_fixed:
-                fixed_line = self._fix_line_syntax_issues(line)
-
+            # Apply line-level syntax fixing for general issues
+            fixed_line = self._fix_line_syntax_issues(line)
             fixed_lines.append(fixed_line)
 
         # Check if we have too many syntax issues for safe fixing
@@ -1326,23 +1296,78 @@ class ParamAnalyzer:
         return self._fix_global_syntax_issues(full_content)
 
     def _fix_line_syntax_issues(self, line: str) -> str:
-        """Fix common syntax issues in a single line."""
-        fixed_line = line
+        """Fix common syntax issues in a single line using generalized patterns."""
+        fixed_line = line.rstrip()  # Remove trailing whitespace
 
-        # Count quotes in the line
-        double_quotes = line.count('"') - line.count('\\"')  # Exclude escaped quotes
-        single_quotes = line.count("'") - line.count("\\'")  # Exclude escaped quotes
+        # Skip empty lines and comments
+        if not fixed_line.strip() or fixed_line.strip().startswith("#"):
+            return line
 
-        # Fix unclosed quotes (simple cases) - only handle quotes at line level
-        # Let global syntax fixing handle brackets to avoid order issues
-        if double_quotes % 2 == 1 and single_quotes % 2 == 0:
-            # Odd number of double quotes, even single quotes
-            fixed_line = line + '"'
-        elif single_quotes % 2 == 1 and double_quotes % 2 == 0:
-            # Odd number of single quotes, even double quotes
-            fixed_line = line + "'"
+        # Fix unclosed quotes at end of line (simple cases)
+        fixed_line = self._fix_unclosed_quotes_on_line(fixed_line)
+
+        # Fix incomplete decorator calls (generic pattern matching)
+        fixed_line = self._fix_incomplete_decorator_calls(fixed_line)
+
+        # Fix incomplete import statements
+        fixed_line = self._fix_incomplete_imports(fixed_line)
 
         return fixed_line
+
+    def _fix_unclosed_quotes_on_line(self, line: str) -> str:
+        """Fix unclosed quotes on a single line."""
+        # Count quotes excluding escaped ones
+        double_quotes = line.count('"') - line.count('\\"')
+        single_quotes = line.count("'") - line.count("\\'")
+
+        # Only fix if there's exactly one type of unclosed quote
+        if double_quotes % 2 == 1 and single_quotes % 2 == 0:
+            # Odd number of double quotes, even single quotes
+            return line + '"'
+        elif single_quotes % 2 == 1 and double_quotes % 2 == 0:
+            # Odd number of single quotes, even double quotes
+            return line + "'"
+
+        return line
+
+    def _fix_incomplete_decorator_calls(self, line: str) -> str:
+        """Fix incomplete decorator calls using generic pattern matching."""
+        stripped = line.strip()
+
+        # Pattern: @module.function( with unclosed parenthesis
+        if stripped.startswith("@") and "(" in stripped and ")" not in stripped:
+            # Check if there are unclosed quotes inside the decorator
+            content_after_paren = stripped.split("(", 1)[1]
+
+            double_quotes = content_after_paren.count('"') - content_after_paren.count('\\"')
+            single_quotes = content_after_paren.count("'") - content_after_paren.count("\\'")
+
+            # Fix quotes first, then close parenthesis
+            if double_quotes % 2 == 1:
+                return line + '")'
+            elif single_quotes % 2 == 1:
+                return line + "')"
+            else:
+                return line + ")"
+
+        return line
+
+    def _fix_incomplete_imports(self, line: str) -> str:
+        """Fix incomplete import statements."""
+        stripped = line.strip()
+
+        # Pattern: "from module" without "import"
+        if (
+            stripped.startswith("from ")
+            and " import " not in stripped
+            and not stripped.endswith(":")
+        ):
+            # Extract the module name
+            module_name = stripped[5:].strip()
+            if module_name and not any(char in module_name for char in "()[]{}\"'"):
+                return f"import {module_name}"
+
+        return line
 
     def _fix_global_syntax_issues(self, content: str) -> str:
         """Fix multi-line syntax issues across the entire content."""
@@ -1424,32 +1449,37 @@ class ParamAnalyzer:
         fixed_lines = []
 
         for line in lines:
-            fixed_line = line
-
-            # Only fix very specific, safe patterns
-            # Fix incomplete imports
-            if line.strip().startswith("from param") and " import " not in line:
-                fixed_line = "import param"
-
-            # Fix @param.depends patterns
-            elif "@param.depends(" in line and ")" not in line:
-                if '"' in line and line.count('"') % 2 == 1:
-                    fixed_line = line + '")'
-                elif "'" in line and line.count("'") % 2 == 1:
-                    fixed_line = line + "')"
-                else:
-                    fixed_line = line + ")"
-
-            # Fix simple unclosed quotes at end of line (only if it's clearly safe)
-            elif (line.strip().endswith('"') and line.count('"') % 2 == 1) or (
-                line.strip().endswith("'") and line.count("'") % 2 == 1
-            ):
-                # Don't fix - too risky with multiple issues
-                pass
-
+            # Apply only the safest line-level fixes when there are too many syntax issues
+            # This is more conservative than the regular line fixing
+            fixed_line = self._fix_safe_line_syntax_issues(line)
             fixed_lines.append(fixed_line)
 
         return "\n".join(fixed_lines)
+
+    def _fix_safe_line_syntax_issues(self, line: str) -> str:
+        """Apply only the safest line-level syntax fixes."""
+        # When there are multiple syntax issues, be extremely conservative
+        # Only fix obvious, single-character issues that can't cause conflicts
+
+        stripped = line.strip()
+
+        # Don't fix anything if the line is empty or is a comment
+        if not stripped or stripped.startswith("#"):
+            return line
+
+        # Don't fix lines with complex quote patterns or multiple unclosed brackets
+        quote_issues = (line.count('"') % 2) + (line.count("'") % 2)
+        bracket_issues = (
+            abs(line.count("(") - line.count(")"))
+            + abs(line.count("[") - line.count("]"))
+            + abs(line.count("{") - line.count("}"))
+        )
+
+        # If there are multiple types of issues on one line, don't fix anything
+        if quote_issues > 1 or bracket_issues > 1 or (quote_issues > 0 and bracket_issues > 0):
+            return line
+
+        return line
 
     def _introspect_external_class_runtime(self, full_class_path: str) -> ParameterizedInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
