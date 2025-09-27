@@ -18,7 +18,12 @@ from typing import Any
 import param
 
 from .cache import external_library_cache
-from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
+from .constants import (
+    ALLOWED_EXTERNAL_LIBRARIES,
+    DEPRECATED_PARAMETER_TYPES,
+    PARAM_TYPE_MAP,
+    PARAM_TYPES,
+)
 from .models import ParameterInfo, ParameterizedInfo
 
 logging.basicConfig(level=logging.INFO)
@@ -510,6 +515,15 @@ class ParamAnalyzer:
                                 item.value
                             ):
                                 self._check_parameter_default_type(item, target.id, lines)
+                                # Check for deprecated parameter types
+                                if isinstance(item.value, ast.Call):
+                                    param_class_info = self._resolve_parameter_class(
+                                        item.value.func
+                                    )
+                                    if param_class_info and param_class_info["type"]:
+                                        self._check_deprecated_parameter_type(
+                                            item, param_class_info["type"]
+                                        )
 
             # Check runtime parameter assignments like obj.param = value
             elif isinstance(node, ast.Assign):
@@ -971,6 +985,15 @@ class ParamAnalyzer:
                 "code": code,
             }
         )
+
+    def _check_deprecated_parameter_type(
+        self, node: ast.Call | ast.Assign, param_type: str
+    ) -> None:
+        """Check if a parameter type is deprecated and emit a warning."""
+        if param_type in DEPRECATED_PARAMETER_TYPES:
+            deprecation_info = DEPRECATED_PARAMETER_TYPES[param_type]
+            message = f"{deprecation_info['message']} (since {deprecation_info['version']})"
+            self._create_type_error(node, message, "deprecated-parameter", "warning")
 
     def _infer_value_type(self, node: ast.expr) -> type | None:
         """Infer Python type from AST node."""

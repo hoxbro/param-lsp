@@ -270,3 +270,16 @@ RX_METHODS = {
 RX_PROPERTIES = {
     "value": "Retrieves or sets the current value of the reactive expression",
 }
+
+# =============================================================================
+# DEPRECATION WARNINGS
+# =============================================================================
+
+# Configuration for deprecated parameter types
+DEPRECATED_PARAMETER_TYPES = {
+    "ObjectSelector": {
+        "replacement": "Selector",
+        "message": "ObjectSelector is deprecated, use Selector instead",
+        "version": "param 2.0+",
+    }
+}
