@@ -33,7 +33,7 @@ Catch type mismatches before runtime:
 - **Integer**: Whole numbers with optional bounds
 - **Number**: Numeric values (int/float) with optional bounds
 - **Boolean**: True/False values
-- **List**: List objects with optional item type checking
+- **List**: List objects with optional item type validation
 - **Dict**: Dictionary objects
 - **Tuple**: Tuple objects with optional element validation
 

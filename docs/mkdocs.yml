@@ -15,7 +15,7 @@ nav:
   - Features:
       - Overview: features/index.md
       - Autocompletion: features/autocompletion.md
-      - Type Checking: features/type-checking.md
+      - Type Validation: features/type-validation.md
       - Hover Information: features/hover-information.md
 
 theme:
