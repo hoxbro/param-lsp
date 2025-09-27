@@ -6,7 +6,6 @@ hover information, and diagnostics.
 
 from __future__ import annotations
 
-import ast
 import importlib
 import importlib.util
 import inspect
@@ -16,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import param
+import parso
 
 from .cache import external_library_cache
 from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
@@ -51,83 +51,57 @@ class ParamAnalyzer:
 
     def analyze_file(self, content: str, file_path: str | None = None) -> dict[str, Any]:
         """Analyze a Python file for Param usage."""
-        tree = None
         try:
-            tree = ast.parse(content)
+            # Use parso with error recovery enabled for better handling of incomplete syntax
+            grammar = parso.load_grammar()
+            tree = grammar.parse(content, error_recovery=True)
             self._reset_analysis()
             self._current_file_path = file_path
             self._current_file_content = content
-        except SyntaxError:
-            # Try to handle incomplete code (e.g., unclosed parentheses during typing)
-            lines = content.split("\n")
 
-            # First, try to fix common incomplete syntax patterns
-            fixed_content = self._try_fix_incomplete_syntax(lines)
-            if fixed_content != content:
-                try:
-                    tree = ast.parse(fixed_content)
-                    self._reset_analysis()
-                    self._current_file_path = file_path
-                    logger.info("Successfully parsed after fixing incomplete syntax")
-                    # Continue with the fixed content
-                except SyntaxError:
-                    pass  # Fall back to line removal approach
-
-            # If fixing didn't work, try removing lines with incomplete syntax from the end
-            if tree is None:
-                for i in range(1, len(lines) + 1):
-                    # Try parsing without the last i lines
-                    truncated_content = "\n".join(lines[:-i] if i < len(lines) else [])
-
-                    if not truncated_content.strip():
-                        continue  # Skip empty content
-
-                    try:
-                        tree = ast.parse(truncated_content)
-                        self._reset_analysis()
-                        self._current_file_path = file_path
-                        logger.info(
-                            f"Successfully parsed after removing {i} lines with syntax errors"
-                        )
-                        break
-                    except SyntaxError:
-                        continue
-                else:
-                    # If we couldn't parse even with all lines removed, give up
-                    logger.error("Could not parse file due to syntax errors")
-                    return {}
-
-        # At this point, tree should be assigned, but add safety check
-        if tree is None:
-            logger.error("Failed to parse file - tree is None")
+            # Log any syntax errors found by parso (but continue processing)
+            errors = list(grammar.iter_errors(tree))
+            if errors:
+                logger.debug(
+                    f"Found {len(errors)} syntax errors, but continuing with error recovery"
+                )
+                for error in errors:
+                    logger.debug(f"Syntax error at {error.start_pos}: {error.message}")
+        except Exception as e:
+            # If parso completely fails, log and return empty result
+            logger.error(f"Failed to parse file: {e}")
             return {}
 
         # First pass: collect imports
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
+        for node in self._walk_parso_tree(tree):
+            if node.type == "import_name":
                 self._handle_import(node)
-            elif isinstance(node, ast.ImportFrom):
+            elif node.type == "import_from":
                 self._handle_import_from(node)
 
         # Second pass: collect class definitions in order, respecting inheritance
-        class_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+        class_nodes = [node for node in self._walk_parso_tree(tree) if node.type == "classdef"]
 
         # Process classes in dependency order (parents before children)
         processed_classes = set()
         while len(processed_classes) < len(class_nodes):
             progress_made = False
             for node in class_nodes:
-                if node.name in processed_classes:
+                class_name = self._get_class_name_parso(node)
+                if not class_name or class_name in processed_classes:
                     continue
 
                 # Check if all parent classes are processed or are external param classes
                 can_process = True
-                for base in node.bases:
-                    if isinstance(base, ast.Name):
-                        parent_name = base.id
+                bases = self._get_class_bases_parso(node)
+                for base in bases:
+                    if base.type == "name":
+                        parent_name = base.value
                         # If it's a class defined in this file and not processed yet, wait
                         if (
-                            any(cn.name == parent_name for cn in class_nodes)
+                            any(
+                                self._get_class_name_parso(cn) == parent_name for cn in class_nodes
+                            )
                             and parent_name not in processed_classes
                         ):
                             can_process = False
@@ -135,20 +109,21 @@ class ParamAnalyzer:
 
                 if can_process:
                     self._handle_class_def(node)
-                    processed_classes.add(node.name)
+                    processed_classes.add(class_name)
                     progress_made = True
 
             # Prevent infinite loop if there are circular dependencies
             if not progress_made:
                 # Process remaining classes anyway
                 for node in class_nodes:
-                    if node.name not in processed_classes:
+                    class_name = self._get_class_name_parso(node)
+                    if class_name and class_name not in processed_classes:
                         self._handle_class_def(node)
-                        processed_classes.add(node.name)
+                        processed_classes.add(class_name)
                 break
 
-        # Pre-pass: discover all external Parameterized classes using AST
-        self._discover_external_param_classes_ast(tree)
+        # Pre-pass: discover all external Parameterized classes using parso
+        self._discover_external_param_classes(tree)
 
         # Perform type inference after parsing
         self._check_parameter_types(tree, content.split("\n"))
@@ -165,30 +140,171 @@ class ParamAnalyzer:
         self.imports.clear()
         self.type_errors.clear()
 
-    def _handle_import(self, node: ast.Import):
-        """Handle 'import' statements."""
-        for alias in node.names:
-            self.imports[alias.asname or alias.name] = alias.name
+    def _walk_parso_tree(self, node):
+        """Walk a parso tree recursively, yielding all nodes."""
+        yield node
+        if hasattr(node, "children"):
+            for child in node.children:
+                yield from self._walk_parso_tree(child)
 
-    def _handle_import_from(self, node: ast.ImportFrom):
-        """Handle 'from ... import ...' statements."""
-        if node.module:
-            for alias in node.names:
-                imported_name = alias.asname or alias.name
-                full_name = f"{node.module}.{alias.name}"
-                self.imports[imported_name] = full_name
+    def _get_class_name_parso(self, class_node):
+        """Extract class name from parso classdef node."""
+        for child in class_node.children:
+            if child.type == "name":
+                return child.value
+        return None
 
-    def _handle_class_def(self, node: ast.ClassDef):
-        """Handle class definitions that might inherit from param.Parameterized."""
+    def _get_class_bases_parso(self, class_node):
+        """Extract base classes from parso classdef node."""
+        bases = []
+        for child in class_node.children:
+            if child.type == "arglist":
+                # Extract base class names from the argument list
+                for arg_child in child.children:
+                    if arg_child.type == "name":
+                        bases.append(arg_child)
+                    elif arg_child.type == "power":
+                        # Handle dotted names like module.Class
+                        bases.append(arg_child)
+        return bases
+
+    def _is_assignment_stmt(self, node):
+        """Check if a parso node is an assignment statement."""
+        # Look for assignment operator '=' in the children
+        return any(child.type == "operator" and child.value == "=" for child in node.children)
+
+    def _get_assignment_target_name(self, node):
+        """Get the target name from an assignment statement."""
+        # The target is typically the first child before the '=' operator
+        for child in node.children:
+            if child.type == "name":
+                return child.value
+            elif child.type == "operator" and child.value == "=":
+                break
+        return None
+
+    def _is_parameter_assignment_parso(self, node):
+        """Check if a parso assignment statement looks like a parameter definition."""
+        # Find the right-hand side of the assignment (after '=')
+        found_equals = False
+        for child in node.children:
+            if child.type == "operator" and child.value == "=":
+                found_equals = True
+            elif found_equals and child.type == "power":
+                # Check if it's a parameter type call
+                return self._is_parameter_call_parso(child)
+        return False
+
+    def _is_parameter_call_parso(self, node):
+        """Check if a parso power node represents a parameter type call."""
+        # Extract the function name and check if it's a param type
+        func_name = None
+        for child in node.children:
+            if child.type == "name":
+                func_name = child.value
+                break
+            elif child.type == "trailer":
+                # Handle dotted calls like param.Integer
+                for trailer_child in child.children:
+                    if trailer_child.type == "name":
+                        func_name = trailer_child.value
+                        break
+                if func_name:
+                    break
+
+        if func_name:
+            return func_name in PARAM_TYPES
+        return False
+
+    def _has_attribute_target(self, node):
+        """Check if assignment has an attribute target (like obj.attr = value)."""
+        for child in node.children:
+            if child.type == "power":
+                # Check if this power node has attribute access (trailer with '.')
+                for power_child in child.children:
+                    if (
+                        power_child.type == "trailer"
+                        and power_child.children
+                        and power_child.children[0].value == "."
+                    ):
+                        return True
+            elif child.type == "operator" and child.value == "=":
+                break
+        return False
+
+    def _is_function_call(self, node):
+        """Check if a parso power node represents a function call."""
+        return any(
+            child.type == "trailer" and child.children and child.children[0].value == "("
+            for child in node.children
+        )
+
+    def _handle_import(self, node):
+        """Handle 'import' statements (parso node)."""
+        # For parso import_name nodes, parse the import statement
+        for child in node.children:
+            if child.type == "dotted_as_names":
+                for name_child in child.children:
+                    if name_child.type == "dotted_as_name":
+                        # Handle "import module as alias"
+                        parts = []
+                        alias_name = None
+                        for part in name_child.children:
+                            if part.type == "dotted_name":
+                                parts.append(part.value)
+                            elif part.type == "name" and parts:
+                                alias_name = part.value
+                        if parts:
+                            module_name = parts[0]
+                            self.imports[alias_name or module_name] = module_name
+                    elif name_child.type == "dotted_name":
+                        # Handle "import module"
+                        module_name = name_child.value
+                        self.imports[module_name] = module_name
+
+    def _handle_import_from(self, node):
+        """Handle 'from ... import ...' statements (parso node)."""
+        # For parso import_from nodes, parse the from...import statement
+        module_name = None
+
+        for child in node.children:
+            if child.type == "dotted_name" and module_name is None:
+                module_name = child.value
+            elif child.type == "import_as_names":
+                for name_child in child.children:
+                    if name_child.type == "import_as_name":
+                        # Handle "from module import name as alias"
+                        import_name = None
+                        alias_name = None
+                        for part in name_child.children:
+                            if part.type == "name":
+                                if import_name is None:
+                                    import_name = part.value
+                                else:
+                                    alias_name = part.value
+                        if import_name and module_name:
+                            full_name = f"{module_name}.{import_name}"
+                            self.imports[alias_name or import_name] = full_name
+                    elif name_child.type == "name":
+                        # Handle "from module import name"
+                        import_name = name_child.value
+                        if module_name:
+                            full_name = f"{module_name}.{import_name}"
+                            self.imports[import_name] = full_name
+
+    def _handle_class_def(self, node):
+        """Handle class definitions that might inherit from param.Parameterized (parso node)."""
         # Check if class inherits from param.Parameterized (directly or indirectly)
         is_param_class = False
-        for base in node.bases:
+        bases = self._get_class_bases_parso(node)
+        for base in bases:
             if self._is_param_base(base):
                 is_param_class = True
                 break
 
         if is_param_class:
-            class_info = ParameterizedInfo(name=node.name)
+            class_name = self._get_class_name_parso(node)
+            class_info = ParameterizedInfo(name=class_name)
 
             # Get inherited parameters from parent classes first
             inherited_parameters = self._collect_inherited_parameters(
@@ -202,53 +318,74 @@ class ParamAnalyzer:
             for param_info in current_parameters:
                 class_info.add_parameter(param_info)
 
-            self.param_classes[node.name] = class_info
+            self.param_classes[class_name] = class_info
 
-    def _format_base(self, base: ast.expr) -> str:
-        """Format base class for debugging."""
-        if isinstance(base, ast.Name):
-            return base.id
-        elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
-            return f"{base.value.id}.{base.attr}"
-        return str(type(base))
+    def _format_base(self, base) -> str:
+        """Format base class for debugging (parso node)."""
+        if base.type == "name":
+            return base.value
+        elif base.type == "power":
+            # Handle dotted names like module.Class
+            parts = []
+            for child in base.children:
+                if child.type == "name":
+                    parts.append(child.value)
+                elif child.type == "trailer":
+                    for trailer_child in child.children:
+                        if trailer_child.type == "name":
+                            parts.append(trailer_child.value)
+            return ".".join(parts)
+        return str(base.type)
 
-    def _is_param_base(self, base: ast.expr) -> bool:
-        """Check if a base class is param.Parameterized or similar."""
-        if isinstance(base, ast.Name):
+    def _is_param_base(self, base) -> bool:
+        """Check if a base class is param.Parameterized or similar (parso node)."""
+        if base.type == "name":
+            base_name = base.value
             # Check if it's a direct param.Parameterized import
             if (
-                base.id in ["Parameterized"]
-                and base.id in self.imports
-                and "param.Parameterized" in self.imports[base.id]
+                base_name in ["Parameterized"]
+                and base_name in self.imports
+                and "param.Parameterized" in self.imports[base_name]
             ):
                 return True
             # Check if it's a known param class (from inheritance)
-            if base.id in self.param_classes:
+            if base_name in self.param_classes:
                 return True
             # Check if it's an imported param class
             imported_class_info = self._get_imported_param_class_info(
-                base.id, base.id, getattr(self, "_current_file_path", None)
+                base_name, base_name, getattr(self, "_current_file_path", None)
             )
             if imported_class_info:
                 return True
-        elif isinstance(base, ast.Attribute):
-            # Handle simple case: param.Parameterized
-            if isinstance(base.value, ast.Name):
-                module = base.value.id
-                if (module == "param" and base.attr == "Parameterized") or (
-                    module in self.imports
-                    and self.imports[module].endswith("param")
-                    and base.attr == "Parameterized"
-                ):
-                    return True
+        elif base.type == "power":
+            # Handle dotted names like param.Parameterized or pn.widgets.IntSlider
+            parts = []
+            for child in base.children:
+                if child.type == "name":
+                    parts.append(child.value)
+                elif child.type == "trailer":
+                    for trailer_child in child.children:
+                        if trailer_child.type == "name":
+                            parts.append(trailer_child.value)
 
-            # Handle complex attribute access like pn.widgets.IntSlider
-            full_class_path = self._resolve_full_class_path(base)
-            if full_class_path:
-                # Check if this external class is a Parameterized class
-                class_info = self._analyze_external_class_ast(full_class_path)
-                if class_info:
-                    return True
+            if len(parts) >= 2:
+                # Handle simple case: param.Parameterized
+                if len(parts) == 2:
+                    module, class_name = parts
+                    if (module == "param" and class_name == "Parameterized") or (
+                        module in self.imports
+                        and self.imports[module].endswith("param")
+                        and class_name == "Parameterized"
+                    ):
+                        return True
+
+                # Handle complex attribute access like pn.widgets.IntSlider
+                full_class_path = self._resolve_full_class_path(base)
+                if full_class_path:
+                    # Check if this external class is a Parameterized class
+                    class_info = self._analyze_external_class_ast(full_class_path)
+                    if class_info:
+                        return True
         return False
 
     def _collect_inherited_parameters(
@@ -499,26 +636,40 @@ class ParamAnalyzer:
 
         return False
 
-    def _check_parameter_types(self, tree: ast.AST, lines: list[str]):
+    def _check_parameter_types(self, tree, lines: list[str]):
         """Check for type errors in parameter assignments."""
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name in self.param_classes:
-                for item in node.body:
-                    if isinstance(item, ast.Assign):
-                        for target in item.targets:
-                            if isinstance(target, ast.Name) and self._is_parameter_assignment(
-                                item.value
-                            ):
-                                self._check_parameter_default_type(item, target.id, lines)
+        for node in self._walk_parso_tree(tree):
+            if node.type == "classdef":
+                class_name = self._get_class_name_parso(node)
+                if class_name and class_name in self.param_classes:
+                    # Find the suite (class body) in the class definition
+                    for child in node.children:
+                        if child.type == "suite":
+                            for item in child.children:
+                                if item.type == "simple_stmt":
+                                    # Look for assignments within simple statements
+                                    for stmt_child in item.children:
+                                        if (
+                                            stmt_child.type == "expr_stmt"
+                                            and self._is_assignment_stmt(stmt_child)
+                                        ):
+                                            target_name = self._get_assignment_target_name(
+                                                stmt_child
+                                            )
+                                            if target_name and self._is_parameter_assignment_parso(
+                                                stmt_child
+                                            ):
+                                                self._check_parameter_default_type(
+                                                    stmt_child, target_name, lines
+                                                )
 
             # Check runtime parameter assignments like obj.param = value
-            elif isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Attribute):
-                        self._check_runtime_parameter_assignment(node, target, lines)
+            elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
+                if self._has_attribute_target(node):
+                    self._check_runtime_parameter_assignment(node, None, lines)
 
             # Check constructor calls like MyClass(x="A")
-            elif isinstance(node, ast.Call):
+            elif node.type == "power" and self._is_function_call(node):
                 self._check_constructor_parameter_types(node, lines)
 
     def _check_constructor_parameter_types(self, node: ast.Call, lines: list[str]):
@@ -868,30 +1019,28 @@ class ParamAnalyzer:
             return call_node.func.attr
         return None
 
-    def _resolve_full_class_path(self, attr_node: ast.Attribute) -> str | None:
-        """Resolve the full class path from an attribute node like pn.widgets.IntSlider."""
-        path_parts = []
+    def _resolve_full_class_path(self, base) -> str | None:
+        """Resolve the full class path from a parso power node like pn.widgets.IntSlider."""
+        parts = []
+        for child in base.children:
+            if child.type == "name":
+                parts.append(child.value)
+            elif child.type == "trailer":
+                for trailer_child in child.children:
+                    if trailer_child.type == "name":
+                        parts.append(trailer_child.value)
 
-        # Walk up the attribute chain
-        current = attr_node
-        while isinstance(current, ast.Attribute):
-            path_parts.append(current.attr)
-            current = current.value
-
-        if isinstance(current, ast.Name):
-            path_parts.append(current.id)
-            path_parts.reverse()
-
+        if parts:
             # Resolve the root module through imports
-            root_alias = path_parts[0]
+            root_alias = parts[0]
             if root_alias in self.imports:
                 full_module_name = self.imports[root_alias]
                 # Replace the alias with the full module name
-                path_parts[0] = full_module_name
-                return ".".join(path_parts)
+                parts[0] = full_module_name
+                return ".".join(parts)
             else:
                 # Use the alias directly if no import mapping found
-                return ".".join(path_parts)
+                return ".".join(parts)
 
         return None
 
@@ -1588,14 +1737,20 @@ class ParamAnalyzer:
                 return node
         return None
 
-    def _discover_external_param_classes_ast(self, tree: ast.AST):
-        """Pre-pass to discover all external Parameterized classes using AST analysis."""
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+    def _discover_external_param_classes(self, tree):
+        """Pre-pass to discover all external Parameterized classes using parso analysis."""
+        for node in self._walk_parso_tree(tree):
+            if node.type == "power":
                 # Look for calls like pn.widgets.IntSlider()
-                full_class_path = self._resolve_full_class_path(node.func)
-                if full_class_path:
-                    self._analyze_external_class_ast(full_class_path)
+                # Check if this is a function call with parentheses
+                has_call = any(
+                    child.type == "trailer" and child.children and child.children[0].value == "("
+                    for child in node.children
+                )
+                if has_call:
+                    full_class_path = self._resolve_full_class_path(node)
+                    if full_class_path:
+                        self._analyze_external_class_ast(full_class_path)
 
     def _populate_external_library_cache(self):
         """Populate the external library cache with all param.Parameterized classes on startup."""

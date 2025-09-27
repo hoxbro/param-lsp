@@ -1,0 +1,143 @@
+TODO: Replace ast.parse with parso library
+==========================================
+
+PHASE 1: Core Parsing Infrastructure
+------------------------------------
+[x] Replace main parsing logic in analyzer.py:52-104
+    - Replace ast.parse(content) with parso.parse(content)
+    - Leverage parso's built-in error recovery (error_recovery=True)
+    - Remove custom syntax fixing logic (_try_fix_incomplete_syntax)
+    - Remove line-by-line parsing fallback logic
+    - Replace AST walking with parso node traversal
+
+[x] Update import handling
+    - Replace isinstance(node, ast.Import) with parso equivalents
+    - Replace isinstance(node, ast.ImportFrom) with parso equivalents
+    - Update for parso node types: import_name and import_from
+
+[x] Update class definition detection
+    - Replace isinstance(node, ast.ClassDef) with parso's classdef node type
+    - Update base class resolution logic for parso node structure
+
+PHASE 2: AST Node Type Replacements
+-----------------------------------
+[ ] Replace all AST node type checks throughout analyzer.py
+    - ast.Call → parso function call nodes
+    - ast.Assign → parso assignment nodes
+    - ast.Name → parso name nodes
+    - ast.Attribute → parso attribute access nodes
+    - ast.Constant → parso literal nodes
+    - ast.Tuple → parso tuple nodes
+    - ast.List → parso list nodes
+    - ast.Dict → parso dict nodes
+    - ast.UnaryOp → parso unary operation nodes
+    - And all other AST node types found in the code
+
+[ ] Update node attribute access patterns
+    - Update .lineno, .col_offset access for parso equivalents
+    - Update .value, .id, .attr access patterns
+    - Ensure line/column position mapping works correctly
+    - Update .end_lineno, .end_col_offset for parso equivalents
+
+PHASE 3: Value Extraction Logic
+-------------------------------
+[ ] Rewrite _extract_numeric_value() method
+    - Adapt for parso literal nodes instead of ast.Constant
+    - Handle parso's number representation
+
+[ ] Rewrite _extract_string_value() method
+    - Handle parso string node representations
+    - Maintain string value extraction logic
+
+[ ] Rewrite _extract_boolean_value() method
+    - Adapt boolean extraction for parso nodes
+    - Ensure True/False detection works
+
+[ ] Rewrite _format_default_value() method
+    - Handle parso node formatting instead of AST nodes
+    - Use parso's .get_code() method where appropriate
+    - Maintain existing formatting output
+
+[ ] Update _infer_value_type() method
+    - Adapt for parso's node structure
+    - Ensure compatibility with existing type checking logic
+
+PHASE 4: Error Handling & Diagnostics
+-------------------------------------
+[ ] Remove custom syntax error handling
+    - Delete _try_fix_incomplete_syntax() method entirely
+    - Remove line-by-line parsing fallback logic in analyze_file()
+    - Simplify error handling in analyze_file() main try/catch
+
+[ ] Implement parso error handling
+    - Use parso's error_recovery=True for parsing
+    - Implement proper error reporting using parso's iter_errors()
+    - Improve diagnostic messages using parso's detailed error information
+
+[ ] Update _create_type_error() method if needed
+    - Ensure parso node position information works correctly
+    - Maintain existing error format for LSP compatibility
+
+PHASE 5: Testing & Validation
+-----------------------------
+[ ] Run existing tests and fix any failures
+    - Execute pytest tests/ to identify breaking changes
+    - Fix any test failures related to AST→parso conversion
+
+[ ] Test error handling improvements
+    - Test with malformed/incomplete Python code
+    - Verify error recovery works better than current implementation
+    - Test that LSP diagnostics still work correctly
+
+[ ] Test all LSP features still work
+    - Test autocompletion functionality
+    - Test hover information
+    - Test type checking and diagnostics
+    - Verify external library introspection still works
+
+[ ] Performance testing
+    - Benchmark parsing performance vs current ast.parse
+    - Test with large param codebases
+    - Verify memory usage is acceptable
+
+PHASE 6: Cleanup & Optimization
+-------------------------------
+[ ] Clean up imports
+    - Remove 'import ast' from analyzer.py
+    - Add 'import parso'
+    - Update any other files that import ast if needed
+
+[ ] Consider regex reduction opportunities
+    - Analyze completion.py regex patterns for parso replacement
+    - Evaluate @param.depends decorator parsing improvements
+    - Consider constructor call detection improvements
+
+[ ] Documentation updates
+    - Update any comments referencing AST parsing
+    - Update docstrings that mention ast.parse behavior
+    - Document the improved error handling capabilities
+
+PHASE 7: Final Integration
+-------------------------
+[ ] Run full test suite
+    - Execute pytest tests/ for complete validation
+    - Run prek run --all-files for linting
+    - Fix any remaining issues
+
+[ ] Test with real-world codebases
+    - Test against Panel applications
+    - Test against HoloViews code
+    - Test against param examples
+
+[ ] Performance validation
+    - Ensure no significant performance regression
+    - Verify error handling improvements work in practice
+    - Validate that parso caching provides benefits
+
+COMPLETED TASKS
+===============
+[x] Analyze current ast.parse usage in codebase
+[x] Research parso API and capabilities
+[x] Create comprehensive replacement plan
+[x] Identify all AST node types used in analyzer.py
+[x] Create detailed TODO.txt file
