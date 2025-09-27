@@ -166,9 +166,14 @@ class ParamAnalyzer:
                     bases.append(child)
                 elif child.type == "arglist":
                     # Multiple bases in argument list
-                    for arg_child in child.children:
-                        if arg_child.type == "name" or arg_child.type in ("atom_expr", "power"):
-                            bases.append(arg_child)
+                    bases.extend(
+                        [
+                            arg_child
+                            for arg_child in child.children
+                            if arg_child.type == "name" or arg_child.type in ("atom_expr", "power")
+                        ]
+                    )
+
         return bases
 
     def _is_assignment_stmt(self, node):
@@ -343,9 +348,13 @@ class ParamAnalyzer:
                 if child.type == "name":
                     parts.append(child.value)
                 elif child.type == "trailer":
-                    for trailer_child in child.children:
-                        if trailer_child.type == "name":
-                            parts.append(trailer_child.value)
+                    parts.extend(
+                        [
+                            trailer_child.value
+                            for trailer_child in child.children
+                            if trailer_child.type == "name"
+                        ]
+                    )
             return ".".join(parts)
         return str(base.type)
 
@@ -376,9 +385,13 @@ class ParamAnalyzer:
                 if child.type == "name":
                     parts.append(child.value)
                 elif child.type == "trailer":
-                    for trailer_child in child.children:
-                        if trailer_child.type == "name":
-                            parts.append(trailer_child.value)
+                    parts.extend(
+                        [
+                            trailer_child.value
+                            for trailer_child in child.children
+                            if trailer_child.type == "name"
+                        ]
+                    )
 
             if len(parts) >= 2:
                 # Handle simple case: param.Parameterized
@@ -1070,7 +1083,11 @@ class ParamAnalyzer:
                 if child.type == "name":
                     # Simple case: MyClass()
                     return child.value
-                elif child.type == "trailer" and len(child.children) >= 2 and child.children[1].type == "name":
+                elif (
+                    child.type == "trailer"
+                    and len(child.children) >= 2
+                    and child.children[1].type == "name"
+                ):
                     # Could be module.Class case - need to construct full path
                     # For now, just return the class name from the last trailer
                     # Try to resolve the full class path for external classes
@@ -1092,9 +1109,13 @@ class ParamAnalyzer:
             if child.type == "name":
                 parts.append(child.value)
             elif child.type == "trailer":
-                for trailer_child in child.children:
-                    if trailer_child.type == "name":
-                        parts.append(trailer_child.value)
+                parts.extend(
+                    [
+                        trailer_child.value
+                        for trailer_child in child.children
+                        if trailer_child.type == "name"
+                    ]
+                )
 
         if parts:
             # Resolve the root module through imports
@@ -1458,7 +1479,12 @@ class ParamAnalyzer:
                 return None
         elif hasattr(node, "type") and node.type == "name" and node.value == "None":
             return None  # Explicitly handle None
-        elif hasattr(node, "type") and node.type == "factor" and hasattr(node, "children") and len(node.children) >= 2:
+        elif (
+            hasattr(node, "type")
+            and node.type == "factor"
+            and hasattr(node, "children")
+            and len(node.children) >= 2
+        ):
             # Handle unary operators like negative numbers: factor -> operator(-) + number
             operator_node = node.children[0]
             operand_node = node.children[1]
