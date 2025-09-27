@@ -189,6 +189,53 @@ result = ComplexClass(
         completion_labels = [item.label for item in completions]
         assert "value=42" in completion_labels, "Should suggest 'value=42'"
 
+    def test_multiline_constructor_unfinished_parenthesis(self):
+        """Test multiline constructor completion with unfinished parenthesis and comments."""
+        test_server = ParamLanguageServer("test-server", "1.0.0")
+
+        code_py = """\
+import param
+
+
+class MyClass(param.Parameterized):
+    width = param.Integer(default=100, bounds=(1, 1000))
+
+
+instance = MyClass(
+
+    # test
+"""
+
+        # Simulate document analysis
+        uri = "file:///unfinished.py"
+        test_server._analyze_document(uri, code_py)
+
+        lines = code_py.split("\n")
+
+        # Test completion after the comment line (line 10, character 0)
+        position = Position(line=10, character=0)
+
+        # Test multiline constructor context detection
+        is_multiline, class_name = test_server._is_in_constructor_context_multiline(
+            uri, lines, position
+        )
+
+        assert is_multiline, (
+            "Should detect multiline constructor context with unfinished parenthesis"
+        )
+        assert class_name == "MyClass", f"Should identify MyClass, got {class_name}"
+
+        # Test getting completions
+        completions = test_server._get_constructor_parameter_completions_multiline(
+            uri, lines, position, class_name
+        )
+
+        # Should have completion for width parameter
+        assert len(completions) == 1, f"Expected 1 completion, got {len(completions)}"
+
+        completion_labels = [item.label for item in completions]
+        assert "width=100" in completion_labels, "Should suggest 'width=100'"
+
     def test_not_in_multiline_constructor_context(self):
         """Test that multiline detection correctly identifies when NOT in constructor context."""
         test_server = ParamLanguageServer("test-server", "1.0.0")
