@@ -609,7 +609,9 @@ class ParamAnalyzer:
                 # Look for (min, max) pattern
                 for child in bounds_node.children:
                     if child.type == "testlist_comp":
-                        elements = [c for c in child.children if c.type in ("number", "name")]
+                        elements = [
+                            c for c in child.children if c.type in ("number", "name", "factor")
+                        ]
                         if len(elements) >= 2:
                             min_val = self._extract_numeric_value(elements[0])
                             max_val = self._extract_numeric_value(elements[1])
@@ -623,7 +625,7 @@ class ParamAnalyzer:
             if inclusive_bounds_node.type == "atom" and inclusive_bounds_node.children:
                 for child in inclusive_bounds_node.children:
                     if child.type == "testlist_comp":
-                        elements = [c for c in child.children if c.type in ("name",)]
+                        elements = [c for c in child.children if c.type in ("name", "keyword")]
                         if len(elements) >= 2:
                             left_inclusive = self._extract_boolean_value(elements[0])
                             right_inclusive = self._extract_boolean_value(elements[1])
@@ -679,7 +681,7 @@ class ParamAnalyzer:
 
     def _extract_boolean_value(self, node) -> bool | None:
         """Extract boolean value from parso node."""
-        if hasattr(node, "type") and node.type == "name":
+        if hasattr(node, "type") and node.type in ("name", "keyword"):
             if node.value == "True":
                 return True
             elif node.value == "False":
@@ -1239,7 +1241,7 @@ class ParamAnalyzer:
                 # Parse (True, False) pattern
                 for child in inclusive_bounds_node.children:
                     if child.type == "testlist_comp":
-                        elements = [c for c in child.children if c.type == "name"]
+                        elements = [c for c in child.children if c.type in ("name", "keyword")]
                         if len(elements) >= 2:
                             left_inclusive = self._extract_boolean_value(elements[0])
                             right_inclusive = self._extract_boolean_value(elements[1])
@@ -1251,7 +1253,9 @@ class ParamAnalyzer:
                 # Parse (min, max) pattern
                 for child in bounds_node.children:
                     if child.type == "testlist_comp":
-                        elements = [c for c in child.children if c.type in ("number", "name")]
+                        elements = [
+                            c for c in child.children if c.type in ("number", "name", "factor")
+                        ]
                         if len(elements) >= 2:
                             try:
                                 min_val = self._extract_numeric_value(elements[0])
@@ -1302,16 +1306,16 @@ class ParamAnalyzer:
             default_value = kwargs.get("default")
             if default_value and default_value.type == "atom":
                 # Check if it's an empty list or tuple
-                for child in default_value.children:
-                    if child.type in ("testlist_comp",) and not child.children:
-                        # Empty list/tuple - check if bounds are specified
-                        if "bounds" in kwargs:
-                            message = (
-                                f"Parameter '{param_name}' has empty default but bounds specified"
-                            )
-                            self._create_type_error(
-                                node, message, "empty-default-with-bounds", "warning"
-                            )
+                # Get all child values to check for empty containers
+                child_values = [
+                    child.value for child in default_value.children if hasattr(child, "value")
+                ]
+                is_empty_list = child_values == ["[", "]"]
+                is_empty_tuple = child_values == ["(", ")"]
+
+                if (is_empty_list or is_empty_tuple) and "bounds" in kwargs:
+                    message = f"Parameter '{param_name}' has empty default but bounds specified"
+                    self._create_type_error(node, message, "empty-default-with-bounds", "warning")
 
     def _resolve_module_path(
         self, module_name: str, current_file_path: str | None = None
@@ -1457,7 +1461,24 @@ class ParamAnalyzer:
                 return None
         elif hasattr(node, "type") and node.type == "name" and node.value == "None":
             return None  # Explicitly handle None
-        # TODO: Handle negative numbers (unary minus)
+        elif hasattr(node, "type") and node.type == "factor" and hasattr(node, "children"):
+            # Handle unary operators like negative numbers: factor -> operator(-) + number
+            if len(node.children) >= 2:
+                operator_node = node.children[0]
+                operand_node = node.children[1]
+                if (
+                    hasattr(operator_node, "value")
+                    and operator_node.value == "-"
+                    and hasattr(operand_node, "type")
+                    and operand_node.type == "number"
+                ):
+                    try:
+                        if "." in operand_node.value:
+                            return -float(operand_node.value)
+                        else:
+                            return -int(operand_node.value)
+                    except ValueError:
+                        return None
         return None
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
