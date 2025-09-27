@@ -766,7 +766,7 @@ class ParamAnalyzer:
                     self._check_runtime_parameter_assignment_parso(node, lines)
 
             # Check constructor calls like MyClass(x="A")
-            elif node.type == "power" and self._is_function_call(node):
+            elif node.type in ("power", "atom_expr") and self._is_function_call(node):
                 self._check_constructor_parameter_types(node, lines)
 
     def _check_constructor_parameter_types(self, node, lines: list[str]):
@@ -812,10 +812,12 @@ class ParamAnalyzer:
 
                 # Special handling for Boolean parameters - they should only accept actual bool values
                 if cls == "Boolean" and inferred_type and inferred_type is not bool:
-                    if not (
-                        isinstance(param_value, ast.Constant)
-                        and isinstance(param_value.value, bool)
-                    ):
+                    # For parso nodes, check if it's a keyword node with True/False
+                    is_bool_value = (
+                        hasattr(param_value, "type") and param_value.type == "keyword"
+                        and param_value.value in ("True", "False")
+                    )
+                    if not is_bool_value:
                         message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)"
                         self._create_type_error(node, message, "constructor-boolean-type-mismatch")
                 elif inferred_type and not any(
@@ -831,11 +833,11 @@ class ParamAnalyzer:
 
     def _check_constructor_bounds(
         self,
-        node: ast.Call,
+        node,
         class_name: str,
         param_name: str,
         cls: str,
-        param_value: ast.expr,
+        param_value,
     ):
         """Check if constructor parameter value is within parameter bounds."""
         # Only check bounds for numeric types
