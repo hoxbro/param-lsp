@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from lsprotocol.types import CompletionParams, Position, TextDocumentIdentifier
 
-from param_lsp import ParamLanguageServer
-from param_lsp._server.server import completion, server
+from param_lsp._server.server import ParamLanguageServer, completion, server
 
 
 class TestMultilineConstructorCompletion:
