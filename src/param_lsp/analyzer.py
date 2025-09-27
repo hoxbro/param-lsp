@@ -12,6 +12,7 @@ import importlib.util
 import inspect
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -2091,6 +2092,6 @@ class ParamAnalyzer:
         """Store the current file state as a successful state for future recovery."""
         self._last_successful_file_states[file_path] = {
             "content": content,
-            "timestamp": __import__("time").time(),
+            "timestamp": time.perf_counter(),
             "analysis_result": analysis_result,
         }
