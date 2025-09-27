@@ -23,6 +23,8 @@ from param_lsp.constants import (
 from .base import LSPServerBase
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from lsprotocol.types import Position
 
     from param_lsp.models import ParameterInfo
@@ -166,6 +168,73 @@ class CompletionMixin(LSPServerBase):
                 return True
 
         return False
+
+    def _is_in_constructor_context_multiline(
+        self, uri: str, lines: Sequence[str], position: Position
+    ) -> tuple[bool, str | None]:
+        """Check if the cursor is in a param class constructor context across multiple lines.
+
+        Returns (is_in_context, class_name) where class_name is the constructor being called.
+        """
+        if uri not in self.document_cache:
+            return False, None
+
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes = set(analysis.get("param_classes", {}).keys())
+        analyzer = self.document_cache[uri]["analyzer"]
+
+        # Look backwards from current position to find constructor call (max 10 lines)
+        for line_idx in range(position.line, max(-1, position.line - 10), -1):
+            if line_idx >= len(lines):
+                continue
+            line = lines[line_idx]
+
+            # Check if this line has a constructor call
+            match = _re_constructor_call.search(line)
+            if not match:
+                match = _re_constructor_call_inside.search(line)
+
+            if match:
+                class_name = match.group(2)
+
+                # Verify this is a param class first
+                if not self._is_param_class(class_name, param_classes, analyzer):
+                    continue
+
+                # Count parentheses from constructor line to current position
+                total_open = line.count("(")
+                total_close = line.count(")")
+
+                # Count parentheses in lines between constructor and current position
+                for check_idx in range(line_idx + 1, position.line + 1):
+                    if check_idx >= len(lines):
+                        break
+                    check_line = lines[check_idx]
+                    if check_idx == position.line:
+                        # Only count up to cursor position on current line
+                        check_line = check_line[: position.character]
+                    total_open += check_line.count("(")
+                    total_close += check_line.count(")")
+
+                # If we have unbalanced parentheses (more open than close), we're inside
+                if total_open > total_close:
+                    return True, class_name
+
+        return False, None
+
+    def _is_param_class(self, class_name: str, param_classes: set, analyzer) -> bool:
+        """Helper to check if a class is a param class."""
+        # Check if this is a known param class
+        if class_name in param_classes:
+            return True
+
+        # Check if this is an external param class
+        full_class_path = self._resolve_external_class_path(class_name, analyzer)
+        class_info = analyzer.external_param_classes.get(full_class_path)
+        if class_info is None and full_class_path:
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
+
+        return class_info is not None
 
     def _get_constructor_parameter_completions(
         self, uri: str, line: str, character: int
@@ -328,6 +397,125 @@ class CompletionMixin(LSPServerBase):
                                 preselect=False,
                             )
                         )
+
+        return completions
+
+    def _get_constructor_parameter_completions_multiline(
+        self, uri: str, lines: Sequence[str], position: Position, class_name: str
+    ) -> list[CompletionItem]:
+        """Get parameter completions for multiline param class constructors."""
+        if uri not in self.document_cache:
+            return []
+
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes_dict = analysis.get("param_classes", {})
+        analyzer = self.document_cache[uri]["analyzer"]
+
+        # Get class info - reuse helper from single-line version
+        class_info = self._get_class_info(class_name, param_classes_dict, analyzer)
+        if not class_info:
+            return []
+
+        # Find used parameters by looking at recent lines
+        used_params = self._find_used_parameters_simple(lines, position, class_name)
+
+        # Generate completions for unused parameters
+        return self._generate_parameter_completions(class_info, class_name, used_params)
+
+    def _get_class_info(self, class_name: str, param_classes_dict: dict, analyzer):
+        """Get class info for local or external param classes."""
+        if class_name in param_classes_dict:
+            return param_classes_dict[class_name]
+
+        # Handle external param classes
+        full_class_path = self._resolve_external_class_path(class_name, analyzer)
+        class_info = analyzer.external_param_classes.get(full_class_path)
+        if class_info is None and full_class_path:
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
+        return class_info
+
+    def _find_used_parameters_simple(
+        self, lines: Sequence[str], position: Position, class_name: str
+    ) -> set[str]:
+        """Find already used parameters in constructor with simple approach."""
+        used_params = set()
+
+        # First, find the constructor line
+        constructor_line_idx = None
+        for line_idx in range(position.line, max(-1, position.line - 10), -1):
+            if line_idx >= len(lines):
+                continue
+            line = lines[line_idx]
+
+            # Check if this line has a constructor call for our class
+            match = _re_constructor_call.search(line)
+            if not match:
+                match = _re_constructor_call_inside.search(line)
+
+            if match and match.group(2) == class_name:
+                constructor_line_idx = line_idx
+                break
+
+        if constructor_line_idx is None:
+            return used_params
+
+        # Only look at lines from constructor onwards to current position
+        for line_idx in range(constructor_line_idx, position.line + 1):
+            if line_idx >= len(lines):
+                continue
+            line = lines[line_idx]
+            if line_idx == position.line:
+                line = line[: position.character]
+
+            # Find parameter assignments in this line
+            used_matches = _re_constructor_param_assignment.findall(line)
+            used_params.update(used_matches)
+
+        return used_params
+
+    def _generate_parameter_completions(
+        self, class_info, class_name: str, used_params: set
+    ) -> list[CompletionItem]:
+        """Generate completion items for unused parameters."""
+        completions = []
+
+        for param_name in class_info.get_parameter_names():
+            # Skip parameters that are already used
+            if param_name in used_params:
+                continue
+            # Skip the 'name' parameter as it's rarely set in constructors
+            if param_name == "name":
+                continue
+
+            param_info = class_info.parameters.get(param_name)
+            if not param_info:
+                continue
+
+            # Build documentation and completion item
+            documentation = self._build_parameter_documentation(param_info, class_name)
+
+            if param_info.default is not None:
+                default_value = param_info.default
+                cls = param_info.cls
+                display_value = self._format_default_for_display(default_value, cls)
+                insert_text = f"{param_name}={display_value}"
+                label = f"{param_name}={display_value}"
+            else:
+                insert_text = f"{param_name}="
+                label = param_name
+
+            completions.append(
+                CompletionItem(
+                    label=label,
+                    kind=CompletionItemKind.Property,
+                    detail=f"Parameter of {class_name}",
+                    documentation=documentation,
+                    insert_text=insert_text,
+                    filter_text=param_name,
+                    sort_text=f"{param_name:0>3}",
+                    preselect=False,
+                )
+            )
 
         return completions
 
