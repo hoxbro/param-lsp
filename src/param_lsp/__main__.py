@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import argparse
 import logging
-import sys
 
 from . import __version__
 from ._server.server import server
@@ -12,23 +12,18 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Main entry point for the language server."""
+    parser = argparse.ArgumentParser(description="HoloViz Param Language Server", prog="param-lsp")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--tcp", action="store_true", help="Use TCP instead of stdio")
+    parser.add_argument(
+        "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
+    )
 
-    if len(sys.argv) > 1 and sys.argv[1] == "--help":
-        print("HoloViz Param Language Server")
-        print("Usage: python param_lsp.py [--tcp] [--port PORT]")
-        print("\nOptions:")
-        print("  --tcp          Use TCP instead of stdio")
-        print("  --port PORT    TCP port to listen on (default: 8080)")
-        print("  --help         Show this help message")
-        return
+    args = parser.parse_args()
 
-    # Check for TCP mode
-    if "--tcp" in sys.argv:
-        port_idx = sys.argv.index("--port") + 1 if "--port" in sys.argv else None
-        port = int(sys.argv[port_idx]) if port_idx and port_idx < len(sys.argv) else 8080
-
-        logger.info(f"Starting Param LSP server ({__version__}) on TCP port {port}")
-        server.start_tcp("localhost", port)
+    if args.tcp:
+        logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
+        server.start_tcp("localhost", args.port)
     else:
         logger.info(f"Starting Param LSP server ({__version__}) on stdio")
         server.start_io()
