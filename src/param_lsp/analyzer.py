@@ -291,9 +291,11 @@ class ParamAnalyzer:
         module_name = None
 
         for child in node.children:
-            if child.type == "name" and module_name is None and child.value not in ("from", "import"):
-                module_name = child.value
-            elif child.type == "dotted_name" and module_name is None:
+            if (
+                child.type == "name"
+                and module_name is None
+                and child.value not in ("from", "import")
+            ) or (child.type == "dotted_name" and module_name is None):
                 module_name = child.value
             elif child.type == "import_as_names":
                 for name_child in child.children:
@@ -814,7 +816,8 @@ class ParamAnalyzer:
                 if cls == "Boolean" and inferred_type and inferred_type is not bool:
                     # For parso nodes, check if it's a keyword node with True/False
                     is_bool_value = (
-                        hasattr(param_value, "type") and param_value.type == "keyword"
+                        hasattr(param_value, "type")
+                        and param_value.type == "keyword"
                         and param_value.value in ("True", "False")
                     )
                     if not is_bool_value:
