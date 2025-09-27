@@ -48,14 +48,12 @@ class ParamAnalyzer:
         self.file_cache: dict[str, dict[str, Any]] = {}  # file_path -> analysis_result
 
         # Cache for external Parameterized classes (AST-based detection)
-        self.external_param_classes: dict[
-            str, ParameterizedInfo | None
-        ] = {}  # full_class_path -> class_info
+        # full_class_path -> class_info
+        self.external_param_classes: dict[str, ParameterizedInfo | None] = {}
 
         # Memory system for tracking last successful file states
-        self._last_successful_file_states: dict[
-            str, dict[str, Any]
-        ] = {}  # file_path -> file_state
+        # file_path -> file_state
+        self._last_successful_file_states: dict[str, dict[str, Any]] = {}
 
         # Populate external library cache on initialization
         self._populate_external_library_cache()
@@ -1307,9 +1305,6 @@ class ParamAnalyzer:
         # Fix unclosed quotes at end of line (simple cases)
         fixed_line = self._fix_unclosed_quotes_on_line(fixed_line)
 
-        # Fix incomplete import statements
-        fixed_line = self._fix_incomplete_imports(fixed_line)
-
         return fixed_line
 
     def _fix_unclosed_quotes_on_line(self, line: str) -> str:
@@ -1325,23 +1320,6 @@ class ParamAnalyzer:
         elif single_quotes % 2 == 1 and double_quotes % 2 == 0:
             # Odd number of single quotes, even double quotes
             return line + "'"
-
-        return line
-
-    def _fix_incomplete_imports(self, line: str) -> str:
-        """Fix incomplete import statements."""
-        stripped = line.strip()
-
-        # Pattern: "from module" without "import"
-        if (
-            stripped.startswith("from ")
-            and " import " not in stripped
-            and not stripped.endswith(":")
-        ):
-            # Extract the module name
-            module_name = stripped[5:].strip()
-            if module_name and not any(char in module_name for char in "()[]{}\"'"):
-                return f"import {module_name}"
 
         return line
 
