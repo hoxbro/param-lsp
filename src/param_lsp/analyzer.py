@@ -1695,7 +1695,8 @@ class ParamAnalyzer:
         if hasattr(node, "type") and node.type == "number":
             try:
                 # Try to parse as int first, then float
-                if "." in node.value:
+                # Scientific notation (e.g., 1e3) should be parsed as float
+                if "." in node.value or "e" in node.value.lower():
                     return float(node.value)
                 else:
                     return int(node.value)
