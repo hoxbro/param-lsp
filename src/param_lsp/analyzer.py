@@ -536,9 +536,12 @@ class ParamAnalyzer:
 
         for child in param_call.children:
             if child.type == "name":
-                # Simple case: Integer()
-                func_name = child.value
-                break
+                # Simple case: Integer() or param (first part of param.Integer)
+                if func_name is None:
+                    func_name = child.value
+                else:
+                    module_name = func_name
+                    func_name = child.value
             elif child.type == "trailer":
                 # Handle dotted calls like param.Integer
                 for trailer_child in child.children:
@@ -547,8 +550,10 @@ class ParamAnalyzer:
                             module_name = func_name  # Previous name becomes module
                         func_name = trailer_child.value
 
-        if func_name:
-            return PARAM_TYPE_MAP.get(func_name)
+        if func_name and func_name in PARAM_TYPES:
+            # Return the expected format: dict with type key
+            return {"type": func_name, "module": module_name or "param"}
+
         return None
 
     def _extract_bounds_from_call(self, call_trailer):
@@ -588,26 +593,32 @@ class ParamAnalyzer:
         """Extract keyword arguments from a parso function call node."""
         kwargs = {}
 
-        # Find the arglist in the function call
+        # Find the function call trailer with arguments
         for child in call_node.children:
             if child.type == "trailer" and child.children and child.children[0].value == "(":
-                # Look for arglist within this trailer
+                # Look for arguments within this trailer - could be arglist or direct arguments
                 for trailer_child in child.children:
                     if trailer_child.type == "arglist":
-                        # Parse arguments in the arglist
+                        # Multiple arguments in an arglist
                         for arg_child in trailer_child.children:
                             if arg_child.type == "argument":
-                                # This is a keyword argument (name=value)
-                                if len(arg_child.children) >= 3:
-                                    name_node = arg_child.children[0]
-                                    equals_node = arg_child.children[1]
-                                    value_node = arg_child.children[2]
-
-                                    if (name_node.type == "name" and
-                                        equals_node.type == "operator" and equals_node.value == "="):
-                                        kwargs[name_node.value] = value_node
+                                self._extract_single_argument(arg_child, kwargs)
+                    elif trailer_child.type == "argument":
+                        # Single argument directly in trailer
+                        self._extract_single_argument(trailer_child, kwargs)
 
         return kwargs
+
+    def _extract_single_argument(self, arg_node, kwargs: dict[str, Any]):
+        """Extract a single keyword argument from a parso argument node."""
+        if len(arg_node.children) >= 3:
+            name_node = arg_node.children[0]
+            equals_node = arg_node.children[1]
+            value_node = arg_node.children[2]
+
+            if (name_node.type == "name" and
+                equals_node.type == "operator" and equals_node.value == "="):
+                kwargs[name_node.value] = value_node
 
     def _extract_bounds_from_call(self, call_node) -> tuple | None:
         """Extract bounds from a parameter call (parso version)."""
@@ -1159,15 +1170,28 @@ class ParamAnalyzer:
             return " or ".join(type_names)
 
     def _create_type_error(
-        self, node: ast.Call | ast.Assign, message: str, code: str, severity: str = "error"
+        self, node, message: str, code: str, severity: str = "error"
     ) -> None:
-        """Helper function to create and append a type error."""
+        """Helper function to create and append a type error (parso version)."""
+        # Get position information from parso node
+        if hasattr(node, 'start_pos'):
+            line = node.start_pos[0] - 1  # Convert to 0-based
+            col = node.start_pos[1]
+            end_line = node.end_pos[0] - 1 if hasattr(node, 'end_pos') else line
+            end_col = node.end_pos[1] if hasattr(node, 'end_pos') else col
+        else:
+            # Fallback if position info is not available
+            line = 0
+            col = 0
+            end_line = 0
+            end_col = 0
+
         self.type_errors.append(
             {
-                "line": node.lineno - 1,  # Convert to 0-based
-                "col": node.col_offset,
-                "end_line": node.end_lineno - 1 if node.end_lineno else node.lineno - 1,
-                "end_col": node.end_col_offset if node.end_col_offset else node.col_offset,
+                "line": line,
+                "col": col,
+                "end_line": end_line,
+                "end_col": end_col,
                 "message": message,
                 "severity": severity,
                 "code": code,
