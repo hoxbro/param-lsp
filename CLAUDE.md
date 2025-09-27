@@ -35,7 +35,7 @@ The base class that all Param-enabled classes inherit from. Classes that inherit
 
 Key features:
 
-- Automatic parameter validation and type checking
+- Automatic parameter validation
 - Parameter inheritance from parent classes
 - Built-in `.param` namespace for parameter access and introspection
 - Automatic documentation generation from parameter descriptions
