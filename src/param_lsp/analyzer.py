@@ -501,27 +501,21 @@ class ParamAnalyzer:
             if param_class_info:
                 cls = param_class_info["type"]
 
-            # Extract parameter arguments (bounds, doc, default, etc.)
-            # Find the argument list in the function call
-            for call_child in param_call.children:
-                if call_child.type == "trailer" and call_child.children and call_child.children[0].value == "(":
-                    # This is the function call arguments
-                    bounds = self._extract_bounds_from_call(call_child)
-                    doc = self._extract_doc_from_call(call_child)
-                    allow_None_value = self._extract_allow_None_from_call(call_child)
-                    default_value = self._extract_default_from_call(call_child)
+            # Extract parameter arguments (bounds, doc, default, etc.) from the whole param_call
+            bounds = self._extract_bounds_from_call(param_call)
+            doc = self._extract_doc_from_call(param_call)
+            allow_None_value = self._extract_allow_None_from_call(param_call)
+            default_value = self._extract_default_from_call(param_call)
 
-                    # Store default value as a string representation
-                    if default_value is not None:
-                        default = self._format_default_value(default_value)
+            # Store default value as a string representation
+            if default_value is not None:
+                default = self._format_default_value(default_value)
 
-                    # Param automatically sets allow_None=True when default=None
-                    if default_value is not None and self._is_none_value(default_value):
-                        allow_None = True
-                    elif allow_None_value is not None:
-                        allow_None = allow_None_value
-
-                    break
+            # Param automatically sets allow_None=True when default=None
+            if default_value is not None and self._is_none_value(default_value):
+                allow_None = True
+            elif allow_None_value is not None:
+                allow_None = allow_None_value
 
         # Create ParameterInfo object
         return ParameterInfo(
@@ -590,108 +584,126 @@ class ParamAnalyzer:
         return (hasattr(value, 'type') and value.type == 'name' and
                 hasattr(value, 'value') and value.value == 'None')
 
-    def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
-        """Extract bounds from a parameter call."""
+    def _get_keyword_arguments(self, call_node) -> dict[str, Any]:
+        """Extract keyword arguments from a parso function call node."""
+        kwargs = {}
+
+        # Find the arglist in the function call
+        for child in call_node.children:
+            if child.type == "trailer" and child.children and child.children[0].value == "(":
+                # Look for arglist within this trailer
+                for trailer_child in child.children:
+                    if trailer_child.type == "arglist":
+                        # Parse arguments in the arglist
+                        for arg_child in trailer_child.children:
+                            if arg_child.type == "argument":
+                                # This is a keyword argument (name=value)
+                                if len(arg_child.children) >= 3:
+                                    name_node = arg_child.children[0]
+                                    equals_node = arg_child.children[1]
+                                    value_node = arg_child.children[2]
+
+                                    if (name_node.type == "name" and
+                                        equals_node.type == "operator" and equals_node.value == "="):
+                                        kwargs[name_node.value] = value_node
+
+        return kwargs
+
+    def _extract_bounds_from_call(self, call_node) -> tuple | None:
+        """Extract bounds from a parameter call (parso version)."""
         bounds_info = None
         inclusive_bounds = (True, True)  # Default to inclusive
 
-        for keyword in call_node.keywords:
-            if keyword.arg == "bounds":
-                if isinstance(keyword.value, ast.Tuple) and len(keyword.value.elts) == 2:
-                    min_val = self._extract_numeric_value(keyword.value.elts[0])
-                    max_val = self._extract_numeric_value(keyword.value.elts[1])
-                    # Accept bounds even if one side is None (unbounded)
-                    # But require at least one bound to be numeric
-                    if min_val is not None or max_val is not None:
-                        bounds_info = (min_val, max_val)
-            elif (
-                keyword.arg == "inclusive_bounds"
-                and isinstance(keyword.value, ast.Tuple)
-                and len(keyword.value.elts) == 2
-            ):
-                # Extract boolean values for inclusive bounds
-                left_inclusive = self._extract_boolean_value(keyword.value.elts[0])
-                right_inclusive = self._extract_boolean_value(keyword.value.elts[1])
-                if left_inclusive is not None and right_inclusive is not None:
-                    inclusive_bounds = (left_inclusive, right_inclusive)
+        kwargs = self._get_keyword_arguments(call_node)
+
+        if "bounds" in kwargs:
+            bounds_node = kwargs["bounds"]
+            # Check if it's a tuple/parentheses with 2 elements
+            if bounds_node.type == "atom" and bounds_node.children:
+                # Look for (min, max) pattern
+                for child in bounds_node.children:
+                    if child.type == "testlist_comp":
+                        elements = [c for c in child.children if c.type in ("number", "name")]
+                        if len(elements) >= 2:
+                            min_val = self._extract_numeric_value(elements[0])
+                            max_val = self._extract_numeric_value(elements[1])
+                            # Accept bounds even if one side is None (unbounded)
+                            if min_val is not None or max_val is not None:
+                                bounds_info = (min_val, max_val)
+
+        if "inclusive_bounds" in kwargs:
+            inclusive_bounds_node = kwargs["inclusive_bounds"]
+            # Similar logic for inclusive bounds tuple
+            if inclusive_bounds_node.type == "atom" and inclusive_bounds_node.children:
+                for child in inclusive_bounds_node.children:
+                    if child.type == "testlist_comp":
+                        elements = [c for c in child.children if c.type in ("name",)]
+                        if len(elements) >= 2:
+                            left_inclusive = self._extract_boolean_value(elements[0])
+                            right_inclusive = self._extract_boolean_value(elements[1])
+                            if left_inclusive is not None and right_inclusive is not None:
+                                inclusive_bounds = (left_inclusive, right_inclusive)
 
         if bounds_info:
             # Return (min, max, left_inclusive, right_inclusive)
             return (*bounds_info, *inclusive_bounds)
         return None
 
-    def _extract_doc_from_call(self, call_node: ast.Call) -> str | None:
-        """Extract doc string from a parameter call."""
-        for keyword in call_node.keywords:
-            if keyword.arg == "doc":
-                return self._extract_string_value(keyword.value)
+    def _extract_doc_from_call(self, call_node) -> str | None:
+        """Extract doc string from a parameter call (parso version)."""
+        kwargs = self._get_keyword_arguments(call_node)
+        if "doc" in kwargs:
+            return self._extract_string_value(kwargs["doc"])
         return None
 
-    def _extract_allow_None_from_call(self, call_node: ast.Call) -> bool | None:
-        """Extract allow_None from a parameter call."""
-        for keyword in call_node.keywords:
-            if keyword.arg == "allow_None":
-                return self._extract_boolean_value(keyword.value)
+    def _extract_allow_None_from_call(self, call_node) -> bool | None:
+        """Extract allow_None from a parameter call (parso version)."""
+        kwargs = self._get_keyword_arguments(call_node)
+        if "allow_None" in kwargs:
+            return self._extract_boolean_value(kwargs["allow_None"])
         return None
 
-    def _extract_default_from_call(self, call_node: ast.Call) -> ast.expr | None:
-        """Extract default value from a parameter call."""
-        for keyword in call_node.keywords:
-            if keyword.arg == "default":
-                return keyword.value
+    def _extract_default_from_call(self, call_node):
+        """Extract default value from a parameter call (parso version)."""
+        kwargs = self._get_keyword_arguments(call_node)
+        if "default" in kwargs:
+            return kwargs["default"]
         return None
 
-    def _is_none_value(self, node: ast.expr) -> bool:
-        """Check if an AST node represents None."""
-        return isinstance(node, ast.Constant) and node.value is None
+    def _is_none_value(self, node) -> bool:
+        """Check if a parso node represents None."""
+        return (hasattr(node, 'type') and node.type == 'name' and
+                hasattr(node, 'value') and node.value == 'None')
 
-    def _extract_string_value(self, node: ast.expr) -> str | None:
-        """Extract string value from AST node."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return node.value
+    def _extract_string_value(self, node) -> str | None:
+        """Extract string value from parso node."""
+        if hasattr(node, 'type') and node.type == 'string':
+            # Remove quotes from string value
+            value = node.value
+            if value.startswith('"') and value.endswith('"'):
+                return value[1:-1]
+            elif value.startswith("'") and value.endswith("'"):
+                return value[1:-1]
+            return value
         return None
 
-    def _extract_boolean_value(self, node: ast.expr) -> bool | None:
-        """Extract boolean value from AST node."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, bool):
-            return node.value
+    def _extract_boolean_value(self, node) -> bool | None:
+        """Extract boolean value from parso node."""
+        if hasattr(node, 'type') and node.type == 'name':
+            if node.value == 'True':
+                return True
+            elif node.value == 'False':
+                return False
         return None
 
-    def _format_default_value(self, node: ast.expr) -> str:
-        """Format an AST node as a string representation for display."""
-        if isinstance(node, ast.Constant):
-            if node.value is None:
-                return "None"
-            elif isinstance(node.value, str):
-                return repr(node.value)  # Use repr to include quotes
-            else:
-                return str(node.value)
-        elif isinstance(node, ast.List):
-            elements = [self._format_default_value(elem) for elem in node.elts]
-            return f"[{', '.join(elements)}]"
-        elif isinstance(node, ast.Tuple):
-            elements = [self._format_default_value(elem) for elem in node.elts]
-            if len(elements) == 1:
-                return f"({elements[0]},)"  # Single-element tuple
-            return f"({', '.join(elements)})"
-        elif isinstance(node, ast.Dict):
-            pairs = []
-            for key, value in zip(node.keys, node.values, strict=False):
-                key_str = self._format_default_value(key) if key else "None"
-                value_str = self._format_default_value(value)
-                pairs.append(f"{key_str}: {value_str}")
-            return f"{{{', '.join(pairs)}}}"
-        elif isinstance(node, ast.Name):
-            return node.id
-        elif isinstance(node, ast.Attribute):
-            if isinstance(node.value, ast.Name):
-                return f"{node.value.id}.{node.attr}"
-            else:
-                return f"{self._format_default_value(node.value)}.{node.attr}"
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-            return f"-{self._format_default_value(node.operand)}"
+    def _format_default_value(self, node) -> str:
+        """Format a parso node as a string representation for display."""
+        # For parso nodes, use the get_code() method to get the original source
+        if hasattr(node, 'get_code'):
+            return node.get_code().strip()
+        elif hasattr(node, 'value'):
+            return str(node.value)
         else:
-            # Fallback for complex expressions
             return "<complex>"
 
 
@@ -731,8 +743,8 @@ class ParamAnalyzer:
             elif node.type == "power" and self._is_function_call(node):
                 self._check_constructor_parameter_types(node, lines)
 
-    def _check_constructor_parameter_types(self, node: ast.Call, lines: list[str]):
-        """Check for type errors in constructor parameter calls like MyClass(x="A")."""
+    def _check_constructor_parameter_types(self, node, lines: list[str]):
+        """Check for type errors in constructor parameter calls like MyClass(x="A") (parso version)."""
         # Get the class name from the call
         class_name = self._get_instance_class(node)
         if not class_name:
@@ -746,13 +758,11 @@ class ParamAnalyzer:
         if not is_valid_param_class:
             return
 
-        # Check each keyword argument passed to the constructor
-        for keyword in node.keywords:
-            if keyword.arg is None:  # Skip **kwargs
-                continue
+        # Get keyword arguments from the parso node
+        kwargs = self._get_keyword_arguments(node)
 
-            param_name = keyword.arg
-            param_value = keyword.value
+        # Check each keyword argument passed to the constructor
+        for param_name, param_value in kwargs.items():
 
             # Get the expected parameter type
             cls = self._get_parameter_type_from_class(class_name, param_name)
@@ -851,27 +861,29 @@ class ParamAnalyzer:
             message = f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}"
             self._create_type_error(node, message, "constructor-bounds-violation")
 
-    def _check_parameter_default_type(self, node: ast.Assign, param_name: str, lines: list[str]):
-        """Check if parameter default value matches declared type."""
-        if not isinstance(node.value, ast.Call):
+    def _check_parameter_default_type(self, node, param_name: str, lines: list[str]):
+        """Check if parameter default value matches declared type (parso version)."""
+        # Find the parameter call on the right side of the assignment
+        param_call = None
+        for child in node.children:
+            if child.type in ("power", "atom_expr"):
+                param_call = child
+                break
+
+        if not param_call:
             return
 
         # Resolve the actual parameter class type
-        param_class_info = self._resolve_parameter_class(node.value.func)
+        param_class_info = self._resolve_parameter_class(param_call)
         if not param_class_info:
             return
 
         cls = param_class_info["type"]
-        param_class_info.get("module")
 
         # Get default value and allow_None from keyword arguments
-        default_value = None
-        allow_None = None
-        for keyword in node.value.keywords:
-            if keyword.arg == "default":
-                default_value = keyword.value
-            elif keyword.arg == "allow_None":
-                allow_None = self._extract_boolean_value(keyword.value)
+        kwargs = self._get_keyword_arguments(param_call)
+        default_value = kwargs.get("default")
+        allow_None = self._extract_boolean_value(kwargs.get("allow_None")) if "allow_None" in kwargs else None
 
         # Param automatically sets allow_None=True when default=None
         if default_value is not None and self._is_none_value(default_value):
@@ -887,15 +899,11 @@ class ParamAnalyzer:
             # Check if None is allowed for this parameter
             if allow_None and inferred_type is type(None):
                 return  # None is allowed, skip further validation
-                # If allow_None is False or not specified, continue with normal type checking
 
             # Special handling for Boolean parameters - they should only accept actual bool values
             if cls == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
-                if not (
-                    isinstance(default_value, ast.Constant)
-                    and isinstance(default_value.value, bool)
-                ):
+                if not (default_value.type == "name" and default_value.value in ("True", "False")):
                     message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}"
                     self._create_type_error(node, message, "boolean-type-mismatch")
             elif inferred_type and not any(
@@ -1061,21 +1069,29 @@ class ParamAnalyzer:
 
         return None
 
-    def _get_instance_class(self, call_node: ast.Call) -> str | None:
-        """Get the class name from an instance creation call."""
-        if isinstance(call_node.func, ast.Name):
-            return call_node.func.id
-        elif isinstance(call_node.func, ast.Attribute):
-            # Try to resolve the full class path for external classes
-            full_class_path = self._resolve_full_class_path(call_node.func)
-            if full_class_path:
-                # Check if this is an external Parameterized class
-                class_info = self._analyze_external_class_ast(full_class_path)
-                if class_info:
-                    # Return the full path as the class identifier for external classes
-                    return full_class_path
-            # Fallback to just the attribute name for local classes
-            return call_node.func.attr
+    def _get_instance_class(self, call_node) -> str | None:
+        """Get the class name from an instance creation call (parso version)."""
+        # For parso nodes, we need to find the function name from the power/atom_expr structure
+        if call_node.type in ("power", "atom_expr"):
+            # Look for the function name in the node children
+            for child in call_node.children:
+                if child.type == "name":
+                    # Simple case: MyClass()
+                    return child.value
+                elif child.type == "trailer" and len(child.children) >= 2:
+                    # Could be module.Class case - need to construct full path
+                    # For now, just return the class name from the last trailer
+                    if child.children[1].type == "name":
+                        # Try to resolve the full class path for external classes
+                        full_class_path = self._resolve_full_class_path(call_node)
+                        if full_class_path:
+                            # Check if this is an external Parameterized class
+                            class_info = self._analyze_external_class_ast(full_class_path)
+                            if class_info:
+                                # Return the full path as the class identifier for external classes
+                                return full_class_path
+                        # Fallback to just the class name
+                        return child.children[1].value
         return None
 
     def _resolve_full_class_path(self, base) -> str | None:
@@ -1158,111 +1174,132 @@ class ParamAnalyzer:
             }
         )
 
-    def _infer_value_type(self, node: ast.expr) -> type | None:
-        """Infer Python type from AST node."""
-        if isinstance(node, ast.Constant):
-            return type(node.value)
-        elif isinstance(node, ast.List):
-            return list
-        elif isinstance(node, ast.Tuple):
-            return tuple
-        elif isinstance(node, ast.Dict):
-            return dict
-        elif isinstance(node, ast.Set):
-            return set
-        elif isinstance(node, ast.Name):
-            # Could be a variable - would need more sophisticated analysis
-            return None
+    def _infer_value_type(self, node) -> type | None:
+        """Infer Python type from parso node."""
+        if hasattr(node, 'type'):
+            if node.type == 'number':
+                # Check if it's a float or int
+                if '.' in node.value:
+                    return float
+                else:
+                    return int
+            elif node.type == 'string':
+                return str
+            elif node.type == 'name':
+                if node.value == 'True' or node.value == 'False':
+                    return bool
+                elif node.value == 'None':
+                    return type(None)
+                # Could be a variable - would need more sophisticated analysis
+                return None
+            elif node.type == 'atom':
+                # Check for list, dict, tuple
+                if node.children and node.children[0].value == '[':
+                    return list
+                elif node.children and node.children[0].value == '{':
+                    return dict
+                elif node.children and node.children[0].value == '(':
+                    return tuple
         return None
 
-    def _check_parameter_constraints(self, node: ast.Assign, param_name: str, lines: list[str]):
-        """Check for parameter-specific constraints."""
-        if not isinstance(node.value, ast.Call):
+    def _check_parameter_constraints(self, node, param_name: str, lines: list[str]):
+        """Check for parameter-specific constraints (parso version)."""
+        # Find the parameter call on the right side of the assignment
+        param_call = None
+        for child in node.children:
+            if child.type in ("power", "atom_expr"):
+                param_call = child
+                break
+
+        if not param_call:
             return
 
         # Resolve the actual parameter class type for constraint checking
-        param_class_info = self._resolve_parameter_class(node.value.func)
+        param_class_info = self._resolve_parameter_class(param_call)
         if not param_class_info:
             return
 
         resolved_cls = param_class_info["type"]
 
+        # Get keyword arguments
+        kwargs = self._get_keyword_arguments(param_call)
+
         # Check bounds for Number/Integer parameters
         if resolved_cls in ["Number", "Integer"]:
-            bounds = None
+            bounds_node = kwargs.get("bounds")
+            inclusive_bounds_node = kwargs.get("inclusive_bounds")
+            default_value = kwargs.get("default")
+
             inclusive_bounds = (True, True)  # Default to inclusive
-            default_value = None
 
-            for keyword in node.value.keywords:
-                if keyword.arg == "bounds":
-                    bounds = keyword.value
-                elif keyword.arg == "inclusive_bounds":
-                    inclusive_bounds_node = keyword.value
-                    if (
-                        isinstance(inclusive_bounds_node, ast.Tuple)
-                        and len(inclusive_bounds_node.elts) == 2
-                    ):
-                        left_inclusive = self._extract_boolean_value(inclusive_bounds_node.elts[0])
-                        right_inclusive = self._extract_boolean_value(
-                            inclusive_bounds_node.elts[1]
-                        )
-                        if left_inclusive is not None and right_inclusive is not None:
-                            inclusive_bounds = (left_inclusive, right_inclusive)
-                elif keyword.arg == "default":
-                    default_value = keyword.value
+            # Parse inclusive_bounds if present
+            if inclusive_bounds_node and inclusive_bounds_node.type == "atom":
+                # Parse (True, False) pattern
+                for child in inclusive_bounds_node.children:
+                    if child.type == "testlist_comp":
+                        elements = [c for c in child.children if c.type == "name"]
+                        if len(elements) >= 2:
+                            left_inclusive = self._extract_boolean_value(elements[0])
+                            right_inclusive = self._extract_boolean_value(elements[1])
+                            if left_inclusive is not None and right_inclusive is not None:
+                                inclusive_bounds = (left_inclusive, right_inclusive)
 
-            if bounds and isinstance(bounds, ast.Tuple) and len(bounds.elts) == 2:
-                # Check if bounds are valid (min < max)
-                try:
-                    min_val = self._extract_numeric_value(bounds.elts[0])
-                    max_val = self._extract_numeric_value(bounds.elts[1])
+            # Parse bounds if present
+            if bounds_node and bounds_node.type == "atom":
+                # Parse (min, max) pattern
+                for child in bounds_node.children:
+                    if child.type == "testlist_comp":
+                        elements = [c for c in child.children if c.type in ("number", "name")]
+                        if len(elements) >= 2:
+                            try:
+                                min_val = self._extract_numeric_value(elements[0])
+                                max_val = self._extract_numeric_value(elements[1])
 
-                    if min_val is not None and max_val is not None and min_val >= max_val:
-                        message = f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})"
-                        self._create_type_error(node, message, "invalid-bounds")
+                                if min_val is not None and max_val is not None and min_val >= max_val:
+                                    message = f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})"
+                                    self._create_type_error(node, message, "invalid-bounds")
 
-                    # Check if default value violates bounds
-                    if default_value is not None and min_val is not None and max_val is not None:
-                        default_numeric = self._extract_numeric_value(default_value)
-                        if default_numeric is not None:
-                            left_inclusive, right_inclusive = inclusive_bounds
+                                # Check if default value violates bounds
+                                if default_value is not None and min_val is not None and max_val is not None:
+                                    default_numeric = self._extract_numeric_value(default_value)
+                                    if default_numeric is not None:
+                                        left_inclusive, right_inclusive = inclusive_bounds
 
-                            # Check bounds violation
-                            violates_lower = (
-                                (default_numeric < min_val)
-                                if left_inclusive
-                                else (default_numeric <= min_val)
-                            )
-                            violates_upper = (
-                                (default_numeric > max_val)
-                                if right_inclusive
-                                else (default_numeric >= max_val)
-                            )
+                                        # Check bounds violation
+                                        violates_lower = (
+                                            (default_numeric < min_val)
+                                            if left_inclusive
+                                            else (default_numeric <= min_val)
+                                        )
+                                        violates_upper = (
+                                            (default_numeric > max_val)
+                                            if right_inclusive
+                                            else (default_numeric >= max_val)
+                                        )
 
-                            if violates_lower or violates_upper:
-                                bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
-                                message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
-                                self._create_type_error(node, message, "default-bounds-violation")
+                                        if violates_lower or violates_upper:
+                                            bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
+                                            message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
+                                            self._create_type_error(node, message, "default-bounds-violation")
 
-                except (ValueError, TypeError):
-                    pass
+                            except (ValueError, TypeError):
+                                pass
 
         # Check for empty lists/tuples with List/Tuple parameters
         elif resolved_cls in ["List", "Tuple"]:
-            for keyword in node.value.keywords:
-                if keyword.arg == "default" and (
-                    isinstance(keyword.value, (ast.List, ast.Tuple))
-                    and len(keyword.value.elts) == 0
-                ):
-                    # This is usually fine, but flag if bounds are specified
-                    bounds_specified = any(kw.arg == "bounds" for kw in node.value.keywords)
-                    if bounds_specified:
-                        message = (
-                            f"Parameter '{param_name}' has empty default but bounds specified"
-                        )
-                        self._create_type_error(
-                            node, message, "empty-default-with-bounds", "warning"
-                        )
+            default_value = kwargs.get("default")
+            if default_value and default_value.type == "atom":
+                # Check if it's an empty list or tuple
+                for child in default_value.children:
+                    if child.type in ("testlist_comp",) and not child.children:
+                        # Empty list/tuple - check if bounds are specified
+                        if "bounds" in kwargs:
+                            message = (
+                                f"Parameter '{param_name}' has empty default but bounds specified"
+                            )
+                            self._create_type_error(
+                                node, message, "empty-default-with-bounds", "warning"
+                            )
 
     def _resolve_module_path(
         self, module_name: str, current_file_path: str | None = None
@@ -1395,17 +1432,20 @@ class ParamAnalyzer:
 
         return None
 
-    def _extract_numeric_value(self, node: ast.expr) -> float | int | None:
-        """Extract numeric value from AST node."""
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float)):
-                return node.value
-            elif node.value is None:
-                return None  # Explicitly handle None
-        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-            # Handle negative numbers
-            val = self._extract_numeric_value(node.operand)
-            return -val if val is not None else None
+    def _extract_numeric_value(self, node) -> float | int | None:
+        """Extract numeric value from parso node."""
+        if hasattr(node, 'type') and node.type == 'number':
+            try:
+                # Try to parse as int first, then float
+                if '.' in node.value:
+                    return float(node.value)
+                else:
+                    return int(node.value)
+            except ValueError:
+                return None
+        elif hasattr(node, 'type') and node.type == 'name' and node.value == 'None':
+            return None  # Explicitly handle None
+        # TODO: Handle negative numbers (unary minus)
         return None
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
