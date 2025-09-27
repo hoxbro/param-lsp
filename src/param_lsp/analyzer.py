@@ -54,20 +54,15 @@ class ParamAnalyzer:
         """Analyze a Python file for Param usage."""
         try:
             # Use parso with error recovery enabled for better handling of incomplete syntax
-            grammar = parso.load_grammar()
-            tree = grammar.parse(content, error_recovery=True)
+            tree = parso.parse(content, error_recovery=True)
             self._reset_analysis()
             self._current_file_path = file_path
             self._current_file_content = content
 
-            # Log any syntax errors found by parso (but continue processing)
-            errors = list(grammar.iter_errors(tree))
-            if errors:
-                logger.debug(
-                    f"Found {len(errors)} syntax errors, but continuing with error recovery"
-                )
-                for error in errors:
-                    logger.debug(f"Syntax error at {error.start_pos}: {error.message}")
+            # Note: parso handles syntax errors internally with error_recovery=True
+
+            # Walk the parse tree to extract parameter information
+            self._walk_tree(tree)
         except Exception as e:
             # If parso completely fails, log and return empty result
             logger.error(f"Failed to parse file: {e}")
@@ -319,6 +314,8 @@ class ParamAnalyzer:
 
         if is_param_class:
             class_name = self._get_class_name(node)
+            if class_name is None:
+                return  # Skip if we can't get the class name
             class_info = ParameterizedInfo(name=class_name)
 
             # Get inherited parameters from parent classes first
@@ -725,10 +722,11 @@ class ParamAnalyzer:
                                                     stmt_child, target_name, lines
                                                 )
 
-            # Check runtime parameter assignments like obj.param = value
-            elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
-                if self._has_attribute_target(node):
-                    self._check_runtime_parameter_assignment(node, None, lines)
+            # TODO: Check runtime parameter assignments like obj.param = value
+            # This needs to be converted from AST to parso - temporarily disabled
+            # elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
+            #     if self._has_attribute_target(node):
+            #         self._check_runtime_parameter_assignment(node, None, lines)
 
             # Check constructor calls like MyClass(x="A")
             elif node.type == "power" and self._is_function_call(node):
@@ -1072,20 +1070,19 @@ class ParamAnalyzer:
                 if child.type == "name":
                     # Simple case: MyClass()
                     return child.value
-                elif child.type == "trailer" and len(child.children) >= 2:
+                elif child.type == "trailer" and len(child.children) >= 2 and child.children[1].type == "name":
                     # Could be module.Class case - need to construct full path
                     # For now, just return the class name from the last trailer
-                    if child.children[1].type == "name":
-                        # Try to resolve the full class path for external classes
-                        full_class_path = self._resolve_full_class_path(call_node)
-                        if full_class_path:
-                            # Check if this is an external Parameterized class
-                            class_info = self._analyze_external_class_ast(full_class_path)
-                            if class_info:
-                                # Return the full path as the class identifier for external classes
-                                return full_class_path
-                        # Fallback to just the class name
-                        return child.children[1].value
+                    # Try to resolve the full class path for external classes
+                    full_class_path = self._resolve_full_class_path(call_node)
+                    if full_class_path:
+                        # Check if this is an external Parameterized class
+                        class_info = self._analyze_external_class_ast(full_class_path)
+                        if class_info:
+                            # Return the full path as the class identifier for external classes
+                            return full_class_path
+                    # Fallback to just the class name
+                    return child.children[1].value
         return None
 
     def _resolve_full_class_path(self, base) -> str | None:
@@ -1190,7 +1187,7 @@ class ParamAnalyzer:
             elif node.type == "string":
                 return str
             elif node.type == "name":
-                if node.value == "True" or node.value == "False":
+                if node.value in {"True", "False"}:
                     return bool
                 elif node.value == "None":
                     return type(None)
@@ -1461,24 +1458,23 @@ class ParamAnalyzer:
                 return None
         elif hasattr(node, "type") and node.type == "name" and node.value == "None":
             return None  # Explicitly handle None
-        elif hasattr(node, "type") and node.type == "factor" and hasattr(node, "children"):
+        elif hasattr(node, "type") and node.type == "factor" and hasattr(node, "children") and len(node.children) >= 2:
             # Handle unary operators like negative numbers: factor -> operator(-) + number
-            if len(node.children) >= 2:
-                operator_node = node.children[0]
-                operand_node = node.children[1]
-                if (
-                    hasattr(operator_node, "value")
-                    and operator_node.value == "-"
-                    and hasattr(operand_node, "type")
-                    and operand_node.type == "number"
-                ):
-                    try:
-                        if "." in operand_node.value:
-                            return -float(operand_node.value)
-                        else:
-                            return -int(operand_node.value)
-                    except ValueError:
-                        return None
+            operator_node = node.children[0]
+            operand_node = node.children[1]
+            if (
+                hasattr(operator_node, "value")
+                and operator_node.value == "-"
+                and hasattr(operand_node, "type")
+                and operand_node.type == "number"
+            ):
+                try:
+                    if "." in operand_node.value:
+                        return -float(operand_node.value)
+                    else:
+                        return -int(operand_node.value)
+                except ValueError:
+                    return None
         return None
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:

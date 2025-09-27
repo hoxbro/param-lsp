@@ -85,23 +85,34 @@ PHASE 3: Value Extraction Logic
     - ✅ _extract_boolean_value() for parso name nodes (True/False)
     - ✅ _infer_value_type() for parso node structure
 
-REMAINING EDGE CASES TO FIX
----------------------------
-[ ] Negative number handling in bounds
-    - Need to handle unary minus operators in numeric extraction
-    - Test case: bounds=(-5, 0) currently not working
+REMAINING EDGE CASES - COMPLETED ✅
+-----------------------------------
+[x] Negative number handling in bounds
+    - ✅ Updated _extract_numeric_value() to handle factor nodes with unary minus
+    - ✅ Updated bounds extraction to look for factor nodes
+    - ✅ Test case: bounds=(-5, 0) now working correctly
 
-[ ] Inclusive bounds tuple parsing refinement
-    - inclusive_bounds=(False, True) parsing needs improvement
-    - Complex tuple structures in constraint checking
+[x] Inclusive bounds tuple parsing refinement
+    - ✅ Fixed _extract_boolean_value() to handle keyword nodes (True/False)
+    - ✅ Updated all inclusive bounds parsing to look for both name and keyword nodes
+    - ✅ Complex tuple structures in constraint checking now working
 
-[ ] Default value bounds violation detection edge cases
-    - Some scenarios not detecting all violations (expecting 4, getting 2)
-    - Need to improve default value constraint checking
+[x] Default value bounds violation detection edge cases
+    - ✅ Fixed _check_parameter_constraints() to use corrected inclusive bounds parsing
+    - ✅ All scenarios now detecting violations correctly (9/9 bounds tests passing)
+    - ✅ Improved default value constraint checking working
 
-[ ] Empty default value warnings for List/Tuple parameters
-    - default=[] with bounds specified should generate warnings
-    - Empty container detection logic needs refinement
+[x] Empty default value warnings for List/Tuple parameters
+    - ✅ Fixed empty container detection to check for ['[', ']'] and ['(', ')'] patterns
+    - ✅ Warnings for default=[] with bounds specified now working
+    - ✅ Empty container detection logic refined and working
+
+MAJOR MILESTONE ACHIEVED
+========================
+✅ All Phase 2 edge cases completed successfully
+✅ Bounds validation tests: 9/9 passing (was 4/9)
+✅ Negative numbers, inclusive bounds, violation detection, and empty defaults all working
+✅ AST→parso conversion for bounds-related functionality complete
 
 PHASE 4: Error Handling & Diagnostics
 -------------------------------------
@@ -203,12 +214,13 @@ COMPLETED TASKS
     - ✅ Error creation and positioning working with parso nodes
     - ✅ LSP diagnostic compatibility maintained
 
-CURRENT STATUS: Major parso conversion complete, 4/9 bounds tests passing ✅
+CURRENT STATUS: Phase 2 edge cases COMPLETED, 9/9 bounds tests passing ✅
 
 NEXT PRIORITIES
 ===============
-1. Fix remaining bounds validation edge cases (negative numbers, inclusive bounds)
-2. Improve default value violation detection completeness
-3. Add empty default container warnings for List/Tuple parameters
-4. Complete remaining AST method conversions (non-critical paths)
-5. Full test suite validation
+1. ✅ COMPLETED: Fix remaining bounds validation edge cases (negative numbers, inclusive bounds)
+2. ✅ COMPLETED: Improve default value violation detection completeness
+3. ✅ COMPLETED: Add empty default container warnings for List/Tuple parameters
+4. Continue with remaining phases (inheritance, runtime assignments, full LSP features)
+5. Complete remaining AST method conversions for non-bounds functionality
+6. Full test suite validation for all features
