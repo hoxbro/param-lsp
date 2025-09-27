@@ -211,20 +211,30 @@ class ParamAnalyzer:
         # Look through children to find the actual function being called
         for child in node.children:
             if child.type == "name":
-                # This might be the module name (e.g., "param")
-                continue
+                # This could be a direct function call (e.g., "String") or module name
+                func_name = child.value
             elif child.type == "trailer":
                 # Handle dotted calls like param.Integer
                 for trailer_child in child.children:
                     if trailer_child.type == "name":
                         func_name = trailer_child.value
                         break
-                # If we found a function name in a trailer, that's likely the param type
+                # If we found a function name in a trailer, that's the final function name
                 if func_name:
                     break
 
         if func_name:
-            return func_name in PARAM_TYPES
+            # Check if it's a direct param type
+            if func_name in PARAM_TYPES:
+                return True
+
+            # Check if it's an imported param type
+            if func_name in self.imports:
+                imported_full_name = self.imports[func_name]
+                if imported_full_name.startswith("param."):
+                    param_type = imported_full_name.split(".")[-1]
+                    return param_type in PARAM_TYPES
+
         return False
 
     def _has_attribute_target(self, node):
@@ -254,28 +264,26 @@ class ParamAnalyzer:
         """Handle 'import' statements (parso node)."""
         # For parso import_name nodes, parse the import statement
         for child in node.children:
-            if child.type == "name":
+            if child.type == "dotted_as_name":
+                # Handle "import module as alias"
+                module_name = None
+                alias_name = None
+                for part in child.children:
+                    if part.type == "name":
+                        if module_name is None:
+                            module_name = part.value
+                        else:
+                            alias_name = part.value
+                if module_name:
+                    self.imports[alias_name or module_name] = module_name
+            elif child.type == "dotted_name":
+                # Handle "import module"
+                module_name = child.value
+                self.imports[module_name] = module_name
+            elif child.type == "name" and child.value not in ("import", "as"):
                 # Simple case: "import module"
                 module_name = child.value
                 self.imports[module_name] = module_name
-            elif child.type == "dotted_as_names":
-                for name_child in child.children:
-                    if name_child.type == "dotted_as_name":
-                        # Handle "import module as alias"
-                        parts = []
-                        alias_name = None
-                        for part in name_child.children:
-                            if part.type == "dotted_name":
-                                parts.append(part.value)
-                            elif part.type == "name" and parts:
-                                alias_name = part.value
-                        if parts:
-                            module_name = parts[0]
-                            self.imports[alias_name or module_name] = module_name
-                    elif name_child.type == "dotted_name":
-                        # Handle "import module"
-                        module_name = name_child.value
-                        self.imports[module_name] = module_name
 
     def _handle_import_from(self, node):
         """Handle 'from ... import ...' statements (parso node)."""
@@ -283,7 +291,9 @@ class ParamAnalyzer:
         module_name = None
 
         for child in node.children:
-            if child.type == "dotted_name" and module_name is None:
+            if child.type == "name" and module_name is None and child.value not in ("from", "import"):
+                module_name = child.value
+            elif child.type == "dotted_name" and module_name is None:
                 module_name = child.value
             elif child.type == "import_as_names":
                 for name_child in child.children:
@@ -565,9 +575,18 @@ class ParamAnalyzer:
                             module_name = func_name  # Previous name becomes module
                         func_name = trailer_child.value
 
-        if func_name and func_name in PARAM_TYPES:
-            # Return the expected format: dict with type key
-            return {"type": func_name, "module": module_name or "param"}
+        if func_name:
+            # Check if it's a direct param type
+            if func_name in PARAM_TYPES:
+                return {"type": func_name, "module": module_name or "param"}
+
+            # Check if it's an imported param type
+            if func_name in self.imports:
+                imported_full_name = self.imports[func_name]
+                if imported_full_name.startswith("param."):
+                    param_type = imported_full_name.split(".")[-1]
+                    if param_type in PARAM_TYPES:
+                        return {"type": param_type, "module": "param"}
 
         return None
 
@@ -682,7 +701,13 @@ class ParamAnalyzer:
         if hasattr(node, "type") and node.type == "string":
             # Remove quotes from string value
             value = node.value
-            if (value.startswith('"') and value.endswith('"')) or (
+            # Handle triple quotes first
+            if (value.startswith('"""') and value.endswith('"""')) or (
+                value.startswith("'''") and value.endswith("'''")
+            ):
+                return value[3:-3]
+            # Handle single/double quotes
+            elif (value.startswith('"') and value.endswith('"')) or (
                 value.startswith("'") and value.endswith("'")
             ):
                 return value[1:-1]
