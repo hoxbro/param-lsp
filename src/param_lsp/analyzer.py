@@ -316,7 +316,11 @@ class ParamAnalyzer:
                     elif name_child.type == "name":
                         # Handle "from module import name"
                         import_names.append((name_child.value, None))
-            elif child.type == "name" and child.value not in ("from", "import") and module_name is not None:
+            elif (
+                child.type == "name"
+                and child.value not in ("from", "import")
+                and module_name is not None
+            ):
                 # Handle simple "from module import name" where name is a direct child
                 import_names.append((child.value, None))
 
