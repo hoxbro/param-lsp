@@ -555,6 +555,21 @@ class ParamAnalyzer:
             elif allow_None_value is not None:
                 allow_None = allow_None_value
 
+        # Extract location information from the assignment node
+        if assignment_node:
+            try:
+                # Get line number from the parso node
+                line_number = assignment_node.start_pos[0]
+                # Get the source line from the current file content
+                if self._current_file_content:
+                    lines = self._current_file_content.split("\n")
+                    if 0 <= line_number - 1 < len(lines):
+                        source_line = lines[line_number - 1].strip()
+                        location = {"line": line_number, "source": source_line}
+            except (AttributeError, IndexError):
+                # If we can't get location info, continue without it
+                pass
+
         # Create ParameterInfo object
         return ParameterInfo(
             name=param_name,
@@ -706,7 +721,7 @@ class ParamAnalyzer:
         """Check if a parso node represents None."""
         return (
             hasattr(node, "type")
-            and node.type == "name"
+            and node.type in ("name", "keyword")  # None can be either name or keyword type
             and hasattr(node, "value")
             and node.value == "None"
         )
@@ -1439,6 +1454,12 @@ class ParamAnalyzer:
                 elif node.value == "None":
                     return type(None)
                 # Could be a variable - would need more sophisticated analysis
+                return None
+            elif node.type == "keyword":
+                if node.value in {"True", "False"}:
+                    return bool
+                elif node.value == "None":
+                    return type(None)
                 return None
             elif node.type == "atom":
                 # Check for list, dict, tuple
