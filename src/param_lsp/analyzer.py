@@ -1292,7 +1292,16 @@ class ParamAnalyzer:
         """Get the class name from an instance creation call (parso version)."""
         # For parso nodes, we need to find the function name from the power/atom_expr structure
         if call_node.type in ("power", "atom_expr"):
-            # Look for the function name in the node children
+            # First try to resolve the full class path for external classes
+            full_class_path = self._resolve_full_class_path(call_node)
+            if full_class_path:
+                # Check if this is an external Parameterized class
+                class_info = self._analyze_external_class_ast(full_class_path)
+                if class_info:
+                    # Return the full path as the class identifier for external classes
+                    return full_class_path
+
+            # If not an external class, look for local class names
             for child in call_node.children:
                 if child.type == "name":
                     # Simple case: MyClass()
@@ -1302,17 +1311,7 @@ class ParamAnalyzer:
                     and len(child.children) >= 2
                     and child.children[1].type == "name"
                 ):
-                    # Could be module.Class case - need to construct full path
-                    # For now, just return the class name from the last trailer
-                    # Try to resolve the full class path for external classes
-                    full_class_path = self._resolve_full_class_path(call_node)
-                    if full_class_path:
-                        # Check if this is an external Parameterized class
-                        class_info = self._analyze_external_class_ast(full_class_path)
-                        if class_info:
-                            # Return the full path as the class identifier for external classes
-                            return full_class_path
-                    # Fallback to just the class name
+                    # Return the class name from the last trailer
                     return child.children[1].value
         return None
 
@@ -2086,7 +2085,7 @@ class ParamAnalyzer:
     def _discover_external_param_classes(self, tree):
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
         for node in self._walk_tree(tree):
-            if node.type == "power":
+            if node.type in ("power", "atom_expr"):
                 # Look for calls like pn.widgets.IntSlider()
                 # Check if this is a function call with parentheses
                 has_call = any(
