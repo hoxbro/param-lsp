@@ -191,9 +191,23 @@ def completion(params: CompletionParams) -> CompletionList:
         completion_list = CompletionList(is_incomplete=False, items=constructor_completions)
         return completion_list
 
+    # Check if we're in a multiline constructor context
+    is_multiline_constructor, class_name = server._is_in_constructor_context_multiline(
+        uri, lines, position
+    )
+    if is_multiline_constructor and class_name:
+        multiline_completions = server._get_constructor_parameter_completions_multiline(
+            uri, lines, position, class_name
+        )
+        if multiline_completions:
+            return CompletionList(is_incomplete=False, items=multiline_completions)
+
     # Check if we're in a constructor context but have no completions (all params used)
     # In this case, don't fall back to generic param completions
-    if server._is_in_constructor_context(uri, current_line, position.character):
+    single_line_constructor = server._is_in_constructor_context(
+        uri, current_line, position.character
+    )
+    if single_line_constructor or is_multiline_constructor:
         return CompletionList(is_incomplete=False, items=[])
 
     # Get completions based on general context
