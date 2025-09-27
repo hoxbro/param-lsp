@@ -157,15 +157,26 @@ class ParamAnalyzer:
     def _get_class_bases_parso(self, class_node):
         """Extract base classes from parso classdef node."""
         bases = []
+        # Look for bases between parentheses in class definition
+        in_parentheses = False
         for child in class_node.children:
-            if child.type == "arglist":
-                # Extract base class names from the argument list
-                for arg_child in child.children:
-                    if arg_child.type == "name":
-                        bases.append(arg_child)
-                    elif arg_child.type == "power":
-                        # Handle dotted names like module.Class
-                        bases.append(arg_child)
+            if child.type == "operator" and child.value == "(":
+                in_parentheses = True
+            elif child.type == "operator" and child.value == ")":
+                in_parentheses = False
+            elif in_parentheses:
+                if child.type == "name":
+                    bases.append(child)
+                elif child.type in ("atom_expr", "power"):
+                    # Handle dotted names like module.Class or param.Parameterized
+                    bases.append(child)
+                elif child.type == "arglist":
+                    # Multiple bases in argument list
+                    for arg_child in child.children:
+                        if arg_child.type == "name":
+                            bases.append(arg_child)
+                        elif arg_child.type in ("atom_expr", "power"):
+                            bases.append(arg_child)
         return bases
 
     def _is_assignment_stmt(self, node):
@@ -243,7 +254,11 @@ class ParamAnalyzer:
         """Handle 'import' statements (parso node)."""
         # For parso import_name nodes, parse the import statement
         for child in node.children:
-            if child.type == "dotted_as_names":
+            if child.type == "name":
+                # Simple case: "import module"
+                module_name = child.value
+                self.imports[module_name] = module_name
+            elif child.type == "dotted_as_names":
                 for name_child in child.children:
                     if name_child.type == "dotted_as_name":
                         # Handle "import module as alias"
@@ -357,7 +372,7 @@ class ParamAnalyzer:
             )
             if imported_class_info:
                 return True
-        elif base.type == "power":
+        elif base.type in ("power", "atom_expr"):
             # Handle dotted names like param.Parameterized or pn.widgets.IntSlider
             parts = []
             for child in base.children:
@@ -1020,7 +1035,7 @@ class ParamAnalyzer:
         return None
 
     def _resolve_full_class_path(self, base) -> str | None:
-        """Resolve the full class path from a parso power node like pn.widgets.IntSlider."""
+        """Resolve the full class path from a parso power/atom_expr node like pn.widgets.IntSlider."""
         parts = []
         for child in base.children:
             if child.type == "name":
