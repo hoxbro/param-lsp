@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from lsprotocol.types import Position
 
-from param_lsp import ParamLanguageServer
+from param_lsp._server.server import ParamLanguageServer
 
 
 class TestSelectorCompletion:
