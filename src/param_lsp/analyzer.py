@@ -73,34 +73,34 @@ class ParamAnalyzer:
             return {}
 
         # First pass: collect imports
-        for node in self._walk_parso_tree(tree):
+        for node in self._walk_tree(tree):
             if node.type == "import_name":
                 self._handle_import(node)
             elif node.type == "import_from":
                 self._handle_import_from(node)
 
         # Second pass: collect class definitions in order, respecting inheritance
-        class_nodes = [node for node in self._walk_parso_tree(tree) if node.type == "classdef"]
+        class_nodes = [node for node in self._walk_tree(tree) if node.type == "classdef"]
 
         # Process classes in dependency order (parents before children)
         processed_classes = set()
         while len(processed_classes) < len(class_nodes):
             progress_made = False
             for node in class_nodes:
-                class_name = self._get_class_name_parso(node)
+                class_name = self._get_class_name(node)
                 if not class_name or class_name in processed_classes:
                     continue
 
                 # Check if all parent classes are processed or are external param classes
                 can_process = True
-                bases = self._get_class_bases_parso(node)
+                bases = self._get_class_bases(node)
                 for base in bases:
                     if base.type == "name":
                         parent_name = base.value
                         # If it's a class defined in this file and not processed yet, wait
                         if (
                             any(
-                                self._get_class_name_parso(cn) == parent_name for cn in class_nodes
+                                self._get_class_name(cn) == parent_name for cn in class_nodes
                             )
                             and parent_name not in processed_classes
                         ):
@@ -116,7 +116,7 @@ class ParamAnalyzer:
             if not progress_made:
                 # Process remaining classes anyway
                 for node in class_nodes:
-                    class_name = self._get_class_name_parso(node)
+                    class_name = self._get_class_name(node)
                     if class_name and class_name not in processed_classes:
                         self._handle_class_def(node)
                         processed_classes.add(class_name)
@@ -140,21 +140,21 @@ class ParamAnalyzer:
         self.imports.clear()
         self.type_errors.clear()
 
-    def _walk_parso_tree(self, node):
+    def _walk_tree(self, node):
         """Walk a parso tree recursively, yielding all nodes."""
         yield node
         if hasattr(node, "children"):
             for child in node.children:
-                yield from self._walk_parso_tree(child)
+                yield from self._walk_tree(child)
 
-    def _get_class_name_parso(self, class_node):
+    def _get_class_name(self, class_node):
         """Extract class name from parso classdef node."""
         for child in class_node.children:
             if child.type == "name":
                 return child.value
         return None
 
-    def _get_class_bases_parso(self, class_node):
+    def _get_class_bases(self, class_node):
         """Extract base classes from parso classdef node."""
         bases = []
         # Look for bases between parentheses in class definition
@@ -194,19 +194,19 @@ class ParamAnalyzer:
                 break
         return None
 
-    def _is_parameter_assignment_parso(self, node):
+    def _is_parameter_assignment(self, node):
         """Check if a parso assignment statement looks like a parameter definition."""
         # Find the right-hand side of the assignment (after '=')
         found_equals = False
         for child in node.children:
             if child.type == "operator" and child.value == "=":
                 found_equals = True
-            elif found_equals and child.type == "power":
+            elif found_equals and child.type in ("power", "atom_expr"):
                 # Check if it's a parameter type call
-                return self._is_parameter_call_parso(child)
+                return self._is_parameter_call(child)
         return False
 
-    def _is_parameter_call_parso(self, node):
+    def _is_parameter_call(self, node):
         """Check if a parso power/atom_expr node represents a parameter type call."""
         # Extract the function name and check if it's a param type
         func_name = None
@@ -314,14 +314,14 @@ class ParamAnalyzer:
         """Handle class definitions that might inherit from param.Parameterized (parso node)."""
         # Check if class inherits from param.Parameterized (directly or indirectly)
         is_param_class = False
-        bases = self._get_class_bases_parso(node)
+        bases = self._get_class_bases(node)
         for base in bases:
             if self._is_param_base(base):
                 is_param_class = True
                 break
 
         if is_param_class:
-            class_name = self._get_class_name_parso(node)
+            class_name = self._get_class_name(node)
             class_info = ParameterizedInfo(name=class_name)
 
             # Get inherited parameters from parent classes first
@@ -412,7 +412,7 @@ class ParamAnalyzer:
         """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
         inherited_parameters = {}  # Last wins
 
-        bases = self._get_class_bases_parso(node)
+        bases = self._get_class_bases(node)
         for base in bases:
             if base.type == "name":
                 parent_class_name = base.value
@@ -457,7 +457,7 @@ class ParamAnalyzer:
                 for item in child.children:
                     if item.type == "expr_stmt" and self._is_assignment_stmt(item):
                         target_name = self._get_assignment_target_name(item)
-                        if target_name and self._is_parameter_assignment_parso(item):
+                        if target_name and self._is_parameter_assignment(item):
                             # Extract parameter information
                             param_info = self._extract_parameter_info_from_assignment(item, target_name)
                             if param_info:
@@ -467,7 +467,7 @@ class ParamAnalyzer:
                         for stmt_child in item.children:
                             if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(stmt_child):
                                 target_name = self._get_assignment_target_name(stmt_child)
-                                if target_name and self._is_parameter_assignment_parso(stmt_child):
+                                if target_name and self._is_parameter_assignment(stmt_child):
                                     # Extract parameter information
                                     param_info = self._extract_parameter_info_from_assignment(stmt_child, target_name)
                                     if param_info:
@@ -497,7 +497,7 @@ class ParamAnalyzer:
 
         if param_call:
             # Get parameter type from the function call
-            param_class_info = self._resolve_parameter_class_parso(param_call)
+            param_class_info = self._resolve_parameter_class(param_call)
             if param_class_info:
                 cls = param_class_info["type"]
 
@@ -506,17 +506,17 @@ class ParamAnalyzer:
             for call_child in param_call.children:
                 if call_child.type == "trailer" and call_child.children and call_child.children[0].value == "(":
                     # This is the function call arguments
-                    bounds = self._extract_bounds_from_call_parso(call_child)
-                    doc = self._extract_doc_from_call_parso(call_child)
-                    allow_None_value = self._extract_allow_None_from_call_parso(call_child)
-                    default_value = self._extract_default_from_call_parso(call_child)
+                    bounds = self._extract_bounds_from_call(call_child)
+                    doc = self._extract_doc_from_call(call_child)
+                    allow_None_value = self._extract_allow_None_from_call(call_child)
+                    default_value = self._extract_default_from_call(call_child)
 
                     # Store default value as a string representation
                     if default_value is not None:
-                        default = self._format_default_value_parso(default_value)
+                        default = self._format_default_value(default_value)
 
                     # Param automatically sets allow_None=True when default=None
-                    if default_value is not None and self._is_none_value_parso(default_value):
+                    if default_value is not None and self._is_none_value(default_value):
                         allow_None = True
                     elif allow_None_value is not None:
                         allow_None = allow_None_value
@@ -534,7 +534,7 @@ class ParamAnalyzer:
             location=location,
         )
 
-    def _resolve_parameter_class_parso(self, param_call):
+    def _resolve_parameter_class(self, param_call):
         """Resolve parameter class from a parso power node like param.Integer()."""
         # Extract the function name from the call
         func_name = None
@@ -557,35 +557,35 @@ class ParamAnalyzer:
             return PARAM_TYPE_MAP.get(func_name)
         return None
 
-    def _extract_bounds_from_call_parso(self, call_trailer):
+    def _extract_bounds_from_call(self, call_trailer):
         """Extract bounds from parameter call trailer (parso node)."""
         # Look for bounds=(...) in the argument list
         # Implementation depends on parsing the arguments within the trailer
         return None
 
-    def _extract_doc_from_call_parso(self, call_trailer):
+    def _extract_doc_from_call(self, call_trailer):
         """Extract doc from parameter call trailer (parso node)."""
         # Look for doc="..." in the argument list
         return None
 
-    def _extract_allow_None_from_call_parso(self, call_trailer):
+    def _extract_allow_None_from_call(self, call_trailer):
         """Extract allow_None from parameter call trailer (parso node)."""
         # Look for allow_None=True/False in the argument list
         return None
 
-    def _extract_default_from_call_parso(self, call_trailer):
+    def _extract_default_from_call(self, call_trailer):
         """Extract default from parameter call trailer (parso node)."""
         # Look for default=value in the argument list
         return None
 
-    def _format_default_value_parso(self, default_value):
+    def _format_default_value(self, default_value):
         """Format default value from parso node."""
         # Convert parso node to string representation
         if hasattr(default_value, 'get_code'):
             return default_value.get_code()
         return str(default_value)
 
-    def _is_none_value_parso(self, value):
+    def _is_none_value(self, value):
         """Check if parso node represents None value."""
         return (hasattr(value, 'type') and value.type == 'name' and
                 hasattr(value, 'value') and value.value == 'None')
@@ -694,38 +694,12 @@ class ParamAnalyzer:
             # Fallback for complex expressions
             return "<complex>"
 
-    def _is_parameter_assignment(self, value: ast.expr) -> bool:
-        """Check if an assignment looks like a parameter definition."""
-        if isinstance(value, ast.Call):
-            param_class_info = self._resolve_parameter_class(value.func)
-            if param_class_info:
-                cls = param_class_info["type"]
-                param_module = param_class_info.get("module")
-
-                # Use param types from constants
-                classes = PARAM_TYPES
-
-                # If we have module info, verify it's from param
-                if param_module and "param" in param_module:
-                    return cls in classes
-                # If no module but type matches and we have param imports, likely a param type
-                elif (
-                    param_module is None
-                    and cls in classes
-                    and any("param" in imp for imp in self.imports.values())
-                ):
-                    return True
-                # Direct param.X() call
-                elif param_module == "param":
-                    return cls in classes
-
-        return False
 
     def _check_parameter_types(self, tree, lines: list[str]):
         """Check for type errors in parameter assignments."""
-        for node in self._walk_parso_tree(tree):
+        for node in self._walk_tree(tree):
             if node.type == "classdef":
-                class_name = self._get_class_name_parso(node)
+                class_name = self._get_class_name(node)
                 if class_name and class_name in self.param_classes:
                     # Find the suite (class body) in the class definition
                     for child in node.children:
@@ -741,7 +715,7 @@ class ParamAnalyzer:
                                             target_name = self._get_assignment_target_name(
                                                 stmt_child
                                             )
-                                            if target_name and self._is_parameter_assignment_parso(
+                                            if target_name and self._is_parameter_assignment(
                                                 stmt_child
                                             ):
                                                 self._check_parameter_default_type(
@@ -1159,28 +1133,6 @@ class ParamAnalyzer:
 
         return False
 
-    def _resolve_parameter_class(self, func_node: ast.expr) -> dict[str, str | None] | None:
-        """Resolve the actual parameter class from the function call."""
-        if isinstance(func_node, ast.Name):
-            # Direct reference like Integer()
-            class_name = func_node.id
-            return {"type": class_name, "module": None}
-
-        elif isinstance(func_node, ast.Attribute):
-            # Attribute reference like param.Integer() or p.Integer()
-            if isinstance(func_node.value, ast.Name):
-                module_alias = func_node.value.id
-                class_name = func_node.attr
-
-                # Check if this is a known param module
-                if module_alias in self.imports:
-                    full_module_name = self.imports[module_alias]
-                    if "param" in full_module_name:
-                        return {"type": class_name, "module": full_module_name}
-                elif module_alias == "param":
-                    return {"type": class_name, "module": "param"}
-
-        return None
 
     def _format_expected_types(self, expected_types: tuple) -> str:
         """Format expected types for error messages."""
@@ -1824,7 +1776,7 @@ class ParamAnalyzer:
 
     def _discover_external_param_classes(self, tree):
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
-        for node in self._walk_parso_tree(tree):
+        for node in self._walk_tree(tree):
             if node.type == "power":
                 # Look for calls like pn.widgets.IntSlider()
                 # Check if this is a function call with parentheses
