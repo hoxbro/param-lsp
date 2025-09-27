@@ -1306,9 +1306,6 @@ class ParamAnalyzer:
         # Fix unclosed quotes at end of line (simple cases)
         fixed_line = self._fix_unclosed_quotes_on_line(fixed_line)
 
-        # Fix incomplete decorator calls (generic pattern matching)
-        fixed_line = self._fix_incomplete_decorator_calls(fixed_line)
-
         # Fix incomplete import statements
         fixed_line = self._fix_incomplete_imports(fixed_line)
 
@@ -1327,28 +1324,6 @@ class ParamAnalyzer:
         elif single_quotes % 2 == 1 and double_quotes % 2 == 0:
             # Odd number of single quotes, even double quotes
             return line + "'"
-
-        return line
-
-    def _fix_incomplete_decorator_calls(self, line: str) -> str:
-        """Fix incomplete decorator calls using generic pattern matching."""
-        stripped = line.strip()
-
-        # Pattern: @module.function( with unclosed parenthesis
-        if stripped.startswith("@") and "(" in stripped and ")" not in stripped:
-            # Check if there are unclosed quotes inside the decorator
-            content_after_paren = stripped.split("(", 1)[1]
-
-            double_quotes = content_after_paren.count('"') - content_after_paren.count('\\"')
-            single_quotes = content_after_paren.count("'") - content_after_paren.count("\\'")
-
-            # Fix quotes first, then close parenthesis
-            if double_quotes % 2 == 1:
-                return line + '")'
-            elif single_quotes % 2 == 1:
-                return line + "')"
-            else:
-                return line + ")"
 
         return line
 
