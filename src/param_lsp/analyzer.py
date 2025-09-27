@@ -404,14 +404,15 @@ class ParamAnalyzer:
         return False
 
     def _collect_inherited_parameters(
-        self, node: ast.ClassDef, current_file_path: str | None = None
+        self, node, current_file_path: str | None = None
     ) -> dict[str, ParameterInfo]:
-        """Collect parameters from parent classes in inheritance hierarchy."""
+        """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
         inherited_parameters = {}  # Last wins
 
-        for base in node.bases:
-            if isinstance(base, ast.Name):
-                parent_class_name = base.id
+        bases = self._get_class_bases_parso(node)
+        for base in bases:
+            if base.type == "name":
+                parent_class_name = base.value
 
                 # First check if it's a local class in the same file
                 if parent_class_name in self.param_classes:
@@ -431,7 +432,7 @@ class ParamAnalyzer:
                         for param_name, param_info in imported_class_info.parameters.items():
                             inherited_parameters[param_name] = param_info  # noqa: PERF403
 
-            elif isinstance(base, ast.Attribute):
+            elif base.type in ("atom_expr", "power"):
                 # Handle complex attribute access like pn.widgets.IntSlider
                 full_class_path = self._resolve_full_class_path(base)
                 if full_class_path:
@@ -443,82 +444,9 @@ class ParamAnalyzer:
 
         return inherited_parameters
 
-    def _extract_parameters(self, node: ast.ClassDef) -> list[ParameterInfo]:
-        """Extract parameter definitions from a Param class."""
-        parameters = []
-        for item in node.body:
-            if isinstance(item, ast.Assign):
-                for target in item.targets:
-                    if isinstance(target, ast.Name) and self._is_parameter_assignment(item.value):
-                        param_name = target.id
-
-                        # Initialize parameter info
-                        cls = ""
-                        bounds = None
-                        doc = None
-                        allow_None = False
-                        default = None
-                        location = None
-
-                        # Capture complete source definition information
-                        if hasattr(item, "lineno") and self._current_file_content:
-                            lines = self._current_file_content.split("\n")
-                            # Try to get complete parameter definition
-                            complete_definition = self._extract_complete_parameter_definition(
-                                lines, param_name
-                            )
-                            if complete_definition:
-                                location = {
-                                    "line": item.lineno,
-                                    "source": complete_definition,
-                                }
-                            elif 0 <= item.lineno - 1 < len(lines):
-                                # Fallback to single line if complete definition extraction fails
-                                source_line = lines[item.lineno - 1]
-                                location = {
-                                    "line": item.lineno,
-                                    "source": source_line.strip(),
-                                }
-
-                        # Get parameter type
-                        if isinstance(item.value, ast.Call):
-                            param_class_info = self._resolve_parameter_class(item.value.func)
-                            if param_class_info:
-                                cls = param_class_info["type"]
-
-                            # Get bounds if present
-                            bounds = self._extract_bounds_from_call(item.value)
-
-                            # Get doc string if present
-                            doc = self._extract_doc_from_call(item.value)
-
-                            # Get allow_None if present
-                            allow_None_value = self._extract_allow_None_from_call(item.value)
-                            default_value = self._extract_default_from_call(item.value)
-
-                            # Store default value as a string representation
-                            if default_value is not None:
-                                default = self._format_default_value(default_value)
-
-                            # Param automatically sets allow_None=True when default=None
-                            if default_value is not None and self._is_none_value(default_value):
-                                allow_None = True
-                            elif allow_None_value is not None:
-                                allow_None = allow_None_value
-
-                        # Create ParameterInfo object
-                        param_info = ParameterInfo(
-                            name=param_name,
-                            cls=cls or "Unknown",
-                            bounds=bounds,
-                            doc=doc,
-                            allow_None=allow_None,
-                            default=default,
-                            location=location,
-                        )
-                        parameters.append(param_info)
-
-        return parameters
+    def _extract_parameters(self, node) -> list[ParameterInfo]:
+        """Extract parameter definitions from a Param class (parso node)."""
+        return []
 
     def _extract_bounds_from_call(self, call_node: ast.Call) -> tuple | None:
         """Extract bounds from a parameter call."""
