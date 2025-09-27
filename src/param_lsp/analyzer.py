@@ -6,6 +6,7 @@ hover information, and diagnostics.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.util
 import inspect
@@ -99,9 +100,7 @@ class ParamAnalyzer:
                         parent_name = base.value
                         # If it's a class defined in this file and not processed yet, wait
                         if (
-                            any(
-                                self._get_class_name(cn) == parent_name for cn in class_nodes
-                            )
+                            any(self._get_class_name(cn) == parent_name for cn in class_nodes)
                             and parent_name not in processed_classes
                         ):
                             can_process = False
@@ -173,9 +172,7 @@ class ParamAnalyzer:
                 elif child.type == "arglist":
                     # Multiple bases in argument list
                     for arg_child in child.children:
-                        if arg_child.type == "name":
-                            bases.append(arg_child)
-                        elif arg_child.type in ("atom_expr", "power"):
+                        if arg_child.type == "name" or arg_child.type in ("atom_expr", "power"):
                             bases.append(arg_child)
         return bases
 
@@ -459,23 +456,31 @@ class ParamAnalyzer:
                         target_name = self._get_assignment_target_name(item)
                         if target_name and self._is_parameter_assignment(item):
                             # Extract parameter information
-                            param_info = self._extract_parameter_info_from_assignment(item, target_name)
+                            param_info = self._extract_parameter_info_from_assignment(
+                                item, target_name
+                            )
                             if param_info:
                                 parameters.append(param_info)
                     elif item.type == "simple_stmt":
                         # Also check within simple statements for other formats
                         for stmt_child in item.children:
-                            if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(stmt_child):
+                            if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(
+                                stmt_child
+                            ):
                                 target_name = self._get_assignment_target_name(stmt_child)
                                 if target_name and self._is_parameter_assignment(stmt_child):
                                     # Extract parameter information
-                                    param_info = self._extract_parameter_info_from_assignment(stmt_child, target_name)
+                                    param_info = self._extract_parameter_info_from_assignment(
+                                        stmt_child, target_name
+                                    )
                                     if param_info:
                                         parameters.append(param_info)
 
         return parameters
 
-    def _extract_parameter_info_from_assignment(self, assignment_node, param_name: str) -> ParameterInfo | None:
+    def _extract_parameter_info_from_assignment(
+        self, assignment_node, param_name: str
+    ) -> ParameterInfo | None:
         """Extract parameter info from a parso assignment statement."""
         # Initialize parameter info
         cls = ""
@@ -556,39 +561,6 @@ class ParamAnalyzer:
 
         return None
 
-    def _extract_bounds_from_call(self, call_trailer):
-        """Extract bounds from parameter call trailer (parso node)."""
-        # Look for bounds=(...) in the argument list
-        # Implementation depends on parsing the arguments within the trailer
-        return None
-
-    def _extract_doc_from_call(self, call_trailer):
-        """Extract doc from parameter call trailer (parso node)."""
-        # Look for doc="..." in the argument list
-        return None
-
-    def _extract_allow_None_from_call(self, call_trailer):
-        """Extract allow_None from parameter call trailer (parso node)."""
-        # Look for allow_None=True/False in the argument list
-        return None
-
-    def _extract_default_from_call(self, call_trailer):
-        """Extract default from parameter call trailer (parso node)."""
-        # Look for default=value in the argument list
-        return None
-
-    def _format_default_value(self, default_value):
-        """Format default value from parso node."""
-        # Convert parso node to string representation
-        if hasattr(default_value, 'get_code'):
-            return default_value.get_code()
-        return str(default_value)
-
-    def _is_none_value(self, value):
-        """Check if parso node represents None value."""
-        return (hasattr(value, 'type') and value.type == 'name' and
-                hasattr(value, 'value') and value.value == 'None')
-
     def _get_keyword_arguments(self, call_node) -> dict[str, Any]:
         """Extract keyword arguments from a parso function call node."""
         kwargs = {}
@@ -616,8 +588,11 @@ class ParamAnalyzer:
             equals_node = arg_node.children[1]
             value_node = arg_node.children[2]
 
-            if (name_node.type == "name" and
-                equals_node.type == "operator" and equals_node.value == "="):
+            if (
+                name_node.type == "name"
+                and equals_node.type == "operator"
+                and equals_node.value == "="
+            ):
                 kwargs[name_node.value] = value_node
 
     def _extract_bounds_from_call(self, call_node) -> tuple | None:
@@ -683,40 +658,43 @@ class ParamAnalyzer:
 
     def _is_none_value(self, node) -> bool:
         """Check if a parso node represents None."""
-        return (hasattr(node, 'type') and node.type == 'name' and
-                hasattr(node, 'value') and node.value == 'None')
+        return (
+            hasattr(node, "type")
+            and node.type == "name"
+            and hasattr(node, "value")
+            and node.value == "None"
+        )
 
     def _extract_string_value(self, node) -> str | None:
         """Extract string value from parso node."""
-        if hasattr(node, 'type') and node.type == 'string':
+        if hasattr(node, "type") and node.type == "string":
             # Remove quotes from string value
             value = node.value
-            if value.startswith('"') and value.endswith('"'):
-                return value[1:-1]
-            elif value.startswith("'") and value.endswith("'"):
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
                 return value[1:-1]
             return value
         return None
 
     def _extract_boolean_value(self, node) -> bool | None:
         """Extract boolean value from parso node."""
-        if hasattr(node, 'type') and node.type == 'name':
-            if node.value == 'True':
+        if hasattr(node, "type") and node.type == "name":
+            if node.value == "True":
                 return True
-            elif node.value == 'False':
+            elif node.value == "False":
                 return False
         return None
 
     def _format_default_value(self, node) -> str:
         """Format a parso node as a string representation for display."""
         # For parso nodes, use the get_code() method to get the original source
-        if hasattr(node, 'get_code'):
+        if hasattr(node, "get_code"):
             return node.get_code().strip()
-        elif hasattr(node, 'value'):
+        elif hasattr(node, "value"):
             return str(node.value)
         else:
             return "<complex>"
-
 
     def _check_parameter_types(self, tree, lines: list[str]):
         """Check for type errors in parameter assignments."""
@@ -774,7 +752,6 @@ class ParamAnalyzer:
 
         # Check each keyword argument passed to the constructor
         for param_name, param_value in kwargs.items():
-
             # Get the expected parameter type
             cls = self._get_parameter_type_from_class(class_name, param_name)
             if not cls:
@@ -894,7 +871,11 @@ class ParamAnalyzer:
         # Get default value and allow_None from keyword arguments
         kwargs = self._get_keyword_arguments(param_call)
         default_value = kwargs.get("default")
-        allow_None = self._extract_boolean_value(kwargs.get("allow_None")) if "allow_None" in kwargs else None
+        allow_None = (
+            self._extract_boolean_value(kwargs.get("allow_None"))
+            if "allow_None" in kwargs
+            else None
+        )
 
         # Param automatically sets allow_None=True when default=None
         if default_value is not None and self._is_none_value(default_value):
@@ -1160,7 +1141,6 @@ class ParamAnalyzer:
 
         return False
 
-
     def _format_expected_types(self, expected_types: tuple) -> str:
         """Format expected types for error messages."""
         if len(expected_types) == 1:
@@ -1169,16 +1149,14 @@ class ParamAnalyzer:
             type_names = [t.__name__ for t in expected_types]
             return " or ".join(type_names)
 
-    def _create_type_error(
-        self, node, message: str, code: str, severity: str = "error"
-    ) -> None:
+    def _create_type_error(self, node, message: str, code: str, severity: str = "error") -> None:
         """Helper function to create and append a type error (parso version)."""
         # Get position information from parso node
-        if hasattr(node, 'start_pos'):
+        if hasattr(node, "start_pos"):
             line = node.start_pos[0] - 1  # Convert to 0-based
             col = node.start_pos[1]
-            end_line = node.end_pos[0] - 1 if hasattr(node, 'end_pos') else line
-            end_col = node.end_pos[1] if hasattr(node, 'end_pos') else col
+            end_line = node.end_pos[0] - 1 if hasattr(node, "end_pos") else line
+            end_col = node.end_pos[1] if hasattr(node, "end_pos") else col
         else:
             # Fallback if position info is not available
             line = 0
@@ -1200,29 +1178,29 @@ class ParamAnalyzer:
 
     def _infer_value_type(self, node) -> type | None:
         """Infer Python type from parso node."""
-        if hasattr(node, 'type'):
-            if node.type == 'number':
+        if hasattr(node, "type"):
+            if node.type == "number":
                 # Check if it's a float or int
-                if '.' in node.value:
+                if "." in node.value:
                     return float
                 else:
                     return int
-            elif node.type == 'string':
+            elif node.type == "string":
                 return str
-            elif node.type == 'name':
-                if node.value == 'True' or node.value == 'False':
+            elif node.type == "name":
+                if node.value == "True" or node.value == "False":
                     return bool
-                elif node.value == 'None':
+                elif node.value == "None":
                     return type(None)
                 # Could be a variable - would need more sophisticated analysis
                 return None
-            elif node.type == 'atom':
+            elif node.type == "atom":
                 # Check for list, dict, tuple
-                if node.children and node.children[0].value == '[':
+                if node.children and node.children[0].value == "[":
                     return list
-                elif node.children and node.children[0].value == '{':
+                elif node.children and node.children[0].value == "{":
                     return dict
-                elif node.children and node.children[0].value == '(':
+                elif node.children and node.children[0].value == "(":
                     return tuple
         return None
 
@@ -1279,12 +1257,20 @@ class ParamAnalyzer:
                                 min_val = self._extract_numeric_value(elements[0])
                                 max_val = self._extract_numeric_value(elements[1])
 
-                                if min_val is not None and max_val is not None and min_val >= max_val:
+                                if (
+                                    min_val is not None
+                                    and max_val is not None
+                                    and min_val >= max_val
+                                ):
                                     message = f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})"
                                     self._create_type_error(node, message, "invalid-bounds")
 
                                 # Check if default value violates bounds
-                                if default_value is not None and min_val is not None and max_val is not None:
+                                if (
+                                    default_value is not None
+                                    and min_val is not None
+                                    and max_val is not None
+                                ):
                                     default_numeric = self._extract_numeric_value(default_value)
                                     if default_numeric is not None:
                                         left_inclusive, right_inclusive = inclusive_bounds
@@ -1304,7 +1290,9 @@ class ParamAnalyzer:
                                         if violates_lower or violates_upper:
                                             bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
                                             message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
-                                            self._create_type_error(node, message, "default-bounds-violation")
+                                            self._create_type_error(
+                                                node, message, "default-bounds-violation"
+                                            )
 
                             except (ValueError, TypeError):
                                 pass
@@ -1458,16 +1446,16 @@ class ParamAnalyzer:
 
     def _extract_numeric_value(self, node) -> float | int | None:
         """Extract numeric value from parso node."""
-        if hasattr(node, 'type') and node.type == 'number':
+        if hasattr(node, "type") and node.type == "number":
             try:
                 # Try to parse as int first, then float
-                if '.' in node.value:
+                if "." in node.value:
                     return float(node.value)
                 else:
                     return int(node.value)
             except ValueError:
                 return None
-        elif hasattr(node, 'type') and node.type == 'name' and node.value == 'None':
+        elif hasattr(node, "type") and node.type == "name" and node.value == "None":
             return None  # Explicitly handle None
         # TODO: Handle negative numbers (unary minus)
         return None
