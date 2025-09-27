@@ -652,7 +652,9 @@ class ParamAnalyzer:
                 for child in bounds_node.children:
                     if child.type == "testlist_comp":
                         elements = [
-                            c for c in child.children if c.type in ("number", "name", "factor", "keyword")
+                            c
+                            for c in child.children
+                            if c.type in ("number", "name", "factor", "keyword")
                         ]
                         if len(elements) >= 2:
                             min_val = self._extract_numeric_value(elements[0])
