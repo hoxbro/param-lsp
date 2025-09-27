@@ -41,7 +41,7 @@ def main():
     args = parser.parse_args()
 
     # Import server only when actually needed to avoid loading during --help/--version
-    from ._server.server import server  # noqa: PLC0415
+    from ._server.server import server
 
     if args.tcp:
         logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
