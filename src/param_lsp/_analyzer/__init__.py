@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from .external_class_inspector import ExternalClassInspector
 from .import_resolver import ImportResolver
-from .type_checker import TypeChecker
+from .validation import ParameterValidator
 
 __all__ = [
     "ExternalClassInspector",
     "ImportResolver",
-    "TypeChecker",
+    "ParameterValidator",
 ]

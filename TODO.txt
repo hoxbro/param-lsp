@@ -12,11 +12,11 @@
   - [x] Move all `_extract_*_from_call` methods to parameter_extractor module
   - [x] Update all parameter extraction calls to use modular components
 
-- [ ] Implement full type checking modularization
-  - [ ] Move all `_check_*` methods to type_checker module
-  - [ ] Move `_infer_value_type` and related type inference to type_checker
-  - [ ] Move constraint checking logic to type_checker
-  - [ ] Integrate type_checker properly with main analyzer
+- [ ] Implement full parameter validation modularization
+  - [ ] Move all `_check_*` methods to validation module (ParameterValidator class)
+  - [ ] Move `_infer_value_type` and related type inference to validation module
+  - [ ] Move constraint checking logic to validation module
+  - [ ] Integrate ParameterValidator properly with main analyzer
 
 - [ ] Complete inheritance resolution modularization
   - [ ] Move `_collect_inherited_parameters` to inheritance_resolver
@@ -40,7 +40,7 @@
 - [ ] Add comprehensive unit tests for modular components
   - [x] Test parso_utils functions independently
   - [x] Test parameter_extractor functions independently
-  - [ ] Test type_checker functionality independently
+  - [ ] Test validation functionality independently
   - [ ] Test external_class_inspector independently
   - [ ] Test import_resolver independently
   - [ ] Test inheritance_resolver independently
