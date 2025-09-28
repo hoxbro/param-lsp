@@ -11,9 +11,8 @@ import importlib.util
 import inspect
 import logging
 import re
-import types
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict, Union
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import param
 import parso
@@ -23,12 +22,13 @@ from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
 from .models import ParameterInfo, ParameterizedInfo
 
 if TYPE_CHECKING:
+    import types
     from collections.abc import Generator
 
     from parso.tree import BaseNode, NodeOrLeaf
 
 # Type aliases for better type safety
-ParsoNode = "NodeOrLeaf | BaseNode"  # General parso node
+ParsoNode = "NodeOrLeaf"  # General parso node (BaseNode is a subclass)
 NumericValue = int | float | None  # Numeric values from nodes
 BoolValue = bool | None  # Boolean values from nodes
 
@@ -107,7 +107,9 @@ class ParamAnalyzer:
                 self._handle_import_from(node)
 
         # Second pass: collect class definitions in order, respecting inheritance
-        class_nodes = [node for node in self._walk_tree(tree) if node.type == "classdef"]
+        class_nodes: list[BaseNode] = [
+            cast("BaseNode", node) for node in self._walk_tree(tree) if node.type == "classdef"
+        ]
 
         # Process classes in dependency order (parents before children)
         processed_classes = set()
@@ -123,7 +125,7 @@ class ParamAnalyzer:
                 bases = self._get_class_bases(node)
                 for base in bases:
                     if base.type == "name":
-                        parent_name = base.value
+                        parent_name = self._get_value(base)
                         # If it's a class defined in this file and not processed yet, wait
                         if (
                             any(self._get_class_name(cn) == parent_name for cn in class_nodes)
@@ -165,18 +167,34 @@ class ParamAnalyzer:
         self.imports.clear()
         self.type_errors.clear()
 
+    def _has_value(self, node: NodeOrLeaf) -> bool:
+        """Check if node has a value attribute."""
+        return hasattr(node, "value")
+
+    def _get_value(self, node: NodeOrLeaf) -> str | None:
+        """Safely get value from node."""
+        return getattr(node, "value", None)
+
+    def _has_children(self, node: NodeOrLeaf) -> bool:
+        """Check if node has children attribute."""
+        return hasattr(node, "children")
+
+    def _get_children(self, node: NodeOrLeaf) -> list[NodeOrLeaf]:
+        """Safely get children from node."""
+        return getattr(node, "children", [])
+
     def _walk_tree(self, node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
         """Walk a parso tree recursively, yielding all nodes."""
         yield node
-        if hasattr(node, "children"):
-            for child in node.children:
+        if self._has_children(node):
+            for child in self._get_children(node):
                 yield from self._walk_tree(child)
 
     def _get_class_name(self, class_node: BaseNode) -> str | None:
         """Extract class name from parso classdef node."""
-        for child in class_node.children:
+        for child in self._get_children(class_node):
             if child.type == "name":
-                return child.value
+                return self._get_value(child)
         return None
 
     def _get_class_bases(self, class_node: BaseNode) -> list[NodeOrLeaf]:
@@ -184,10 +202,10 @@ class ParamAnalyzer:
         bases = []
         # Look for bases between parentheses in class definition
         in_parentheses = False
-        for child in class_node.children:
-            if child.type == "operator" and child.value == "(":
+        for child in self._get_children(class_node):
+            if child.type == "operator" and self._get_value(child) == "(":
                 in_parentheses = True
-            elif child.type == "operator" and child.value == ")":
+            elif child.type == "operator" and self._get_value(child) == ")":
                 in_parentheses = False
             elif in_parentheses:
                 if child.type == "name":
@@ -200,7 +218,7 @@ class ParamAnalyzer:
                     bases.extend(
                         [
                             arg_child
-                            for arg_child in child.children
+                            for arg_child in self._get_children(child)
                             if arg_child.type == "name" or arg_child.type in ("atom_expr", "power")
                         ]
                     )
@@ -210,15 +228,18 @@ class ParamAnalyzer:
     def _is_assignment_stmt(self, node: NodeOrLeaf) -> bool:
         """Check if a parso node is an assignment statement."""
         # Look for assignment operator '=' in the children
-        return any(child.type == "operator" and child.value == "=" for child in node.children)
+        return any(
+            child.type == "operator" and self._get_value(child) == "="
+            for child in self._get_children(node)
+        )
 
     def _get_assignment_target_name(self, node: NodeOrLeaf) -> str | None:
         """Get the target name from an assignment statement."""
         # The target is typically the first child before the '=' operator
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type == "name":
-                return child.value
-            elif child.type == "operator" and child.value == "=":
+                return self._get_value(child)
+            elif child.type == "operator" and self._get_value(child) == "=":
                 break
         return None
 
@@ -226,8 +247,8 @@ class ParamAnalyzer:
         """Check if a parso assignment statement looks like a parameter definition."""
         # Find the right-hand side of the assignment (after '=')
         found_equals = False
-        for child in node.children:
-            if child.type == "operator" and child.value == "=":
+        for child in self._get_children(node):
+            if child.type == "operator" and self._get_value(child) == "=":
                 found_equals = True
             elif found_equals and child.type in ("power", "atom_expr"):
                 # Check if it's a parameter type call
@@ -240,15 +261,15 @@ class ParamAnalyzer:
         func_name = None
 
         # Look through children to find the actual function being called
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type == "name":
                 # This could be a direct function call (e.g., "String") or module name
-                func_name = child.value
+                func_name = self._get_value(child)
             elif child.type == "trailer":
                 # Handle dotted calls like param.Integer
-                for trailer_child in child.children:
+                for trailer_child in self._get_children(child):
                     if trailer_child.type == "name":
-                        func_name = trailer_child.value
+                        func_name = self._get_value(trailer_child)
                         break
                 # If we found a function name in a trailer, that's the final function name
                 if func_name:
@@ -270,43 +291,43 @@ class ParamAnalyzer:
 
     def _has_attribute_target(self, node: NodeOrLeaf) -> bool:
         """Check if assignment has an attribute target (like obj.attr = value)."""
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type in ("power", "atom_expr"):
                 # Check if this node has attribute access (trailer with '.')
-                for sub_child in child.children:
+                for sub_child in self._get_children(child):
                     if (
                         sub_child.type == "trailer"
-                        and sub_child.children
-                        and sub_child.children[0].value == "."
+                        and self._get_children(sub_child)
+                        and self._get_value(self._get_children(sub_child)[0]) == "."
                     ):
                         return True
-            elif child.type == "operator" and child.value == "=":
+            elif child.type == "operator" and self._get_value(child) == "=":
                 break
         return False
 
     def _handle_import(self, node: NodeOrLeaf) -> None:
         """Handle 'import' statements (parso node)."""
         # For parso import_name nodes, parse the import statement
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type == "dotted_as_name":
                 # Handle "import module as alias"
                 module_name = None
                 alias_name = None
-                for part in child.children:
+                for part in self._get_children(child):
                     if part.type == "name":
                         if module_name is None:
-                            module_name = part.value
+                            module_name = self._get_value(part)
                         else:
-                            alias_name = part.value
+                            alias_name = self._get_value(part)
                 if module_name:
                     self.imports[alias_name or module_name] = module_name
             elif child.type == "dotted_name":
                 # Handle "import module"
-                module_name = child.value
+                module_name = self._get_value(child)
                 self.imports[module_name] = module_name
-            elif child.type == "name" and child.value not in ("import", "as"):
+            elif child.type == "name" and self._get_value(child) not in ("import", "as"):
                 # Simple case: "import module"
-                module_name = child.value
+                module_name = self._get_value(child)
                 self.imports[module_name] = module_name
 
     def _handle_import_from(self, node: NodeOrLeaf) -> None:
@@ -316,37 +337,37 @@ class ParamAnalyzer:
         import_names = []
 
         # First pass: find module name and collect import names
-        for child in node.children:
+        for child in self._get_children(node):
             if (
                 child.type == "name"
                 and module_name is None
-                and child.value not in ("from", "import")
+                and self._get_value(child) not in ("from", "import")
             ) or (child.type == "dotted_name" and module_name is None):
-                module_name = child.value
+                module_name = self._get_value(child)
             elif child.type == "import_as_names":
-                for name_child in child.children:
+                for name_child in self._get_children(child):
                     if name_child.type == "import_as_name":
                         # Handle "from module import name as alias"
                         import_name = None
                         alias_name = None
-                        for part in name_child.children:
+                        for part in self._get_children(name_child):
                             if part.type == "name":
                                 if import_name is None:
-                                    import_name = part.value
+                                    import_name = self._get_value(part)
                                 else:
-                                    alias_name = part.value
+                                    alias_name = self._get_value(part)
                         if import_name:
                             import_names.append((import_name, alias_name))
                     elif name_child.type == "name":
                         # Handle "from module import name"
-                        import_names.append((name_child.value, None))
+                        import_names.append((self._get_value(name_child), None))
             elif (
                 child.type == "name"
-                and child.value not in ("from", "import")
+                and self._get_value(child) not in ("from", "import")
                 and module_name is not None
             ):
                 # Handle simple "from module import name" where name is a direct child
-                import_names.append((child.value, None))
+                import_names.append((self._get_value(child), None))
 
         # Second pass: register all imports
         if module_name:
@@ -387,18 +408,18 @@ class ParamAnalyzer:
     def _format_base(self, base) -> str:
         """Format base class for debugging (parso node)."""
         if base.type == "name":
-            return base.value
+            return self._get_value(base)
         elif base.type == "power":
             # Handle dotted names like module.Class
             parts = []
-            for child in base.children:
+            for child in self._get_children(base):
                 if child.type == "name":
-                    parts.append(child.value)
+                    parts.append(self._get_value(child))
                 elif child.type == "trailer":
                     parts.extend(
                         [
-                            trailer_child.value
-                            for trailer_child in child.children
+                            self._get_value(trailer_child)
+                            for trailer_child in self._get_children(child)
                             if trailer_child.type == "name"
                         ]
                     )
@@ -408,7 +429,7 @@ class ParamAnalyzer:
     def _is_param_base(self, base) -> bool:
         """Check if a base class is param.Parameterized or similar (parso node)."""
         if base.type == "name":
-            base_name = base.value
+            base_name = self._get_value(base)
             # Check if it's a direct param.Parameterized import
             if (
                 base_name in ["Parameterized"]
@@ -428,14 +449,14 @@ class ParamAnalyzer:
         elif base.type in ("power", "atom_expr"):
             # Handle dotted names like param.Parameterized or pn.widgets.IntSlider
             parts = []
-            for child in base.children:
+            for child in self._get_children(base):
                 if child.type == "name":
-                    parts.append(child.value)
+                    parts.append(self._get_value(child))
                 elif child.type == "trailer":
                     parts.extend(
                         [
-                            trailer_child.value
-                            for trailer_child in child.children
+                            self._get_value(trailer_child)
+                            for trailer_child in self._get_children(child)
                             if trailer_child.type == "name"
                         ]
                     )
@@ -469,7 +490,7 @@ class ParamAnalyzer:
         bases = self._get_class_bases(node)
         for base in bases:
             if base.type == "name":
-                parent_class_name = base.value
+                parent_class_name = self._get_value(base)
 
                 # First check if it's a local class in the same file
                 if parent_class_name in self.param_classes:
@@ -527,8 +548,8 @@ class ParamAnalyzer:
         # Get the parameter call (right-hand side of assignment)
         param_call = None
         found_equals = False
-        for child in assignment_node.children:
-            if child.type == "operator" and child.value == "=":
+        for child in self._get_children(assignment_node):
+            if child.type == "operator" and self._get_value(child) == "=":
                 found_equals = True
             elif found_equals and child.type in ("power", "atom_expr"):
                 param_call = child
@@ -588,21 +609,21 @@ class ParamAnalyzer:
         func_name = None
         module_name = None
 
-        for child in param_call.children:
+        for child in self._get_children(param_call):
             if child.type == "name":
                 # Simple case: Integer() or param (first part of param.Integer)
                 if func_name is None:
-                    func_name = child.value
+                    func_name = self._get_value(child)
                 else:
                     module_name = func_name
-                    func_name = child.value
+                    func_name = self._get_value(child)
             elif child.type == "trailer":
                 # Handle dotted calls like param.Integer
-                for trailer_child in child.children:
+                for trailer_child in self._get_children(child):
                     if trailer_child.type == "name":
                         if module_name is None:
                             module_name = func_name  # Previous name becomes module
-                        func_name = trailer_child.value
+                        func_name = self._get_value(trailer_child)
 
         if func_name:
             # Check if it's a direct param type
@@ -633,17 +654,17 @@ class ParamAnalyzer:
         self, arg_node: NodeOrLeaf, kwargs: dict[str, NodeOrLeaf]
     ) -> None:
         """Extract a single keyword argument from a parso argument node."""
-        if len(arg_node.children) >= 3:
-            name_node = arg_node.children[0]
-            equals_node = arg_node.children[1]
-            value_node = arg_node.children[2]
+        if len(self._get_children(arg_node)) >= 3:
+            name_node = self._get_children(arg_node)[0]
+            equals_node = self._get_children(arg_node)[1]
+            value_node = self._get_children(arg_node)[2]
 
             if (
                 name_node.type == "name"
                 and equals_node.type == "operator"
-                and equals_node.value == "="
+                and self._get_value(equals_node) == "="
             ):
-                kwargs[name_node.value] = value_node
+                kwargs[self._get_value(name_node)] = value_node
 
     def _extract_bounds_from_call(self, call_node: NodeOrLeaf) -> tuple | None:
         """Extract bounds from a parameter call (parso version)."""
@@ -655,13 +676,13 @@ class ParamAnalyzer:
         if "bounds" in kwargs:
             bounds_node = kwargs["bounds"]
             # Check if it's a tuple/parentheses with 2 elements
-            if bounds_node.type == "atom" and bounds_node.children:
+            if bounds_node.type == "atom" and self._get_children(bounds_node):
                 # Look for (min, max) pattern
-                for child in bounds_node.children:
+                for child in self._get_children(bounds_node):
                     if child.type == "testlist_comp":
                         elements = [
                             c
-                            for c in child.children
+                            for c in self._get_children(child)
                             if c.type in ("number", "name", "factor", "keyword")
                         ]
                         if len(elements) >= 2:
@@ -674,10 +695,12 @@ class ParamAnalyzer:
         if "inclusive_bounds" in kwargs:
             inclusive_bounds_node = kwargs["inclusive_bounds"]
             # Similar logic for inclusive bounds tuple
-            if inclusive_bounds_node.type == "atom" and inclusive_bounds_node.children:
-                for child in inclusive_bounds_node.children:
+            if inclusive_bounds_node.type == "atom" and self._get_children(inclusive_bounds_node):
+                for child in self._get_children(inclusive_bounds_node):
                     if child.type == "testlist_comp":
-                        elements = [c for c in child.children if c.type in ("name", "keyword")]
+                        elements = [
+                            c for c in self._get_children(child) if c.type in ("name", "keyword")
+                        ]
                         if len(elements) >= 2:
                             left_inclusive = self._extract_boolean_value(elements[0])
                             right_inclusive = self._extract_boolean_value(elements[1])
@@ -716,14 +739,14 @@ class ParamAnalyzer:
             hasattr(node, "type")
             and node.type in ("name", "keyword")  # None can be either name or keyword type
             and hasattr(node, "value")
-            and node.value == "None"
+            and self._get_value(node) == "None"
         )
 
     def _extract_string_value(self, node: NodeOrLeaf) -> str | None:
         """Extract string value from parso node."""
         if hasattr(node, "type") and node.type == "string":
             # Remove quotes from string value
-            value = node.value
+            value = self._get_value(node)
             # Handle triple quotes first
             if (value.startswith('"""') and value.endswith('"""')) or (
                 value.startswith("'''") and value.endswith("'''")
@@ -740,9 +763,9 @@ class ParamAnalyzer:
     def _extract_boolean_value(self, node: NodeOrLeaf) -> BoolValue:
         """Extract boolean value from parso node."""
         if hasattr(node, "type") and node.type in ("name", "keyword"):
-            if node.value == "True":
+            if self._get_value(node) == "True":
                 return True
-            elif node.value == "False":
+            elif self._get_value(node) == "False":
                 return False
         return None
 
@@ -752,7 +775,7 @@ class ParamAnalyzer:
         if hasattr(node, "get_code"):
             return node.get_code().strip()
         elif hasattr(node, "value"):
-            return str(node.value)
+            return str(self._get_value(node))
         else:
             return "<complex>"
 
@@ -813,13 +836,15 @@ class ParamAnalyzer:
         if not hasattr(node, "children"):
             return False
         return any(
-            child.type == "trailer" and child.children and child.children[0].value == "("
-            for child in node.children
+            child.type == "trailer"
+            and self._get_children(child)
+            and self._get_value(self._get_children(child)[0]) == "("
+            for child in self._get_children(node)
         )
 
     def _find_class_suites(self, class_node: BaseNode) -> Generator[NodeOrLeaf, None, None]:
         """Generator that yields class suite nodes from a class definition."""
-        for child in class_node.children:
+        for child in self._get_children(class_node):
             if child.type == "suite":
                 yield child
 
@@ -827,7 +852,7 @@ class ParamAnalyzer:
         self, suite_node: NodeOrLeaf
     ) -> Generator[tuple[NodeOrLeaf, str], None, None]:
         """Generator that yields parameter assignment nodes from a class suite."""
-        for item in suite_node.children:
+        for item in self._get_children(suite_node):
             if item.type == "expr_stmt" and self._is_assignment_stmt(item):
                 target_name = self._get_assignment_target_name(item)
                 if target_name and self._is_parameter_assignment(item):
@@ -840,7 +865,7 @@ class ParamAnalyzer:
         self, stmt_node: NodeOrLeaf
     ) -> Generator[tuple[NodeOrLeaf, str], None, None]:
         """Generator that yields assignment nodes from a simple statement."""
-        for stmt_child in stmt_node.children:
+        for stmt_child in self._get_children(stmt_node):
             if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(stmt_child):
                 target_name = self._get_assignment_target_name(stmt_child)
                 if target_name and self._is_parameter_assignment(stmt_child):
@@ -850,15 +875,19 @@ class ParamAnalyzer:
         self, call_node: NodeOrLeaf
     ) -> Generator[NodeOrLeaf, None, None]:
         """Generator that yields function call trailers with arguments."""
-        for child in call_node.children:
-            if child.type == "trailer" and child.children and child.children[0].value == "(":
+        for child in self._get_children(call_node):
+            if (
+                child.type == "trailer"
+                and self._get_children(child)
+                and self._get_value(self._get_children(child)[0]) == "("
+            ):
                 yield child
 
     def _find_arguments_in_trailer(
         self, trailer_node: NodeOrLeaf
     ) -> Generator[NodeOrLeaf, None, None]:
         """Generator that yields argument nodes from a function call trailer."""
-        for trailer_child in trailer_node.children:
+        for trailer_child in self._get_children(trailer_node):
             if trailer_child.type == "arglist":
                 # Multiple arguments in an arglist
                 yield from self._find_arguments_in_arglist(trailer_child)
@@ -870,7 +899,7 @@ class ParamAnalyzer:
         self, arglist_node: NodeOrLeaf
     ) -> Generator[NodeOrLeaf, None, None]:
         """Generator that yields argument nodes from an arglist."""
-        for arg_child in arglist_node.children:
+        for arg_child in self._get_children(arglist_node):
             if arg_child.type == "argument":
                 yield arg_child
 
@@ -952,7 +981,7 @@ class ParamAnalyzer:
                     is_bool_value = (
                         hasattr(param_value, "type")
                         and param_value.type == "keyword"
-                        and param_value.value in ("True", "False")
+                        and self._get_value(param_value) in ("True", "False")
                     )
                     if not is_bool_value:
                         message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)"
@@ -1026,7 +1055,7 @@ class ParamAnalyzer:
         """Check if parameter default value matches declared type (parso version)."""
         # Find the parameter call on the right side of the assignment
         param_call = None
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type in ("power", "atom_expr"):
                 param_call = child
                 break
@@ -1068,7 +1097,10 @@ class ParamAnalyzer:
             # Special handling for Boolean parameters - they should only accept actual bool values
             if cls == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
-                if not (default_value.type == "name" and default_value.value in ("True", "False")):
+                if not (
+                    default_value.type == "name"
+                    and self._get_value(default_value) in ("True", "False")
+                ):
                     message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}"
                     self._create_type_error(node, message, "boolean-type-mismatch")
             elif inferred_type and not any(
@@ -1091,21 +1123,21 @@ class ParamAnalyzer:
         assigned_value = None
 
         # Look for attribute target and assigned value
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type in ("power", "atom_expr"):
                 # Check if this is an attribute access (obj.attr)
                 has_attribute = False
-                for sub_child in child.children:
+                for sub_child in self._get_children(child):
                     if (
                         sub_child.type == "trailer"
-                        and sub_child.children
-                        and sub_child.children[0].value == "."
+                        and self._get_children(sub_child)
+                        and self._get_value(self._get_children(sub_child)[0]) == "."
                     ):
                         has_attribute = True
                         break
                 if has_attribute:
                     target = child
-            elif child.type == "operator" and child.value == "=":
+            elif child.type == "operator" and self._get_value(child) == "=":
                 # Next non-operator child should be the assigned value
                 continue
             elif target is not None and child.type != "operator":
@@ -1117,14 +1149,14 @@ class ParamAnalyzer:
 
         # Extract parameter name from the attribute access
         param_name = None
-        for child in target.children:
+        for child in self._get_children(target):
             if (
                 child.type == "trailer"
-                and len(child.children) >= 2
-                and child.children[0].value == "."
-                and child.children[1].type == "name"
+                and len(self._get_children(child)) >= 2
+                and self._get_value(self._get_children(child)[0]) == "."
+                and self._get_children(child)[1].type == "name"
             ):
-                param_name = child.children[1].value
+                param_name = self._get_value(self._get_children(child)[1])
                 break
 
         if not param_name:
@@ -1135,12 +1167,12 @@ class ParamAnalyzer:
 
         # Check if this is a direct instantiation (has parentheses before the dot)
         has_call = False
-        for child in target.children:
+        for child in self._get_children(target):
             if (
                 child.type == "trailer"
-                and len(child.children) >= 2
-                and child.children[0].value == "("
-                and child.children[-1].value == ")"
+                and len(self._get_children(child)) >= 2
+                and self._get_value(self._get_children(child)[0]) == "("
+                and self._get_value(self._get_children(child)[-1]) == ")"
             ):
                 has_call = True
                 break
@@ -1213,8 +1245,8 @@ class ParamAnalyzer:
 
     def _is_boolean_literal(self, node: NodeOrLeaf) -> bool:
         """Check if a parso node represents a boolean literal (True/False)."""
-        return (node.type == "name" and node.value in ("True", "False")) or (
-            node.type == "keyword" and node.value in ("True", "False")
+        return (node.type == "name" and self._get_value(node) in ("True", "False")) or (
+            node.type == "keyword" and self._get_value(node) in ("True", "False")
         )
 
     def _check_runtime_bounds_parso(
@@ -1303,17 +1335,20 @@ class ParamAnalyzer:
 
             # Find the last name before a function call (parentheses trailer)
             last_name = None
-            for child in call_node.children:
+            for child in self._get_children(call_node):
                 if child.type == "name":
-                    last_name = child.value
+                    last_name = self._get_value(child)
                 elif child.type == "trailer":
-                    if len(child.children) >= 2 and child.children[1].type == "name":
+                    if (
+                        len(self._get_children(child)) >= 2
+                        and self._get_children(child)[1].type == "name"
+                    ):
                         # This is a dot access like .Inner
-                        last_name = child.children[1].value
+                        last_name = self._get_value(self._get_children(child)[1])
                     elif (
-                        len(child.children) >= 1
-                        and child.children[0].type == "operator"
-                        and child.children[0].value == "("
+                        len(self._get_children(child)) >= 1
+                        and self._get_children(child)[0].type == "operator"
+                        and self._get_value(self._get_children(child)[0]) == "("
                     ):
                         # This is the function call parentheses - return the last name we found
                         return last_name
@@ -1325,14 +1360,14 @@ class ParamAnalyzer:
     def _resolve_full_class_path(self, base) -> str | None:
         """Resolve the full class path from a parso power/atom_expr node like pn.widgets.IntSlider."""
         parts = []
-        for child in base.children:
+        for child in self._get_children(base):
             if child.type == "name":
-                parts.append(child.value)
+                parts.append(self._get_value(child))
             elif child.type == "trailer":
                 parts.extend(
                     [
-                        trailer_child.value
-                        for trailer_child in child.children
+                        self._get_value(trailer_child)
+                        for trailer_child in self._get_children(child)
                         if trailer_child.type == "name"
                     ]
                 )
@@ -1421,32 +1456,41 @@ class ParamAnalyzer:
         if hasattr(node, "type"):
             if node.type == "number":
                 # Check if it's a float or int
-                if "." in node.value:
+                if "." in self._get_value(node):
                     return float
                 else:
                     return int
             elif node.type == "string":
                 return str
             elif node.type == "name":
-                if node.value in {"True", "False"}:
+                if self._get_value(node) in {"True", "False"}:
                     return bool
-                elif node.value == "None":
+                elif self._get_value(node) == "None":
                     return type(None)
                 # Could be a variable - would need more sophisticated analysis
                 return None
             elif node.type == "keyword":
-                if node.value in {"True", "False"}:
+                if self._get_value(node) in {"True", "False"}:
                     return bool
-                elif node.value == "None":
+                elif self._get_value(node) == "None":
                     return type(None)
                 return None
             elif node.type == "atom":
                 # Check for list, dict, tuple
-                if node.children and node.children[0].value == "[":
+                if (
+                    self._get_children(node)
+                    and self._get_value(self._get_children(node)[0]) == "["
+                ):
                     return list
-                elif node.children and node.children[0].value == "{":
+                elif (
+                    self._get_children(node)
+                    and self._get_value(self._get_children(node)[0]) == "{"
+                ):
                     return dict
-                elif node.children and node.children[0].value == "(":
+                elif (
+                    self._get_children(node)
+                    and self._get_value(self._get_children(node)[0]) == "("
+                ):
                     return tuple
         return None
 
@@ -1456,7 +1500,7 @@ class ParamAnalyzer:
         """Check for parameter-specific constraints (parso version)."""
         # Find the parameter call on the right side of the assignment
         param_call = None
-        for child in node.children:
+        for child in self._get_children(node):
             if child.type in ("power", "atom_expr"):
                 param_call = child
                 break
@@ -1485,9 +1529,11 @@ class ParamAnalyzer:
             # Parse inclusive_bounds if present
             if inclusive_bounds_node and inclusive_bounds_node.type == "atom":
                 # Parse (True, False) pattern
-                for child in inclusive_bounds_node.children:
+                for child in self._get_children(inclusive_bounds_node):
                     if child.type == "testlist_comp":
-                        elements = [c for c in child.children if c.type in ("name", "keyword")]
+                        elements = [
+                            c for c in self._get_children(child) if c.type in ("name", "keyword")
+                        ]
                         if len(elements) >= 2:
                             left_inclusive = self._extract_boolean_value(elements[0])
                             right_inclusive = self._extract_boolean_value(elements[1])
@@ -1497,10 +1543,12 @@ class ParamAnalyzer:
             # Parse bounds if present
             if bounds_node and bounds_node.type == "atom":
                 # Parse (min, max) pattern
-                for child in bounds_node.children:
+                for child in self._get_children(bounds_node):
                     if child.type == "testlist_comp":
                         elements = [
-                            c for c in child.children if c.type in ("number", "name", "factor")
+                            c
+                            for c in self._get_children(child)
+                            if c.type in ("number", "name", "factor")
                         ]
                         if len(elements) >= 2:
                             try:
@@ -1556,7 +1604,9 @@ class ParamAnalyzer:
                 # Check if it's an empty list or tuple
                 # Get all child values to check for empty containers
                 child_values = [
-                    child.value for child in default_value.children if hasattr(child, "value")
+                    self._get_value(child)
+                    for child in self._get_children(default_value)
+                    if hasattr(child, "value")
                 ]
                 is_empty_list = child_values == ["[", "]"]
                 is_empty_tuple = child_values == ["(", ")"]
@@ -1702,34 +1752,38 @@ class ParamAnalyzer:
             try:
                 # Try to parse as int first, then float
                 # Scientific notation (e.g., 1e3) should be parsed as float
-                if "." in node.value or "e" in node.value.lower():
-                    return float(node.value)
+                if "." in self._get_value(node) or "e" in self._get_value(node).lower():
+                    return float(self._get_value(node))
                 else:
-                    return int(node.value)
+                    return int(self._get_value(node))
             except ValueError:
                 return None
-        elif hasattr(node, "type") and node.type in ("name", "keyword") and node.value == "None":
+        elif (
+            hasattr(node, "type")
+            and node.type in ("name", "keyword")
+            and self._get_value(node) == "None"
+        ):
             return None  # Explicitly handle None
         elif (
             hasattr(node, "type")
             and node.type == "factor"
             and hasattr(node, "children")
-            and len(node.children) >= 2
+            and len(self._get_children(node)) >= 2
         ):
             # Handle unary operators like negative numbers: factor -> operator(-) + number
-            operator_node = node.children[0]
-            operand_node = node.children[1]
+            operator_node = self._get_children(node)[0]
+            operand_node = self._get_children(node)[1]
             if (
                 hasattr(operator_node, "value")
-                and operator_node.value == "-"
+                and self._get_value(operator_node) == "-"
                 and hasattr(operand_node, "type")
                 and operand_node.type == "number"
             ):
                 try:
-                    if "." in operand_node.value:
-                        return -float(operand_node.value)
+                    if "." in self._get_value(operand_node):
+                        return -float(self._get_value(operand_node))
                     else:
-                        return -int(operand_node.value)
+                        return -int(self._get_value(operand_node))
                 except ValueError:
                     return None
         return None

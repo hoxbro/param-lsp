@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
-from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.analyzer import ParamAnalyzer, TypeErrorDict
 
 from .base import LSPServerBase
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class ValidationMixin(LSPServerBase):
         # Publish diagnostics for type errors
         self._publish_diagnostics(uri, analysis.get("type_errors", []))
 
-    def _publish_diagnostics(self, uri: str, type_errors: list[dict[str, Any]]):
+    def _publish_diagnostics(self, uri: str, type_errors: list[TypeErrorDict]):
         """Publish diagnostics for type errors."""
         diagnostics = []
 
