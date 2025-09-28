@@ -7,7 +7,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict, cast
 
-from .parso_utils import get_children, get_value, has_attribute_target, walk_tree
+from .parso_utils import (
+    find_all_parameter_assignments,
+    get_children,
+    get_value,
+    has_attribute_target,
+    is_assignment_stmt,
+    is_function_call,
+    walk_tree,
+)
+from .parameter_extractor import (
+    extract_boolean_value,
+    extract_numeric_value,
+    get_keyword_arguments,
+    is_none_value,
+    resolve_parameter_class,
+)
 
 if TYPE_CHECKING:
     from parso.tree import BaseNode, NodeOrLeaf
@@ -28,8 +43,17 @@ class TypeErrorDict(TypedDict):
 class TypeChecker:
     """Handles type checking and validation for parameter assignments."""
 
-    def __init__(self, param_type_map: dict):
+    def __init__(
+        self,
+        param_type_map: dict,
+        param_classes: dict,
+        imports: dict[str, str],
+        is_parameter_assignment_func,
+    ):
         self.param_type_map = param_type_map
+        self.param_classes = param_classes
+        self.imports = imports
+        self.is_parameter_assignment = is_parameter_assignment_func
         self.type_errors: list[TypeErrorDict] = []
 
     def check_parameter_types(self, tree: NodeOrLeaf, lines: list[str]) -> list[TypeErrorDict]:
@@ -41,20 +65,16 @@ class TypeChecker:
                 self._check_class_parameter_defaults(cast("BaseNode", node), lines)
 
             # Check runtime parameter assignments like obj.param = value
-            elif (
-                node.type == "expr_stmt"
-                and self._is_assignment_stmt(node)
-                and has_attribute_target(node)
-            ):
-                self._check_runtime_parameter_assignment_parso(node, lines)
+            elif node.type == "expr_stmt" and is_assignment_stmt(node):
+                if has_attribute_target(node):
+                    self._check_runtime_parameter_assignment_parso(node, lines)
+
+            # Check constructor calls like MyClass(x="A")
+            elif node.type in ("power", "atom_expr") and is_function_call(node):
+                self._check_constructor_parameter_types(node, lines)
 
         return self.type_errors.copy()
 
-    def _is_assignment_stmt(self, node: NodeOrLeaf) -> bool:
-        """Check if a parso node is an assignment statement."""
-        return any(
-            child.type == "operator" and get_value(child) == "=" for child in get_children(node)
-        )
 
     def _check_class_parameter_defaults(self, class_node: BaseNode, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
