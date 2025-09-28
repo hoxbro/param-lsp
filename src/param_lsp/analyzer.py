@@ -1330,17 +1330,28 @@ class ParamAnalyzer:
                     return full_class_path
 
             # If not an external class, look for local class names
+            # We need to find the class name that's actually being called
+            # For Outer.Inner(), we want "Inner", not "Outer"
+
+            # Find the last name before a function call (parentheses trailer)
+            last_name = None
             for child in call_node.children:
                 if child.type == "name":
-                    # Simple case: MyClass()
-                    return child.value
-                elif (
-                    child.type == "trailer"
-                    and len(child.children) >= 2
-                    and child.children[1].type == "name"
-                ):
-                    # Return the class name from the last trailer
-                    return child.children[1].value
+                    last_name = child.value
+                elif child.type == "trailer":
+                    if len(child.children) >= 2 and child.children[1].type == "name":
+                        # This is a dot access like .Inner
+                        last_name = child.children[1].value
+                    elif (
+                        len(child.children) >= 1
+                        and child.children[0].type == "operator"
+                        and child.children[0].value == "("
+                    ):
+                        # This is the function call parentheses - return the last name we found
+                        return last_name
+
+            # If we found a name but no explicit function call, return the last name
+            return last_name
         return None
 
     def _resolve_full_class_path(self, base) -> str | None:
