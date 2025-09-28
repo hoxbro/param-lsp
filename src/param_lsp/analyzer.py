@@ -476,32 +476,32 @@ class ParamAnalyzer:
         # Find the suite (class body) in the class definition
         for child in node.children:
             if child.type == "suite":
-                for item in child.children:
-                    if item.type == "expr_stmt" and self._is_assignment_stmt(item):
-                        target_name = self._get_assignment_target_name(item)
-                        if target_name and self._is_parameter_assignment(item):
-                            # Extract parameter information
-                            param_info = self._extract_parameter_info_from_assignment(
-                                item, target_name
-                            )
-                            if param_info:
-                                parameters.append(param_info)
-                    elif item.type == "simple_stmt":
-                        # Also check within simple statements for other formats
-                        for stmt_child in item.children:
-                            if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(
-                                stmt_child
-                            ):
-                                target_name = self._get_assignment_target_name(stmt_child)
-                                if target_name and self._is_parameter_assignment(stmt_child):
-                                    # Extract parameter information
-                                    param_info = self._extract_parameter_info_from_assignment(
-                                        stmt_child, target_name
-                                    )
-                                    if param_info:
-                                        parameters.append(param_info)
+                self._extract_parameters_from_suite(child, parameters)
 
         return parameters
+
+    def _extract_parameters_from_suite(self, suite_node, parameters: list[ParameterInfo]):
+        """Extract parameters from a class suite node."""
+        for item in suite_node.children:
+            if item.type == "expr_stmt" and self._is_assignment_stmt(item):
+                self._process_parameter_assignment(item, parameters)
+            elif item.type == "simple_stmt":
+                # Also check within simple statements for other formats
+                self._extract_parameters_from_simple_stmt(item, parameters)
+
+    def _extract_parameters_from_simple_stmt(self, stmt_node, parameters: list[ParameterInfo]):
+        """Extract parameters from a simple statement node."""
+        for stmt_child in stmt_node.children:
+            if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(stmt_child):
+                self._process_parameter_assignment(stmt_child, parameters)
+
+    def _process_parameter_assignment(self, assignment_node, parameters: list[ParameterInfo]):
+        """Process a single parameter assignment and add to parameters list."""
+        target_name = self._get_assignment_target_name(assignment_node)
+        if target_name and self._is_parameter_assignment(assignment_node):
+            param_info = self._extract_parameter_info_from_assignment(assignment_node, target_name)
+            if param_info:
+                parameters.append(param_info)
 
     def _extract_parameter_info_from_assignment(
         self, assignment_node, param_name: str
@@ -617,18 +617,25 @@ class ParamAnalyzer:
         # Find the function call trailer with arguments
         for child in call_node.children:
             if child.type == "trailer" and child.children and child.children[0].value == "(":
-                # Look for arguments within this trailer - could be arglist or direct arguments
-                for trailer_child in child.children:
-                    if trailer_child.type == "arglist":
-                        # Multiple arguments in an arglist
-                        for arg_child in trailer_child.children:
-                            if arg_child.type == "argument":
-                                self._extract_single_argument(arg_child, kwargs)
-                    elif trailer_child.type == "argument":
-                        # Single argument directly in trailer
-                        self._extract_single_argument(trailer_child, kwargs)
+                self._extract_arguments_from_trailer(child, kwargs)
 
         return kwargs
+
+    def _extract_arguments_from_trailer(self, trailer_node, kwargs: dict[str, Any]):
+        """Extract arguments from a function call trailer."""
+        for trailer_child in trailer_node.children:
+            if trailer_child.type == "arglist":
+                # Multiple arguments in an arglist
+                self._extract_arguments_from_arglist(trailer_child, kwargs)
+            elif trailer_child.type == "argument":
+                # Single argument directly in trailer
+                self._extract_single_argument(trailer_child, kwargs)
+
+    def _extract_arguments_from_arglist(self, arglist_node, kwargs: dict[str, Any]):
+        """Extract arguments from an arglist node."""
+        for arg_child in arglist_node.children:
+            if arg_child.type == "argument":
+                self._extract_single_argument(arg_child, kwargs)
 
     def _extract_single_argument(self, arg_node, kwargs: dict[str, Any]):
         """Extract a single keyword argument from a parso argument node."""
@@ -820,28 +827,7 @@ class ParamAnalyzer:
         """Check for type errors in parameter assignments."""
         for node in self._walk_tree(tree):
             if node.type == "classdef":
-                class_name = self._get_class_name(node)
-                if class_name and class_name in self.param_classes:
-                    # Find the suite (class body) in the class definition
-                    for child in node.children:
-                        if child.type == "suite":
-                            for item in child.children:
-                                if item.type == "simple_stmt":
-                                    # Look for assignments within simple statements
-                                    for stmt_child in item.children:
-                                        if (
-                                            stmt_child.type == "expr_stmt"
-                                            and self._is_assignment_stmt(stmt_child)
-                                        ):
-                                            target_name = self._get_assignment_target_name(
-                                                stmt_child
-                                            )
-                                            if target_name and self._is_parameter_assignment(
-                                                stmt_child
-                                            ):
-                                                self._check_parameter_default_type(
-                                                    stmt_child, target_name, lines
-                                                )
+                self._check_class_parameter_defaults(node, lines)
 
             # Check runtime parameter assignments like obj.param = value
             elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
@@ -851,6 +837,31 @@ class ParamAnalyzer:
             # Check constructor calls like MyClass(x="A")
             elif node.type in ("power", "atom_expr") and self._is_function_call(node):
                 self._check_constructor_parameter_types(node, lines)
+
+    def _check_class_parameter_defaults(self, class_node, lines: list[str]):
+        """Check parameter default types within a class definition."""
+        class_name = self._get_class_name(class_node)
+        if not class_name or class_name not in self.param_classes:
+            return
+
+        # Find the class body (suite)
+        for child in class_node.children:
+            if child.type == "suite":
+                self._check_suite_parameter_assignments(child, lines)
+
+    def _check_suite_parameter_assignments(self, suite_node, lines: list[str]):
+        """Check parameter assignments within a class suite."""
+        for item in suite_node.children:
+            if item.type == "simple_stmt":
+                self._check_simple_stmt_assignments(item, lines)
+
+    def _check_simple_stmt_assignments(self, stmt_node, lines: list[str]):
+        """Check parameter assignments within a simple statement."""
+        for stmt_child in stmt_node.children:
+            if stmt_child.type == "expr_stmt" and self._is_assignment_stmt(stmt_child):
+                target_name = self._get_assignment_target_name(stmt_child)
+                if target_name and self._is_parameter_assignment(stmt_child):
+                    self._check_parameter_default_type(stmt_child, target_name, lines)
 
     def _check_constructor_parameter_types(self, node, lines: list[str]):
         """Check for type errors in constructor parameter calls like MyClass(x="A") (parso version)."""
