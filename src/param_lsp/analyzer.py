@@ -6,7 +6,6 @@ hover information, and diagnostics.
 
 from __future__ import annotations
 
-import ast
 import importlib
 import importlib.util
 import inspect
@@ -252,13 +251,6 @@ class ParamAnalyzer:
             elif child.type == "operator" and child.value == "=":
                 break
         return False
-
-    def _is_function_call(self, node):
-        """Check if a parso power node represents a function call."""
-        return any(
-            child.type == "trailer" and child.children and child.children[0].value == "("
-            for child in node.children
-        )
 
     def _handle_import(self, node):
         """Handle 'import' statements (parso node)."""
@@ -763,6 +755,67 @@ class ParamAnalyzer:
         else:
             return "<complex>"
 
+    def _parse_bounds_format(
+        self, bounds: tuple
+    ) -> tuple[float | None, float | None, bool, bool] | None:
+        """Parse bounds tuple into (min_val, max_val, left_inclusive, right_inclusive).
+
+        Args:
+            bounds: Either (min, max) or (min, max, left_inclusive, right_inclusive)
+
+        Returns:
+            Tuple of (min_val, max_val, left_inclusive, right_inclusive) or None if invalid
+        """
+        if len(bounds) == 2:
+            min_val, max_val = bounds
+            left_inclusive, right_inclusive = True, True  # Default to inclusive
+            return min_val, max_val, left_inclusive, right_inclusive
+        elif len(bounds) == 4:
+            min_val, max_val, left_inclusive, right_inclusive = bounds
+            return min_val, max_val, left_inclusive, right_inclusive
+        else:
+            return None
+
+    def _format_bounds_description(
+        self,
+        min_val: float | None,
+        max_val: float | None,
+        left_inclusive: bool,
+        right_inclusive: bool,
+    ) -> str:
+        """Format bounds into a human-readable string with proper bracket notation.
+
+        Args:
+            min_val: Minimum value (or None for unbounded)
+            max_val: Maximum value (or None for unbounded)
+            left_inclusive: Whether left bound is inclusive
+            right_inclusive: Whether right bound is inclusive
+
+        Returns:
+            Formatted bounds string like "[0, 10]" or "(0, 10)" etc.
+        """
+        min_str = str(min_val) if min_val is not None else "-∞"
+        max_str = str(max_val) if max_val is not None else "∞"
+        left_bracket = "[" if left_inclusive else "("
+        right_bracket = "]" if right_inclusive else ")"
+        return f"{left_bracket}{min_str}, {max_str}{right_bracket}"
+
+    def _is_function_call(self, node) -> bool:
+        """Check if a parso node represents a function call (has trailing parentheses).
+
+        Args:
+            node: Parso node to check
+
+        Returns:
+            True if the node represents a function call
+        """
+        if not hasattr(node, "children"):
+            return False
+        return any(
+            child.type == "trailer" and child.children and child.children[0].value == "("
+            for child in node.children
+        )
+
     def _check_parameter_types(self, tree, lines: list[str]):
         """Check for type errors in parameter assignments."""
         for node in self._walk_tree(tree):
@@ -885,17 +938,13 @@ class ParamAnalyzer:
         if assigned_numeric is None:
             return
 
-        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
-        if len(bounds) == 2:
-            min_val, max_val = bounds
-            left_inclusive, right_inclusive = True, True  # Default to inclusive
-        elif len(bounds) == 4:
-            min_val, max_val, left_inclusive, right_inclusive = bounds
-        else:
+        # Parse bounds format
+        parsed_bounds = self._parse_bounds_format(bounds)
+        if not parsed_bounds:
             return
+        min_val, max_val, left_inclusive, right_inclusive = parsed_bounds
 
         # Check if value is within bounds based on inclusivity
-        # Handle None bounds (unbounded)
         violates_lower = False
         violates_upper = False
 
@@ -912,10 +961,9 @@ class ParamAnalyzer:
                 violates_upper = assigned_numeric >= max_val
 
         if violates_lower or violates_upper:
-            # Format bounds description with proper None handling
-            min_str = str(min_val) if min_val is not None else "-∞"
-            max_str = str(max_val) if max_val is not None else "∞"
-            bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
+            bound_description = self._format_bounds_description(
+                min_val, max_val, left_inclusive, right_inclusive
+            )
             message = f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}"
             self._create_type_error(node, message, "constructor-bounds-violation")
 
@@ -978,85 +1026,6 @@ class ParamAnalyzer:
 
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
-
-    def _check_runtime_parameter_assignment(
-        self, node: ast.Assign, target: ast.Attribute, lines: list[str]
-    ):
-        """Check runtime parameter assignments like obj.param = value."""
-        instance_class = None
-        param_name = target.attr
-        assigned_value = node.value
-
-        if isinstance(target.value, ast.Call):
-            # Case: MyClass().x = value
-            instance_class = self._get_instance_class(target.value)
-        elif isinstance(target.value, ast.Name):
-            # Case: instance_var.x = value
-            # We need to infer the class from context or assume it could be any param class
-            # First check local param classes
-            for class_name, class_info in self.param_classes.items():
-                if param_name in class_info.parameters:
-                    instance_class = class_name
-                    break
-
-            # If not found in local classes, check external param classes
-            if not instance_class:
-                for class_name, class_info in self.external_param_classes.items():
-                    if class_info and param_name in class_info.parameters:
-                        instance_class = class_name
-                        break
-
-        if not instance_class:
-            return
-
-        # Check if this is a valid param class (local or external)
-        is_valid_param_class = instance_class in self.param_classes or (
-            instance_class in self.external_param_classes
-            and self.external_param_classes[instance_class]
-        )
-
-        if not is_valid_param_class:
-            return
-
-        # Get the parameter type from the class definition
-        cls = self._get_parameter_type_from_class(instance_class, param_name)
-        if not cls:
-            return
-
-        # Check if assigned value matches expected type
-        if cls in self.param_type_map:
-            expected_types = self.param_type_map[cls]
-            if not isinstance(expected_types, tuple):
-                expected_types = (expected_types,)
-
-            inferred_type = self._infer_value_type(assigned_value)
-
-            # Check if None is allowed for this parameter
-            if inferred_type is type(None):  # None value
-                allow_None = self._get_parameter_allow_None(instance_class, param_name)
-                if allow_None:
-                    return  # None is allowed, skip further validation
-                # If allow_None is False or not specified, continue with normal type checking
-
-            # Special handling for Boolean parameters - they should only accept actual bool values
-            if cls == "Boolean" and inferred_type and inferred_type is not bool:
-                # For Boolean parameters, only accept actual boolean values
-                if not (
-                    isinstance(assigned_value, ast.Constant)
-                    and isinstance(assigned_value.value, bool)
-                ):
-                    message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)"
-                    self._create_type_error(node, message, "runtime-boolean-type-mismatch")
-            elif inferred_type and not any(
-                (isinstance(inferred_type, type) and issubclass(inferred_type, t))
-                or inferred_type == t
-                for t in expected_types
-            ):
-                message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})"
-                self._create_type_error(node, message, "runtime-type-mismatch")
-
-        # Check bounds for numeric parameters
-        self._check_runtime_bounds(node, instance_class, param_name, cls, assigned_value)
 
     def _check_runtime_parameter_assignment_parso(self, node, lines: list[str]):
         """Check runtime parameter assignments like obj.param = value (parso version)."""
@@ -1209,14 +1178,11 @@ class ParamAnalyzer:
         if assigned_numeric is None:
             return
 
-        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
-        if len(bounds) == 2:
-            min_val, max_val = bounds
-            left_inclusive, right_inclusive = True, True  # Default to inclusive
-        elif len(bounds) == 4:
-            min_val, max_val, left_inclusive, right_inclusive = bounds
-        else:
+        # Parse bounds format
+        parsed_bounds = self._parse_bounds_format(bounds)
+        if not parsed_bounds:
             return
+        min_val, max_val, left_inclusive, right_inclusive = parsed_bounds
 
         # Check if value is within bounds based on inclusivity
         violates_lower = False
@@ -1234,70 +1200,10 @@ class ParamAnalyzer:
             else:
                 violates_upper = assigned_numeric >= max_val
 
-        # Format bounds description with proper None handling
-        min_str = str(min_val) if min_val is not None else "-∞"
-        max_str = str(max_val) if max_val is not None else "∞"
-        bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
-
         if violates_lower or violates_upper:
-            message = f"Value {assigned_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
-            self._create_type_error(node, message, "bounds-violation")
-
-    def _check_runtime_bounds(
-        self,
-        node: ast.Assign,
-        instance_class: str,
-        param_name: str,
-        cls: str,
-        assigned_value: ast.expr,
-    ):
-        """Check if assigned value is within parameter bounds."""
-        # Only check bounds for numeric types
-        if cls not in ["Number", "Integer"]:
-            return
-
-        # Get bounds for this parameter
-        bounds = self._get_parameter_bounds(instance_class, param_name)
-        if not bounds:
-            return
-
-        # Extract numeric value from assigned value
-        assigned_numeric = self._extract_numeric_value(assigned_value)
-        if assigned_numeric is None:
-            return
-
-        # Handle bounds format (min, max) or (min, max, left_inclusive, right_inclusive)
-        if len(bounds) == 2:
-            min_val, max_val = bounds
-            left_inclusive, right_inclusive = True, True  # Default to inclusive
-        elif len(bounds) == 4:
-            min_val, max_val, left_inclusive, right_inclusive = bounds
-        else:
-            return
-
-        # Check if value is within bounds based on inclusivity
-        # Handle None bounds (unbounded)
-        violates_lower = False
-        violates_upper = False
-
-        if min_val is not None:
-            if left_inclusive:
-                violates_lower = assigned_numeric < min_val
-            else:
-                violates_lower = assigned_numeric <= min_val
-
-        if max_val is not None:
-            if right_inclusive:
-                violates_upper = assigned_numeric > max_val
-            else:
-                violates_upper = assigned_numeric >= max_val
-
-        # Format bounds description with proper None handling
-        min_str = str(min_val) if min_val is not None else "-∞"
-        max_str = str(max_val) if max_val is not None else "∞"
-        bound_description = f"{'[' if left_inclusive else '('}{min_str}, {max_str}{']' if right_inclusive else ')'}"
-
-        if violates_lower or violates_upper:
+            bound_description = self._format_bounds_description(
+                min_val, max_val, left_inclusive, right_inclusive
+            )
             message = f"Value {assigned_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
             self._create_type_error(node, message, "bounds-violation")
 
@@ -1568,7 +1474,9 @@ class ParamAnalyzer:
                                         )
 
                                         if violates_lower or violates_upper:
-                                            bound_description = f"{'[' if left_inclusive else '('}{min_val}, {max_val}{']' if right_inclusive else ')'}"
+                                            bound_description = self._format_bounds_description(
+                                                min_val, max_val, left_inclusive, right_inclusive
+                                            )
                                             message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
                                             self._create_type_error(
                                                 node, message, "default-bounds-violation"
@@ -2087,61 +1995,14 @@ class ParamAnalyzer:
                 return start_line + i
         return None
 
-    def _extract_imports_from_ast(self, tree: ast.AST) -> dict[str, str]:
-        """Extract import mappings from an AST."""
-        imports = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imports[alias.asname or alias.name] = alias.name
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                for alias in node.names:
-                    imported_name = alias.asname or alias.name
-                    full_name = f"{node.module}.{alias.name}"
-                    imports[imported_name] = full_name
-        return imports
-
-    def _inherits_from_parameterized_ast(
-        self, class_node: ast.ClassDef, imports: dict[str, str]
-    ) -> bool:
-        """Check if a class inherits from param.Parameterized using AST analysis."""
-        for base in class_node.bases:
-            if isinstance(base, ast.Name):
-                # Direct inheritance from Parameterized
-                if base.id == "Parameterized":
-                    imported_class = imports.get(base.id, "")
-                    if "param.Parameterized" in imported_class:
-                        return True
-            elif isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
-                # Module.Parameterized style inheritance
-                module = base.value.id
-                if base.attr == "Parameterized":
-                    imported_module = imports.get(module, "")
-                    if "param" in imported_module:
-                        return True
-        return False
-
-    def _find_class_in_ast(self, tree: ast.AST, class_name: str) -> ast.ClassDef | None:
-        """Find a class definition in an AST."""
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == class_name:
-                return node
-        return None
-
     def _discover_external_param_classes(self, tree):
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
         for node in self._walk_tree(tree):
-            if node.type in ("power", "atom_expr"):
+            if node.type in ("power", "atom_expr") and self._is_function_call(node):
                 # Look for calls like pn.widgets.IntSlider()
-                # Check if this is a function call with parentheses
-                has_call = any(
-                    child.type == "trailer" and child.children and child.children[0].value == "("
-                    for child in node.children
-                )
-                if has_call:
-                    full_class_path = self._resolve_full_class_path(node)
-                    if full_class_path:
-                        self._analyze_external_class_ast(full_class_path)
+                full_class_path = self._resolve_full_class_path(node)
+                if full_class_path:
+                    self._analyze_external_class_ast(full_class_path)
 
     def _populate_external_library_cache(self):
         """Populate the external library cache with all param.Parameterized classes on startup."""
