@@ -27,7 +27,6 @@ from ._analyzer.parameter_extractor import (
     extract_default_from_call,
     extract_doc_from_call,
     extract_numeric_value,
-    extract_string_value,
     format_default_value,
     is_none_value,
 )
@@ -689,8 +688,6 @@ class ParamAnalyzer:
                 name_value = self._get_value(name_node)
                 if name_value:
                     kwargs[name_value] = value_node
-
-
 
     def _parse_bounds_format(
         self, bounds: tuple
@@ -1662,7 +1659,6 @@ class ParamAnalyzer:
                 return class_info
 
         return None
-
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using the modular external inspector."""

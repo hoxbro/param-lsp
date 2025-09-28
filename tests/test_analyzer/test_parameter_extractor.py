@@ -1,7 +1,9 @@
 """
 Tests for the parameter_extractor module.
 """
-import pytest
+
+from __future__ import annotations
+
 import parso
 
 from param_lsp._analyzer.parameter_extractor import (
@@ -25,7 +27,7 @@ def parse_expression(code: str):
     # For simple expressions, parso puts them directly under file_input
     # Skip the endmarker and get the actual expression
     for child in tree.children:
-        if child.type != 'endmarker':
+        if child.type != "endmarker":
             return child
     return tree.children[0] if tree.children else tree
 
@@ -208,4 +210,4 @@ class TestExtractFromCall:
         node = parse_expression("param.Integer(default=42)")
         default = extract_default_from_call(node)
         # Should return a node or None
-        assert default is None or hasattr(default, 'type')
+        assert default is None or hasattr(default, "type")
