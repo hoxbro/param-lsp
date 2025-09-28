@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from parso.tree import NodeOrLeaf
 
     from param_lsp.models import ParameterInfo
+else:
+    from param_lsp.models import ParameterInfo
 
 # Type aliases for better type safety
 NumericValue = int | float | None  # Numeric values from nodes
@@ -273,3 +275,118 @@ def extract_numeric_value(node: NodeOrLeaf) -> NumericValue:
             except ValueError:
                 return None
     return None
+
+
+def resolve_parameter_class(
+    param_call: NodeOrLeaf, imports: dict[str, str]
+) -> dict[str, str] | None:
+    """Resolve parameter class from a parso power node like param.Integer()."""
+    # Extract the function name from the call
+    func_name = None
+    module_name = None
+
+    for child in get_children(param_call):
+        if child.type == "name":
+            # Simple case: Integer() or param (first part of param.Integer)
+            if func_name is None:
+                func_name = get_value(child)
+            else:
+                module_name = func_name
+                func_name = get_value(child)
+        elif child.type == "trailer":
+            # Handle dotted calls like param.Integer
+            for trailer_child in get_children(child):
+                if trailer_child.type == "name":
+                    if module_name is None:
+                        module_name = func_name  # Previous name becomes module
+                    func_name = get_value(trailer_child)
+
+    if func_name:
+        # Check if it's a direct param type
+        if func_name in PARAM_TYPES:
+            return {"type": func_name, "module": module_name or "param"}
+
+        # Check if it's an imported param type
+        if func_name in imports:
+            imported_full_name = imports[func_name]
+            if imported_full_name.startswith("param."):
+                param_type = imported_full_name.split(".")[-1]
+                if param_type in PARAM_TYPES:
+                    return {"type": param_type, "module": "param"}
+
+    return None
+
+
+def extract_parameter_info_from_assignment(
+    assignment_node: NodeOrLeaf,
+    param_name: str,
+    imports: dict[str, str],
+    current_file_content: str | None = None,
+) -> ParameterInfo | None:
+    """Extract parameter info from a parso assignment statement."""
+
+    # Initialize parameter info
+    cls = ""
+    bounds = None
+    doc = None
+    allow_None = False
+    default = None
+    location = None
+
+    # Get the parameter call (right-hand side of assignment)
+    param_call = None
+    found_equals = False
+    for child in get_children(assignment_node):
+        if child.type == "operator" and get_value(child) == "=":
+            found_equals = True
+        elif found_equals and child.type in ("power", "atom_expr"):
+            param_call = child
+            break
+
+    if param_call:
+        # Get parameter type from the function call
+        param_class_info = resolve_parameter_class(param_call, imports)
+        if param_class_info:
+            cls = param_class_info["type"]
+
+        # Extract parameter arguments (bounds, doc, default, etc.) from the whole param_call
+        bounds = extract_bounds_from_call(param_call)
+        doc = extract_doc_from_call(param_call)
+        allow_None_value = extract_allow_None_from_call(param_call)
+        default_value = extract_default_from_call(param_call)
+
+        # Store default value as a string representation
+        if default_value is not None:
+            default = format_default_value(default_value)
+
+        # Param automatically sets allow_None=True when default=None
+        if default_value is not None and is_none_value(default_value):
+            allow_None = True
+        elif allow_None_value is not None:
+            allow_None = allow_None_value
+
+    # Extract location information from the assignment node
+    if assignment_node:
+        try:
+            # Get line number from the parso node
+            line_number = assignment_node.start_pos[0]
+            # Get the source line from the current file content
+            if current_file_content:
+                lines = current_file_content.split("\n")
+                if 0 <= line_number - 1 < len(lines):
+                    source_line = lines[line_number - 1].strip()
+                    location = {"line": line_number, "source": source_line}
+        except (AttributeError, IndexError):
+            # If we can't get location info, continue without it
+            pass
+
+    # Create ParameterInfo object
+    return ParameterInfo(
+        name=param_name,
+        cls=cls or "Unknown",
+        bounds=bounds,
+        doc=doc,
+        allow_None=allow_None,
+        default=default,
+        location=location,
+    )
