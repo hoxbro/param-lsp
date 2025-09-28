@@ -2,6 +2,9 @@
 HoloViz Param Language Server Protocol implementation.
 Provides IDE support for Param-based Python code including autocompletion,
 hover information, and diagnostics.
+
+This version uses modular components for external class inspection
+while preserving all existing functionality.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 import param
 import parso
 
+from ._analyzer.external_class_inspector import ExternalClassInspector
 from .cache import external_library_cache
 from .constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPE_MAP, PARAM_TYPES
 from .models import ParameterInfo, ParameterizedInfo
@@ -73,13 +77,12 @@ class ParamAnalyzer:
         self.module_cache: dict[str, AnalysisResult] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
-        # Cache for external Parameterized classes (AST-based detection)
-        self.external_param_classes: dict[
-            str, ParameterizedInfo | None
-        ] = {}  # full_class_path -> class_info
+        # Use modular external class inspector
+        self.external_inspector = ExternalClassInspector()
+        self.external_param_classes = self.external_inspector.external_param_classes
 
-        # Populate external library cache on initialization
-        self._populate_external_library_cache()
+        # Populate external library cache on initialization using modular component
+        self.external_inspector.populate_external_library_cache()
 
     def analyze_file(self, content: str, file_path: str | None = None) -> AnalysisResult:
         """Analyze a Python file for Param usage."""
@@ -1816,21 +1819,8 @@ class ParamAnalyzer:
         return None
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
-        """Analyze external classes using runtime introspection for allowed libraries."""
-        if full_class_path in self.external_param_classes:
-            return self.external_param_classes[full_class_path]
-
-        # Check if this library is allowed for runtime introspection
-        root_module = full_class_path.split(".")[0]
-        if root_module in ALLOWED_EXTERNAL_LIBRARIES:
-            class_info = self._introspect_external_class_runtime(full_class_path)
-            self.external_param_classes[full_class_path] = class_info
-        else:
-            # For non-allowed libraries, mark as unknown
-            self.external_param_classes[full_class_path] = None
-            class_info = None
-
-        return class_info
+        """Analyze external classes using the modular external inspector."""
+        return self.external_inspector.analyze_external_class_ast(full_class_path)
 
     def _introspect_external_class_runtime(self, full_class_path: str) -> ParameterizedInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
