@@ -1,0 +1,147 @@
+# param-lsp Future Work TODO
+
+## Analyzer Refactoring - Phase 2
+- [ ] Replace remaining parso utility methods with modular components
+  - [ ] Move all `_has_value`, `_get_value`, `_walk_tree` etc. to use parso_utils module
+  - [ ] Replace `_find_*` generator methods with modular equivalents
+  - [ ] Update all internal method calls to use modular functions
+
+- [ ] Complete parameter extraction modularization
+  - [ ] Move `_extract_parameter_info_from_assignment` to parameter_extractor module
+  - [ ] Move `_resolve_parameter_class` to parameter_extractor module
+  - [ ] Move all `_extract_*_from_call` methods to parameter_extractor module
+  - [ ] Update all parameter extraction calls to use modular components
+
+- [ ] Implement full type checking modularization
+  - [ ] Move all `_check_*` methods to type_checker module
+  - [ ] Move `_infer_value_type` and related type inference to type_checker
+  - [ ] Move constraint checking logic to type_checker
+  - [ ] Integrate type_checker properly with main analyzer
+
+- [ ] Complete inheritance resolution modularization
+  - [ ] Move `_collect_inherited_parameters` to inheritance_resolver
+  - [ ] Move `_is_param_base` to inheritance_resolver
+  - [ ] Update inheritance logic to use modular component
+
+- [ ] Complete import resolution modularization
+  - [ ] Move `_resolve_module_path` to import_resolver
+  - [ ] Move `_analyze_imported_module` to import_resolver
+  - [ ] Move `_get_imported_param_class_info` to import_resolver
+  - [ ] Update all import handling to use modular component
+
+## Code Quality & Cleanup
+- [ ] Fix linting issues in modular components
+  - [ ] Remove unused imports in _analyzer/ modules
+  - [ ] Fix relative import preferences (use absolute imports)
+  - [ ] Move type imports to TYPE_CHECKING blocks
+  - [ ] Fix SIM102 warnings (combine if statements)
+  - [ ] Move top-level imports out of functions
+
+- [ ] Add comprehensive unit tests for modular components
+  - [ ] Test parso_utils functions independently
+  - [ ] Test parameter_extractor functions independently
+  - [ ] Test type_checker functionality independently
+  - [ ] Test external_class_inspector independently
+  - [ ] Test import_resolver independently
+  - [ ] Test inheritance_resolver independently
+
+- [ ] Remove remaining dead code from analyzer.py
+  - [ ] Identify and remove any remaining unused methods
+  - [ ] Clean up unused imports
+  - [ ] Remove redundant helper functions now handled by modules
+
+- [ ] Improve documentation
+  - [ ] Add comprehensive docstrings to all modular components
+  - [ ] Update analyzer.py docstring to reflect modular architecture
+  - [ ] Create README for _analyzer/ module explaining architecture
+  - [ ] Add type hints to all modular component functions
+
+## Performance & Architecture
+- [ ] Optimize modular component interactions
+  - [ ] Minimize object creation in hot paths
+  - [ ] Cache expensive operations in modular components
+  - [ ] Profile performance impact of modularization
+
+- [ ] Improve error handling
+  - [ ] Add proper error handling in modular components
+  - [ ] Ensure graceful degradation when modules fail
+  - [ ] Add better error messages for debugging
+
+- [ ] Consider further modularization
+  - [ ] Extract AST navigation logic into separate module
+  - [ ] Extract bounds checking into dedicated validator
+  - [ ] Extract string/numeric value extraction into utilities module
+  - [ ] Consider separating local vs external class analysis
+
+## Testing & Validation
+- [ ] Verify 100% test coverage maintained
+  - [ ] Run coverage analysis on new modular components
+  - [ ] Ensure no regressions in existing functionality
+  - [ ] Add integration tests for modular component interactions
+
+- [ ] Performance benchmarking
+  - [ ] Benchmark analyzer performance before/after modularization
+  - [ ] Identify any performance regressions
+  - [ ] Optimize hot paths if needed
+
+- [ ] Memory usage analysis
+  - [ ] Check if modular architecture affects memory usage
+  - [ ] Optimize memory usage in modular components
+
+## Future Enhancements
+- [ ] Consider plugin architecture
+  - [ ] Allow external modules to extend analyzer functionality
+  - [ ] Create plugin interface for custom parameter types
+  - [ ] Enable custom validation rules
+
+- [ ] Async analysis support
+  - [ ] Consider making analysis pipeline async for large files
+  - [ ] Support background analysis for better IDE responsiveness
+
+- [ ] Enhanced external library support
+  - [ ] Improve detection of new external Param libraries
+  - [ ] Add support for custom parameter classes
+  - [ ] Better handling of complex inheritance hierarchies
+
+## Code Organization
+- [ ] Organize _analyzer/ module structure
+  - [ ] Group related functionality into submodules
+  - [ ] Consider creating _analyzer/core/ and _analyzer/utils/ subdirs
+  - [ ] Ensure clear separation of concerns
+
+- [ ] Create comprehensive API documentation
+  - [ ] Document public interfaces of all modules
+  - [ ] Create usage examples for each modular component
+  - [ ] Add migration guide for using new modular architecture
+
+## Long-term Goals
+- [ ] Complete migration to modular architecture
+  - [ ] Replace analyzer.py entirely with orchestration of modular components
+  - [ ] Ensure each module can be tested and used independently
+  - [ ] Create clear dependency graph between modules
+
+- [ ] Enable modular testing
+  - [ ] Allow testing individual components without full analyzer
+  - [ ] Create mock interfaces for component testing
+  - [ ] Enable faster test cycles for specific functionality
+
+- [ ] Consider language server protocol enhancements
+  - [ ] Better integration with LSP features using modular components
+  - [ ] Improved performance for real-time analysis
+  - [ ] Enhanced error reporting using modular validation
+
+## Immediate Next Steps (Priority)
+1. [ ] Fix linting issues in _analyzer/ modules (quick wins)
+2. [ ] Remove remaining dead code from analyzer.py
+3. [ ] Add basic unit tests for new modular components
+4. [ ] Verify no performance regressions from current changes
+5. [ ] Document the new modular architecture in README
+
+---
+Generated: 2025-01-28
+Status: Phase 1 of analyzer refactoring completed successfully
+- ✅ Created 6 modular components in _analyzer/ directory
+- ✅ Replaced external class inspection with modular component
+- ✅ Maintained 100% test compatibility (228/228 tests passing)
+- ✅ Removed unused method _try_fix_incomplete_syntax
+- ✅ Established foundation for further modularization

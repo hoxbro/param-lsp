@@ -7,19 +7,26 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..constants import PARAM_TYPES
-from ..models import ParameterInfo
-from .parso_utils import get_children, get_value
+from param_lsp.constants import PARAM_TYPES
+
+from .parso_utils import (
+    find_arguments_in_trailer,
+    find_function_call_trailers,
+    get_children,
+    get_value,
+)
 
 if TYPE_CHECKING:
     from parso.tree import NodeOrLeaf
+
+    from param_lsp.models import ParameterInfo
 
 # Type aliases for better type safety
 NumericValue = int | float | None  # Numeric values from nodes
 BoolValue = bool | None  # Boolean values from nodes
 
 
-def is_parameter_assignment(node: "NodeOrLeaf") -> bool:
+def is_parameter_assignment(node: NodeOrLeaf) -> bool:
     """Check if a parso assignment statement looks like a parameter definition."""
     # Find the right-hand side of the assignment (after '=')
     found_equals = False
@@ -32,7 +39,7 @@ def is_parameter_assignment(node: "NodeOrLeaf") -> bool:
     return False
 
 
-def is_parameter_call(node: "NodeOrLeaf") -> bool:
+def is_parameter_call(node: NodeOrLeaf) -> bool:
     """Check if a parso power/atom_expr node represents a parameter type call."""
     # Extract the function name and check if it's a param type
     func_name = None
@@ -52,17 +59,14 @@ def is_parameter_call(node: "NodeOrLeaf") -> bool:
             if func_name:
                 break
 
-    if func_name:
-        # Check if it's a direct param type
-        if func_name in PARAM_TYPES:
-            return True
-
-        # Would need imports context to check imported param types
-        # This will be handled by the main analyzer
-    return False
+    # Would need imports context to check imported param types
+    # This will be handled by the main analyzer
+    return func_name is not None and func_name in PARAM_TYPES
 
 
-def extract_parameters(node, find_assignments_func, extract_info_func, is_parameter_assignment_func) -> list[ParameterInfo]:
+def extract_parameters(
+    node, find_assignments_func, extract_info_func, is_parameter_assignment_func
+) -> list[ParameterInfo]:
     """Extract parameter definitions from a Param class (parso node)."""
     parameters = []
 
@@ -74,9 +78,8 @@ def extract_parameters(node, find_assignments_func, extract_info_func, is_parame
     return parameters
 
 
-def get_keyword_arguments(call_node: "NodeOrLeaf") -> dict[str, "NodeOrLeaf"]:
+def get_keyword_arguments(call_node: NodeOrLeaf) -> dict[str, NodeOrLeaf]:
     """Extract keyword arguments from a parso function call node."""
-    from .parso_utils import find_function_call_trailers, find_arguments_in_trailer
 
     kwargs = {}
 
@@ -87,7 +90,7 @@ def get_keyword_arguments(call_node: "NodeOrLeaf") -> dict[str, "NodeOrLeaf"]:
     return kwargs
 
 
-def extract_single_argument(arg_node: "NodeOrLeaf", kwargs: dict[str, "NodeOrLeaf"]) -> None:
+def extract_single_argument(arg_node: NodeOrLeaf, kwargs: dict[str, NodeOrLeaf]) -> None:
     """Extract a single keyword argument from a parso argument node."""
     if len(get_children(arg_node)) >= 3:
         name_node = get_children(arg_node)[0]
@@ -104,7 +107,7 @@ def extract_single_argument(arg_node: "NodeOrLeaf", kwargs: dict[str, "NodeOrLea
                 kwargs[name_value] = value_node
 
 
-def extract_bounds_from_call(call_node: "NodeOrLeaf") -> tuple | None:
+def extract_bounds_from_call(call_node: NodeOrLeaf) -> tuple | None:
     """Extract bounds from a parameter call (parso version)."""
     bounds_info = None
     inclusive_bounds = (True, True)  # Default to inclusive
@@ -136,9 +139,7 @@ def extract_bounds_from_call(call_node: "NodeOrLeaf") -> tuple | None:
         if inclusive_bounds_node.type == "atom" and get_children(inclusive_bounds_node):
             for child in get_children(inclusive_bounds_node):
                 if child.type == "testlist_comp":
-                    elements = [
-                        c for c in get_children(child) if c.type in ("name", "keyword")
-                    ]
+                    elements = [c for c in get_children(child) if c.type in ("name", "keyword")]
                     if len(elements) >= 2:
                         left_inclusive = extract_boolean_value(elements[0])
                         right_inclusive = extract_boolean_value(elements[1])
@@ -151,7 +152,7 @@ def extract_bounds_from_call(call_node: "NodeOrLeaf") -> tuple | None:
     return None
 
 
-def extract_doc_from_call(call_node: "NodeOrLeaf") -> str | None:
+def extract_doc_from_call(call_node: NodeOrLeaf) -> str | None:
     """Extract doc string from a parameter call (parso version)."""
     kwargs = get_keyword_arguments(call_node)
     if "doc" in kwargs:
@@ -159,7 +160,7 @@ def extract_doc_from_call(call_node: "NodeOrLeaf") -> str | None:
     return None
 
 
-def extract_allow_None_from_call(call_node: "NodeOrLeaf") -> BoolValue:
+def extract_allow_None_from_call(call_node: NodeOrLeaf) -> BoolValue:
     """Extract allow_None from a parameter call (parso version)."""
     kwargs = get_keyword_arguments(call_node)
     if "allow_None" in kwargs:
@@ -167,7 +168,7 @@ def extract_allow_None_from_call(call_node: "NodeOrLeaf") -> BoolValue:
     return None
 
 
-def extract_default_from_call(call_node: "NodeOrLeaf") -> "NodeOrLeaf" | None:
+def extract_default_from_call(call_node: NodeOrLeaf) -> NodeOrLeaf | None:
     """Extract default value from a parameter call (parso version)."""
     kwargs = get_keyword_arguments(call_node)
     if "default" in kwargs:
@@ -175,7 +176,7 @@ def extract_default_from_call(call_node: "NodeOrLeaf") -> "NodeOrLeaf" | None:
     return None
 
 
-def is_none_value(node: "NodeOrLeaf") -> bool:
+def is_none_value(node: NodeOrLeaf) -> bool:
     """Check if a parso node represents None."""
     return (
         hasattr(node, "type")
@@ -185,7 +186,7 @@ def is_none_value(node: "NodeOrLeaf") -> bool:
     )
 
 
-def extract_string_value(node: "NodeOrLeaf") -> str | None:
+def extract_string_value(node: NodeOrLeaf) -> str | None:
     """Extract string value from parso node."""
     if hasattr(node, "type") and node.type == "string":
         # Remove quotes from string value
@@ -206,7 +207,7 @@ def extract_string_value(node: "NodeOrLeaf") -> str | None:
     return None
 
 
-def extract_boolean_value(node: "NodeOrLeaf") -> BoolValue:
+def extract_boolean_value(node: NodeOrLeaf) -> BoolValue:
     """Extract boolean value from parso node."""
     if hasattr(node, "type") and node.type in ("name", "keyword"):
         if get_value(node) == "True":
@@ -216,7 +217,7 @@ def extract_boolean_value(node: "NodeOrLeaf") -> BoolValue:
     return None
 
 
-def format_default_value(node: "NodeOrLeaf") -> str:
+def format_default_value(node: NodeOrLeaf) -> str:
     """Format a parso node as a string representation for display."""
     # For parso nodes, use the get_code() method to get the original source
     if hasattr(node, "get_code"):
@@ -229,7 +230,7 @@ def format_default_value(node: "NodeOrLeaf") -> str:
         return "<complex>"
 
 
-def extract_numeric_value(node: "NodeOrLeaf") -> NumericValue:
+def extract_numeric_value(node: NodeOrLeaf) -> NumericValue:
     """Extract numeric value from parso node."""
     if hasattr(node, "type") and node.type == "number":
         try:
@@ -244,11 +245,7 @@ def extract_numeric_value(node: "NodeOrLeaf") -> NumericValue:
                 return int(value)
         except ValueError:
             return None
-    elif (
-        hasattr(node, "type")
-        and node.type in ("name", "keyword")
-        and get_value(node) == "None"
-    ):
+    elif hasattr(node, "type") and node.type in ("name", "keyword") and get_value(node) == "None":
         return None  # Explicitly handle None
     elif (
         hasattr(node, "type")

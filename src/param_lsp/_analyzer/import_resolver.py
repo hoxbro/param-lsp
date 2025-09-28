@@ -32,7 +32,7 @@ class ImportResolver:
         self.module_cache: dict[str, AnalysisResult] = {}
         self.file_cache: dict[str, AnalysisResult] = {}
 
-    def handle_import(self, node: "NodeOrLeaf") -> None:
+    def handle_import(self, node: NodeOrLeaf) -> None:
         """Handle 'import' statements (parso node)."""
         # For parso import_name nodes, parse the import statement
         for child in get_children(node):
@@ -59,7 +59,7 @@ class ImportResolver:
                 if module_name:
                     self.imports[module_name] = module_name
 
-    def handle_import_from(self, node: "NodeOrLeaf") -> None:
+    def handle_import_from(self, node: NodeOrLeaf) -> None:
         """Handle 'from ... import ...' statements (parso node)."""
         # For parso import_from nodes, parse the from...import statement
         module_name = None

@@ -13,27 +13,27 @@ if TYPE_CHECKING:
     from parso.tree import BaseNode, NodeOrLeaf
 
 
-def has_value(node: "NodeOrLeaf") -> bool:
+def has_value(node: NodeOrLeaf) -> bool:
     """Check if node has a value attribute."""
     return hasattr(node, "value")
 
 
-def get_value(node: "NodeOrLeaf") -> str | None:
+def get_value(node: NodeOrLeaf) -> str | None:
     """Safely get value from node."""
     return getattr(node, "value", None)
 
 
-def has_children(node: "NodeOrLeaf") -> bool:
+def has_children(node: NodeOrLeaf) -> bool:
     """Check if node has children attribute."""
     return hasattr(node, "children")
 
 
-def get_children(node: "NodeOrLeaf") -> list["NodeOrLeaf"]:
+def get_children(node: NodeOrLeaf) -> list[NodeOrLeaf]:
     """Safely get children from node."""
     return getattr(node, "children", [])
 
 
-def walk_tree(node: "NodeOrLeaf") -> "Generator[NodeOrLeaf, None, None]":
+def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
     """Walk a parso tree recursively, yielding all nodes."""
     yield node
     if has_children(node):
@@ -41,7 +41,7 @@ def walk_tree(node: "NodeOrLeaf") -> "Generator[NodeOrLeaf, None, None]":
             yield from walk_tree(child)
 
 
-def get_class_name(class_node: "BaseNode") -> str | None:
+def get_class_name(class_node: BaseNode) -> str | None:
     """Extract class name from parso classdef node."""
     for child in get_children(class_node):
         if child.type == "name":
@@ -49,7 +49,7 @@ def get_class_name(class_node: "BaseNode") -> str | None:
     return None
 
 
-def get_class_bases(class_node: "BaseNode") -> list["NodeOrLeaf"]:
+def get_class_bases(class_node: BaseNode) -> list[NodeOrLeaf]:
     """Extract base classes from parso classdef node."""
     bases = []
     # Look for bases between parentheses in class definition
@@ -77,7 +77,7 @@ def get_class_bases(class_node: "BaseNode") -> list["NodeOrLeaf"]:
     return bases
 
 
-def is_assignment_stmt(node: "NodeOrLeaf") -> bool:
+def is_assignment_stmt(node: NodeOrLeaf) -> bool:
     """Check if a parso node is an assignment statement."""
     # Look for assignment operator '=' in the children
     return any(
@@ -85,7 +85,7 @@ def is_assignment_stmt(node: "NodeOrLeaf") -> bool:
     )
 
 
-def get_assignment_target_name(node: "NodeOrLeaf") -> str | None:
+def get_assignment_target_name(node: NodeOrLeaf) -> str | None:
     """Get the target name from an assignment statement."""
     # The target is typically the first child before the '=' operator
     for child in get_children(node):
@@ -96,7 +96,7 @@ def get_assignment_target_name(node: "NodeOrLeaf") -> str | None:
     return None
 
 
-def has_attribute_target(node: "NodeOrLeaf") -> bool:
+def has_attribute_target(node: NodeOrLeaf) -> bool:
     """Check if assignment has an attribute target (like obj.attr = value)."""
     for child in get_children(node):
         if child.type in ("power", "atom_expr"):
@@ -113,7 +113,7 @@ def has_attribute_target(node: "NodeOrLeaf") -> bool:
     return False
 
 
-def is_function_call(node: "NodeOrLeaf") -> bool:
+def is_function_call(node: NodeOrLeaf) -> bool:
     """Check if a parso node represents a function call (has trailing parentheses)."""
     if not hasattr(node, "children"):
         return False
@@ -125,7 +125,7 @@ def is_function_call(node: "NodeOrLeaf") -> bool:
     )
 
 
-def find_class_suites(class_node: "BaseNode") -> "Generator[NodeOrLeaf, None, None]":
+def find_class_suites(class_node: BaseNode) -> Generator[NodeOrLeaf, None, None]:
     """Generator that yields class suite nodes from a class definition."""
     for child in get_children(class_node):
         if child.type == "suite":
@@ -133,9 +133,9 @@ def find_class_suites(class_node: "BaseNode") -> "Generator[NodeOrLeaf, None, No
 
 
 def find_parameter_assignments(
-    suite_node: "NodeOrLeaf",
+    suite_node: NodeOrLeaf,
     is_parameter_assignment_func,
-) -> "Generator[tuple[NodeOrLeaf, str], None, None]":
+) -> Generator[tuple[NodeOrLeaf, str], None, None]:
     """Generator that yields parameter assignment nodes from a class suite."""
     for item in get_children(suite_node):
         if item.type == "expr_stmt" and is_assignment_stmt(item):
@@ -148,9 +148,9 @@ def find_parameter_assignments(
 
 
 def find_assignments_in_simple_stmt(
-    stmt_node: "NodeOrLeaf",
+    stmt_node: NodeOrLeaf,
     is_parameter_assignment_func,
-) -> "Generator[tuple[NodeOrLeaf, str], None, None]":
+) -> Generator[tuple[NodeOrLeaf, str], None, None]:
     """Generator that yields assignment nodes from a simple statement."""
     for stmt_child in get_children(stmt_node):
         if stmt_child.type == "expr_stmt" and is_assignment_stmt(stmt_child):
@@ -159,7 +159,7 @@ def find_assignments_in_simple_stmt(
                 yield stmt_child, target_name
 
 
-def find_function_call_trailers(call_node: "NodeOrLeaf") -> "Generator[NodeOrLeaf, None, None]":
+def find_function_call_trailers(call_node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
     """Generator that yields function call trailers with arguments."""
     for child in get_children(call_node):
         if (
@@ -170,7 +170,7 @@ def find_function_call_trailers(call_node: "NodeOrLeaf") -> "Generator[NodeOrLea
             yield child
 
 
-def find_arguments_in_trailer(trailer_node: "NodeOrLeaf") -> "Generator[NodeOrLeaf, None, None]":
+def find_arguments_in_trailer(trailer_node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
     """Generator that yields argument nodes from a function call trailer."""
     for trailer_child in get_children(trailer_node):
         if trailer_child.type == "arglist":
@@ -181,7 +181,7 @@ def find_arguments_in_trailer(trailer_node: "NodeOrLeaf") -> "Generator[NodeOrLe
             yield trailer_child
 
 
-def find_arguments_in_arglist(arglist_node: "NodeOrLeaf") -> "Generator[NodeOrLeaf, None, None]":
+def find_arguments_in_arglist(arglist_node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
     """Generator that yields argument nodes from an arglist."""
     for arg_child in get_children(arglist_node):
         if arg_child.type == "argument":
@@ -189,9 +189,9 @@ def find_arguments_in_arglist(arglist_node: "NodeOrLeaf") -> "Generator[NodeOrLe
 
 
 def find_all_parameter_assignments(
-    class_node: "BaseNode",
+    class_node: BaseNode,
     is_parameter_assignment_func,
-) -> "Generator[tuple[NodeOrLeaf, str], None, None]":
+) -> Generator[tuple[NodeOrLeaf, str], None, None]:
     """Generator that yields all parameter assignments in a class."""
     for suite_node in find_class_suites(class_node):
         yield from find_parameter_assignments(suite_node, is_parameter_assignment_func)

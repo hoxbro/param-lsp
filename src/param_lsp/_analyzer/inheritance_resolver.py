@@ -7,12 +7,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..constants import PARAM_TYPES
-from ..models import ParameterInfo, ParameterizedInfo
-from .parso_utils import get_children, get_value
+from .parso_utils import get_children, get_class_bases, get_value
 
 if TYPE_CHECKING:
-    from parso.tree import BaseNode, NodeOrLeaf
+    from parso.tree import BaseNode
+
+    from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
 class InheritanceResolver:
@@ -80,10 +80,9 @@ class InheritanceResolver:
         return False
 
     def collect_inherited_parameters(
-        self, node: "BaseNode", current_file_path: str | None, analyzer
+        self, node: BaseNode, current_file_path: str | None, analyzer
     ) -> dict[str, ParameterInfo]:
         """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
-        from .parso_utils import get_class_bases
 
         inherited_parameters = {}  # Last wins
 

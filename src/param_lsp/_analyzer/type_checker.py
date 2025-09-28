@@ -7,13 +7,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict, cast
 
-from ..constants import PARAM_TYPE_MAP
-from .parameter_extractor import (
-    extract_boolean_value,
-    extract_numeric_value,
-    get_keyword_arguments,
-    is_none_value,
-)
 from .parso_utils import get_children, get_value, has_attribute_target, walk_tree
 
 if TYPE_CHECKING:
@@ -39,7 +32,7 @@ class TypeChecker:
         self.param_type_map = param_type_map
         self.type_errors: list[TypeErrorDict] = []
 
-    def check_parameter_types(self, tree: "NodeOrLeaf", lines: list[str]) -> list[TypeErrorDict]:
+    def check_parameter_types(self, tree: NodeOrLeaf, lines: list[str]) -> list[TypeErrorDict]:
         """Check for type errors in parameter assignments."""
         self.type_errors.clear()
 
@@ -48,35 +41,34 @@ class TypeChecker:
                 self._check_class_parameter_defaults(cast("BaseNode", node), lines)
 
             # Check runtime parameter assignments like obj.param = value
-            elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
-                if has_attribute_target(node):
-                    self._check_runtime_parameter_assignment_parso(node, lines)
+            elif (
+                node.type == "expr_stmt"
+                and self._is_assignment_stmt(node)
+                and has_attribute_target(node)
+            ):
+                self._check_runtime_parameter_assignment_parso(node, lines)
 
         return self.type_errors.copy()
 
-    def _is_assignment_stmt(self, node: "NodeOrLeaf") -> bool:
+    def _is_assignment_stmt(self, node: NodeOrLeaf) -> bool:
         """Check if a parso node is an assignment statement."""
         return any(
             child.type == "operator" and get_value(child) == "=" for child in get_children(node)
         )
 
-    def _check_class_parameter_defaults(
-        self, class_node: "BaseNode", lines: list[str]
-    ) -> None:
+    def _check_class_parameter_defaults(self, class_node: BaseNode, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
         # This would need access to analyzer's param_classes and other methods
         # For now, this is a placeholder that shows the structure
-        pass
 
     def _check_runtime_parameter_assignment_parso(
-        self, node: "NodeOrLeaf", lines: list[str]
+        self, node: NodeOrLeaf, lines: list[str]
     ) -> None:
         """Check runtime parameter assignments like obj.param = value (parso version)."""
         # This is a complex method that needs access to analyzer's context
         # For now, this is a placeholder that shows the structure
-        pass
 
-    def _infer_value_type(self, node: "NodeOrLeaf") -> type | None:
+    def _infer_value_type(self, node: NodeOrLeaf) -> type | None:
         """Infer Python type from parso node."""
         if hasattr(node, "type"):
             if node.type == "number":
@@ -113,7 +105,7 @@ class TypeChecker:
                     return tuple
         return None
 
-    def _is_boolean_literal(self, node: "NodeOrLeaf") -> bool:
+    def _is_boolean_literal(self, node: NodeOrLeaf) -> bool:
         """Check if a parso node represents a boolean literal (True/False)."""
         return (node.type == "name" and get_value(node) in ("True", "False")) or (
             node.type == "keyword" and get_value(node) in ("True", "False")
@@ -128,7 +120,7 @@ class TypeChecker:
             return " or ".join(type_names)
 
     def _create_type_error(
-        self, node: "NodeOrLeaf", message: str, code: str, severity: str = "error"
+        self, node: NodeOrLeaf, message: str, code: str, severity: str = "error"
     ) -> None:
         """Helper function to create and append a type error (parso version)."""
         # Get position information from parso node

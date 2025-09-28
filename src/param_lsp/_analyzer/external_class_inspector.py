@@ -8,14 +8,13 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import param
 
-from ..cache import external_library_cache
-from ..constants import ALLOWED_EXTERNAL_LIBRARIES
-from ..models import ParameterInfo, ParameterizedInfo
+from param_lsp.cache import external_library_cache
+from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
+from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 if TYPE_CHECKING:
     import types
@@ -134,7 +133,9 @@ class ExternalClassInspector:
                                 bounds = bounds_tuple
 
                         # Get doc string
-                        doc = param_obj.doc if hasattr(param_obj, "doc") and param_obj.doc else None
+                        doc = (
+                            param_obj.doc if hasattr(param_obj, "doc") and param_obj.doc else None
+                        )
 
                         # Get allow_None
                         allow_None = (
@@ -179,7 +180,7 @@ class ExternalClassInspector:
             return None
 
     def _discover_param_classes_in_library(
-        self, library: "types.ModuleType", library_name: str
+        self, library: types.ModuleType, library_name: str
     ) -> int:
         """Discover and cache all param.Parameterized classes in a library."""
         classes_cached = 0
@@ -213,7 +214,7 @@ class ExternalClassInspector:
         return classes_cached
 
     def _get_all_classes_in_module(
-        self, module: "types.ModuleType", visited_modules: set[str] | None = None
+        self, module: types.ModuleType, visited_modules: set[str] | None = None
     ) -> list[type]:
         """Recursively get all classes in a module and its submodules."""
         if visited_modules is None:
@@ -279,7 +280,9 @@ class ExternalClassInspector:
                                 bounds = bounds_tuple
 
                         # Get doc string
-                        doc = param_obj.doc if hasattr(param_obj, "doc") and param_obj.doc else None
+                        doc = (
+                            param_obj.doc if hasattr(param_obj, "doc") and param_obj.doc else None
+                        )
 
                         # Get allow_None
                         allow_None = (
