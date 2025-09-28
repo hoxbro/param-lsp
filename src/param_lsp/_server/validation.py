@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
 
 from param_lsp.analyzer import ParamAnalyzer, TypeErrorDict
 
 from .base import LSPServerBase
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

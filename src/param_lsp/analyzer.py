@@ -324,11 +324,13 @@ class ParamAnalyzer:
             elif child.type == "dotted_name":
                 # Handle "import module"
                 module_name = self._get_value(child)
-                self.imports[module_name] = module_name
+                if module_name:
+                    self.imports[module_name] = module_name
             elif child.type == "name" and self._get_value(child) not in ("import", "as"):
                 # Simple case: "import module"
                 module_name = self._get_value(child)
-                self.imports[module_name] = module_name
+                if module_name:
+                    self.imports[module_name] = module_name
 
     def _handle_import_from(self, node: NodeOrLeaf) -> None:
         """Handle 'from ... import ...' statements (parso node)."""
@@ -360,14 +362,18 @@ class ParamAnalyzer:
                             import_names.append((import_name, alias_name))
                     elif name_child.type == "name":
                         # Handle "from module import name"
-                        import_names.append((self._get_value(name_child), None))
+                        name_value = self._get_value(name_child)
+                        if name_value:
+                            import_names.append((name_value, None))
             elif (
                 child.type == "name"
                 and self._get_value(child) not in ("from", "import")
                 and module_name is not None
             ):
                 # Handle simple "from module import name" where name is a direct child
-                import_names.append((self._get_value(child), None))
+                child_value = self._get_value(child)
+                if child_value:
+                    import_names.append((child_value, None))
 
         # Second pass: register all imports
         if module_name:
@@ -408,7 +414,8 @@ class ParamAnalyzer:
     def _format_base(self, base) -> str:
         """Format base class for debugging (parso node)."""
         if base.type == "name":
-            return self._get_value(base)
+            value = self._get_value(base)
+            return value if value is not None else "<unknown>"
         elif base.type == "power":
             # Handle dotted names like module.Class
             parts = []
@@ -430,6 +437,8 @@ class ParamAnalyzer:
         """Check if a base class is param.Parameterized or similar (parso node)."""
         if base.type == "name":
             base_name = self._get_value(base)
+            if not base_name:
+                return False
             # Check if it's a direct param.Parameterized import
             if (
                 base_name in ["Parameterized"]
@@ -491,6 +500,8 @@ class ParamAnalyzer:
         for base in bases:
             if base.type == "name":
                 parent_class_name = self._get_value(base)
+                if not parent_class_name:
+                    continue
 
                 # First check if it's a local class in the same file
                 if parent_class_name in self.param_classes:
@@ -664,7 +675,9 @@ class ParamAnalyzer:
                 and equals_node.type == "operator"
                 and self._get_value(equals_node) == "="
             ):
-                kwargs[self._get_value(name_node)] = value_node
+                name_value = self._get_value(name_node)
+                if name_value:
+                    kwargs[name_value] = value_node
 
     def _extract_bounds_from_call(self, call_node: NodeOrLeaf) -> tuple | None:
         """Extract bounds from a parameter call (parso version)."""
@@ -747,6 +760,8 @@ class ParamAnalyzer:
         if hasattr(node, "type") and node.type == "string":
             # Remove quotes from string value
             value = self._get_value(node)
+            if value is None:
+                return None
             # Handle triple quotes first
             if (value.startswith('"""') and value.endswith('"""')) or (
                 value.startswith("'''") and value.endswith("'''")
@@ -773,9 +788,11 @@ class ParamAnalyzer:
         """Format a parso node as a string representation for display."""
         # For parso nodes, use the get_code() method to get the original source
         if hasattr(node, "get_code"):
-            return node.get_code().strip()
+            code = node.get_code()
+            return code.strip() if code is not None else "<complex>"
         elif hasattr(node, "value"):
-            return str(self._get_value(node))
+            value = self._get_value(node)
+            return str(value) if value is not None else "<unknown>"
         else:
             return "<complex>"
 
@@ -914,7 +931,7 @@ class ParamAnalyzer:
         """Check for type errors in parameter assignments."""
         for node in self._walk_tree(tree):
             if node.type == "classdef":
-                self._check_class_parameter_defaults(node, lines)
+                self._check_class_parameter_defaults(cast("BaseNode", node), lines)
 
             # Check runtime parameter assignments like obj.param = value
             elif node.type == "expr_stmt" and self._is_assignment_stmt(node):
@@ -1073,9 +1090,10 @@ class ParamAnalyzer:
         # Get default value and allow_None from keyword arguments
         kwargs = self._get_keyword_arguments(param_call)
         default_value = kwargs.get("default")
+        allow_None_node = kwargs.get("allow_None")
         allow_None = (
-            self._extract_boolean_value(kwargs.get("allow_None"))
-            if "allow_None" in kwargs
+            self._extract_boolean_value(allow_None_node)
+            if "allow_None" in kwargs and allow_None_node is not None
             else None
         )
 
@@ -1456,7 +1474,10 @@ class ParamAnalyzer:
         if hasattr(node, "type"):
             if node.type == "number":
                 # Check if it's a float or int
-                if "." in self._get_value(node):
+                value = self._get_value(node)
+                if value is None:
+                    return None
+                if "." in value:
                     return float
                 else:
                     return int
@@ -1750,12 +1771,15 @@ class ParamAnalyzer:
         """Extract numeric value from parso node."""
         if hasattr(node, "type") and node.type == "number":
             try:
+                value = self._get_value(node)
+                if value is None:
+                    return None
                 # Try to parse as int first, then float
                 # Scientific notation (e.g., 1e3) should be parsed as float
-                if "." in self._get_value(node) or "e" in self._get_value(node).lower():
-                    return float(self._get_value(node))
+                if "." in value or "e" in value.lower():
+                    return float(value)
                 else:
-                    return int(self._get_value(node))
+                    return int(value)
             except ValueError:
                 return None
         elif (
@@ -1780,10 +1804,13 @@ class ParamAnalyzer:
                 and operand_node.type == "number"
             ):
                 try:
-                    if "." in self._get_value(operand_node):
-                        return -float(self._get_value(operand_node))
+                    operand_value = self._get_value(operand_node)
+                    if operand_value is None:
+                        return None
+                    if "." in operand_value:
+                        return -float(operand_value)
                     else:
-                        return -int(self._get_value(operand_node))
+                        return -int(operand_value)
                 except ValueError:
                     return None
         return None
