@@ -22,9 +22,14 @@ import parso
 from ._analyzer.external_class_inspector import ExternalClassInspector
 from ._analyzer.parameter_extractor import (
     extract_allow_None_from_call,
+    extract_boolean_value,
     extract_bounds_from_call,
     extract_default_from_call,
     extract_doc_from_call,
+    extract_numeric_value,
+    extract_string_value,
+    format_default_value,
+    is_none_value,
 )
 from .constants import PARAM_TYPE_MAP, PARAM_TYPES
 from .models import ParameterInfo, ParameterizedInfo
@@ -586,10 +591,10 @@ class ParamAnalyzer:
 
             # Store default value as a string representation
             if default_value is not None:
-                default = self._format_default_value(default_value)
+                default = format_default_value(default_value)
 
             # Param automatically sets allow_None=True when default=None
-            if default_value is not None and self._is_none_value(default_value):
+            if default_value is not None and is_none_value(default_value):
                 allow_None = True
             elif allow_None_value is not None:
                 allow_None = allow_None_value
@@ -686,55 +691,6 @@ class ParamAnalyzer:
                     kwargs[name_value] = value_node
 
 
-    def _is_none_value(self, node: NodeOrLeaf) -> bool:
-        """Check if a parso node represents None."""
-        return (
-            hasattr(node, "type")
-            and node.type in ("name", "keyword")  # None can be either name or keyword type
-            and hasattr(node, "value")
-            and self._get_value(node) == "None"
-        )
-
-    def _extract_string_value(self, node: NodeOrLeaf) -> str | None:
-        """Extract string value from parso node."""
-        if hasattr(node, "type") and node.type == "string":
-            # Remove quotes from string value
-            value = self._get_value(node)
-            if value is None:
-                return None
-            # Handle triple quotes first
-            if (value.startswith('"""') and value.endswith('"""')) or (
-                value.startswith("'''") and value.endswith("'''")
-            ):
-                return value[3:-3]
-            # Handle single/double quotes
-            elif (value.startswith('"') and value.endswith('"')) or (
-                value.startswith("'") and value.endswith("'")
-            ):
-                return value[1:-1]
-            return value
-        return None
-
-    def _extract_boolean_value(self, node: NodeOrLeaf) -> BoolValue:
-        """Extract boolean value from parso node."""
-        if hasattr(node, "type") and node.type in ("name", "keyword"):
-            if self._get_value(node) == "True":
-                return True
-            elif self._get_value(node) == "False":
-                return False
-        return None
-
-    def _format_default_value(self, node: NodeOrLeaf) -> str:
-        """Format a parso node as a string representation for display."""
-        # For parso nodes, use the get_code() method to get the original source
-        if hasattr(node, "get_code"):
-            code = node.get_code()
-            return code.strip() if code is not None else "<complex>"
-        elif hasattr(node, "value"):
-            value = self._get_value(node)
-            return str(value) if value is not None else "<unknown>"
-        else:
-            return "<complex>"
 
     def _parse_bounds_format(
         self, bounds: tuple
@@ -973,7 +929,7 @@ class ParamAnalyzer:
             return
 
         # Extract numeric value from parameter value
-        assigned_numeric = self._extract_numeric_value(param_value)
+        assigned_numeric = extract_numeric_value(param_value)
         if assigned_numeric is None:
             return
 
@@ -1032,13 +988,13 @@ class ParamAnalyzer:
         default_value = kwargs.get("default")
         allow_None_node = kwargs.get("allow_None")
         allow_None = (
-            self._extract_boolean_value(allow_None_node)
+            extract_boolean_value(allow_None_node)
             if "allow_None" in kwargs and allow_None_node is not None
             else None
         )
 
         # Param automatically sets allow_None=True when default=None
-        if default_value is not None and self._is_none_value(default_value):
+        if default_value is not None and is_none_value(default_value):
             allow_None = True
 
         if cls and default_value and cls in self.param_type_map:
@@ -1226,7 +1182,7 @@ class ParamAnalyzer:
             return
 
         # Extract numeric value from assigned value
-        assigned_numeric = self._extract_numeric_value(assigned_value)
+        assigned_numeric = extract_numeric_value(assigned_value)
         if assigned_numeric is None:
             return
 
@@ -1496,8 +1452,8 @@ class ParamAnalyzer:
                             c for c in self._get_children(child) if c.type in ("name", "keyword")
                         ]
                         if len(elements) >= 2:
-                            left_inclusive = self._extract_boolean_value(elements[0])
-                            right_inclusive = self._extract_boolean_value(elements[1])
+                            left_inclusive = extract_boolean_value(elements[0])
+                            right_inclusive = extract_boolean_value(elements[1])
                             if left_inclusive is not None and right_inclusive is not None:
                                 inclusive_bounds = (left_inclusive, right_inclusive)
 
@@ -1513,8 +1469,8 @@ class ParamAnalyzer:
                         ]
                         if len(elements) >= 2:
                             try:
-                                min_val = self._extract_numeric_value(elements[0])
-                                max_val = self._extract_numeric_value(elements[1])
+                                min_val = extract_numeric_value(elements[0])
+                                max_val = extract_numeric_value(elements[1])
 
                                 if (
                                     min_val is not None
@@ -1530,7 +1486,7 @@ class ParamAnalyzer:
                                     and min_val is not None
                                     and max_val is not None
                                 ):
-                                    default_numeric = self._extract_numeric_value(default_value)
+                                    default_numeric = extract_numeric_value(default_value)
                                     if default_numeric is not None:
                                         left_inclusive, right_inclusive = inclusive_bounds
 
@@ -1707,53 +1663,6 @@ class ParamAnalyzer:
 
         return None
 
-    def _extract_numeric_value(self, node: NodeOrLeaf) -> NumericValue:
-        """Extract numeric value from parso node."""
-        if hasattr(node, "type") and node.type == "number":
-            try:
-                value = self._get_value(node)
-                if value is None:
-                    return None
-                # Try to parse as int first, then float
-                # Scientific notation (e.g., 1e3) should be parsed as float
-                if "." in value or "e" in value.lower():
-                    return float(value)
-                else:
-                    return int(value)
-            except ValueError:
-                return None
-        elif (
-            hasattr(node, "type")
-            and node.type in ("name", "keyword")
-            and self._get_value(node) == "None"
-        ):
-            return None  # Explicitly handle None
-        elif (
-            hasattr(node, "type")
-            and node.type == "factor"
-            and hasattr(node, "children")
-            and len(self._get_children(node)) >= 2
-        ):
-            # Handle unary operators like negative numbers: factor -> operator(-) + number
-            operator_node = self._get_children(node)[0]
-            operand_node = self._get_children(node)[1]
-            if (
-                hasattr(operator_node, "value")
-                and self._get_value(operator_node) == "-"
-                and hasattr(operand_node, "type")
-                and operand_node.type == "number"
-            ):
-                try:
-                    operand_value = self._get_value(operand_node)
-                    if operand_value is None:
-                        return None
-                    if "." in operand_value:
-                        return -float(operand_value)
-                    else:
-                        return -int(operand_value)
-                except ValueError:
-                    return None
-        return None
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using the modular external inspector."""
