@@ -20,6 +20,12 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 import parso
 
 from ._analyzer.external_class_inspector import ExternalClassInspector
+from ._analyzer.parameter_extractor import (
+    extract_allow_None_from_call,
+    extract_bounds_from_call,
+    extract_default_from_call,
+    extract_doc_from_call,
+)
 from .constants import PARAM_TYPE_MAP, PARAM_TYPES
 from .models import ParameterInfo, ParameterizedInfo
 
@@ -573,10 +579,10 @@ class ParamAnalyzer:
                 cls = param_class_info["type"]
 
             # Extract parameter arguments (bounds, doc, default, etc.) from the whole param_call
-            bounds = self._extract_bounds_from_call(param_call)
-            doc = self._extract_doc_from_call(param_call)
-            allow_None_value = self._extract_allow_None_from_call(param_call)
-            default_value = self._extract_default_from_call(param_call)
+            bounds = extract_bounds_from_call(param_call)
+            doc = extract_doc_from_call(param_call)
+            allow_None_value = extract_allow_None_from_call(param_call)
+            default_value = extract_default_from_call(param_call)
 
             # Store default value as a string representation
             if default_value is not None:
@@ -679,72 +685,6 @@ class ParamAnalyzer:
                 if name_value:
                     kwargs[name_value] = value_node
 
-    def _extract_bounds_from_call(self, call_node: NodeOrLeaf) -> tuple | None:
-        """Extract bounds from a parameter call (parso version)."""
-        bounds_info = None
-        inclusive_bounds = (True, True)  # Default to inclusive
-
-        kwargs = self._get_keyword_arguments(call_node)
-
-        if "bounds" in kwargs:
-            bounds_node = kwargs["bounds"]
-            # Check if it's a tuple/parentheses with 2 elements
-            if bounds_node.type == "atom" and self._get_children(bounds_node):
-                # Look for (min, max) pattern
-                for child in self._get_children(bounds_node):
-                    if child.type == "testlist_comp":
-                        elements = [
-                            c
-                            for c in self._get_children(child)
-                            if c.type in ("number", "name", "factor", "keyword")
-                        ]
-                        if len(elements) >= 2:
-                            min_val = self._extract_numeric_value(elements[0])
-                            max_val = self._extract_numeric_value(elements[1])
-                            # Accept bounds even if one side is None (unbounded)
-                            if min_val is not None or max_val is not None:
-                                bounds_info = (min_val, max_val)
-
-        if "inclusive_bounds" in kwargs:
-            inclusive_bounds_node = kwargs["inclusive_bounds"]
-            # Similar logic for inclusive bounds tuple
-            if inclusive_bounds_node.type == "atom" and self._get_children(inclusive_bounds_node):
-                for child in self._get_children(inclusive_bounds_node):
-                    if child.type == "testlist_comp":
-                        elements = [
-                            c for c in self._get_children(child) if c.type in ("name", "keyword")
-                        ]
-                        if len(elements) >= 2:
-                            left_inclusive = self._extract_boolean_value(elements[0])
-                            right_inclusive = self._extract_boolean_value(elements[1])
-                            if left_inclusive is not None and right_inclusive is not None:
-                                inclusive_bounds = (left_inclusive, right_inclusive)
-
-        if bounds_info:
-            # Return (min, max, left_inclusive, right_inclusive)
-            return (*bounds_info, *inclusive_bounds)
-        return None
-
-    def _extract_doc_from_call(self, call_node: NodeOrLeaf) -> str | None:
-        """Extract doc string from a parameter call (parso version)."""
-        kwargs = self._get_keyword_arguments(call_node)
-        if "doc" in kwargs:
-            return self._extract_string_value(kwargs["doc"])
-        return None
-
-    def _extract_allow_None_from_call(self, call_node: NodeOrLeaf) -> BoolValue:
-        """Extract allow_None from a parameter call (parso version)."""
-        kwargs = self._get_keyword_arguments(call_node)
-        if "allow_None" in kwargs:
-            return self._extract_boolean_value(kwargs["allow_None"])
-        return None
-
-    def _extract_default_from_call(self, call_node: NodeOrLeaf) -> NodeOrLeaf | None:
-        """Extract default value from a parameter call (parso version)."""
-        kwargs = self._get_keyword_arguments(call_node)
-        if "default" in kwargs:
-            return kwargs["default"]
-        return None
 
     def _is_none_value(self, node: NodeOrLeaf) -> bool:
         """Check if a parso node represents None."""
