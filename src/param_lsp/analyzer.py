@@ -1832,39 +1832,6 @@ class ParamAnalyzer:
 
         return class_info
 
-    def _try_fix_incomplete_syntax(self, lines: list[str]) -> str:
-        """Try to fix common incomplete syntax patterns."""
-        fixed_lines = []
-
-        for line in lines:
-            fixed_line = line
-
-            # Fix incomplete imports like "from param" -> "import param"
-            if line.strip().startswith("from param") and " import " not in line:
-                fixed_line = "import param"
-
-            # Fix incomplete @param.depends( by adding closing parenthesis and quotes
-            elif "@param.depends(" in line and ")" not in line:
-                # Handle unclosed quotes in @param.depends
-                if '"' in line and line.count('"') % 2 == 1:
-                    # Unclosed double quote
-                    fixed_line = line + '")'
-                elif "'" in line and line.count("'") % 2 == 1:
-                    # Unclosed single quote
-                    fixed_line = line + "')"
-                else:
-                    # No quotes or balanced quotes, just add closing parenthesis
-                    fixed_line = line + ")"
-
-            # Fix incomplete function definitions after @param.depends
-            elif line.strip().startswith("def ") and line.endswith(": ..."):
-                # Make it a proper function definition
-                fixed_line = line.replace(": ...", ":\n        pass")
-
-            fixed_lines.append(fixed_line)
-
-        return "\n".join(fixed_lines)
-
     def _introspect_external_class_runtime(self, full_class_path: str) -> ParameterizedInfo | None:
         """Introspect an external class using runtime imports for allowed libraries."""
 
