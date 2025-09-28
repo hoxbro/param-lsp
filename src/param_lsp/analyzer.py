@@ -473,13 +473,10 @@ class ParamAnalyzer:
         """Extract parameter definitions from a Param class (parso node)."""
         parameters = []
 
-        for suite_node in self._find_class_suites(node):
-            for assignment_node, target_name in self._find_parameter_assignments(suite_node):
-                param_info = self._extract_parameter_info_from_assignment(
-                    assignment_node, target_name
-                )
-                if param_info:
-                    parameters.append(param_info)
+        for assignment_node, target_name in self._find_all_parameter_assignments(node):
+            param_info = self._extract_parameter_info_from_assignment(assignment_node, target_name)
+            if param_info:
+                parameters.append(param_info)
 
         return parameters
 
@@ -833,6 +830,11 @@ class ParamAnalyzer:
             if arg_child.type == "argument":
                 yield arg_child
 
+    def _find_all_parameter_assignments(self, class_node):
+        """Generator that yields all parameter assignments in a class."""
+        for suite_node in self._find_class_suites(class_node):
+            yield from self._find_parameter_assignments(suite_node)
+
     def _check_parameter_types(self, tree, lines: list[str]):
         """Check for type errors in parameter assignments."""
         for node in self._walk_tree(tree):
@@ -854,9 +856,8 @@ class ParamAnalyzer:
         if not class_name or class_name not in self.param_classes:
             return
 
-        for suite_node in self._find_class_suites(class_node):
-            for assignment_node, target_name in self._find_parameter_assignments(suite_node):
-                self._check_parameter_default_type(assignment_node, target_name, lines)
+        for assignment_node, target_name in self._find_all_parameter_assignments(class_node):
+            self._check_parameter_default_type(assignment_node, target_name, lines)
 
     def _check_constructor_parameter_types(self, node, lines: list[str]):
         """Check for type errors in constructor parameter calls like MyClass(x="A") (parso version)."""
@@ -2005,7 +2006,6 @@ class ParamAnalyzer:
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
         for node in self._walk_tree(tree):
             if node.type in ("power", "atom_expr") and self._is_function_call(node):
-                # Look for calls like pn.widgets.IntSlider()
                 full_class_path = self._resolve_full_class_path(node)
                 if full_class_path:
                     self._analyze_external_class_ast(full_class_path)
