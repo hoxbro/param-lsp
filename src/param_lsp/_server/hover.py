@@ -118,11 +118,13 @@ class HoverMixin(LSPServerBase):
             source_line = param_info.location.get("source")
             line_number = param_info.location.get("line")
             if source_line:
+                # Clean and dedent multiline parameter definitions
+                clean_source = textwrap.dedent(source_line).strip()
                 if line_number:
                     definition_header = f"Definition (line {line_number}):"
                 else:
                     definition_header = "Definition:"
-                source_section = f"---\n{definition_header}\n```python\n{source_line}\n```"
+                source_section = f"---\n{definition_header}\n```python\n{clean_source}\n```"
                 hover_sections.append(source_section)
 
         return "\n\n".join(hover_sections)
