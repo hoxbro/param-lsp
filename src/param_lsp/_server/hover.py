@@ -120,7 +120,7 @@ class HoverMixin(LSPServerBase):
             line_number = param_info.location.get("line")
             if source_line:
                 # Clean and dedent multiline parameter definitions
-                clean_source = self._clean_source_definition(source_line)
+                clean_source = textwrap.dedent(source_line).strip()
                 if line_number:
                     definition_header = f"Definition (line {line_number}):"
                 else:
@@ -206,31 +206,3 @@ class HoverMixin(LSPServerBase):
         # Clean and dedent the documentation
         clean_doc = textwrap.dedent(doc).strip()
         return clean_doc
-
-    def _clean_source_definition(self, source_line: str) -> str:
-        """Clean and format source definition by removing common leading whitespace."""
-        if not source_line:
-            return source_line
-
-        lines = source_line.split("\n")
-        if len(lines) <= 1:
-            return source_line.strip()
-
-        # Find the minimum indentation (excluding empty lines)
-        non_empty_lines = [line for line in lines if line.strip()]
-        if not non_empty_lines:
-            return source_line.strip()
-
-        min_indent = min(len(line) - len(line.lstrip()) for line in non_empty_lines)
-
-        # Remove the common indentation from all lines
-        cleaned_lines = []
-        for line in lines:
-            if line.strip():  # Non-empty line
-                cleaned_lines.append(
-                    line[min_indent:] if len(line) > min_indent else line.lstrip()
-                )
-            else:  # Empty line
-                cleaned_lines.append("")
-
-        return "\n".join(cleaned_lines).strip()

@@ -252,20 +252,34 @@ def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
         # Check if it's a list [item1, item2, ...]
         children = get_children(list_node)
         if len(children) >= 3 and get_value(children[0]) == "[" and get_value(children[-1]) == "]":
-            # Extract items between brackets
+            # Extract items between brackets - could be in testlist_comp or directly
             items = []
             for child in children[1:-1]:  # Skip brackets
-                if hasattr(child, "type") and child.type == "string":
-                    # Extract string value and remove quotes
-                    value = get_value(child)
-                    if value and len(value) >= 2:
-                        # Remove surrounding quotes
-                        if (value.startswith('"') and value.endswith('"')) or (
-                            value.startswith("'") and value.endswith("'")
-                        ):
-                            items.append(value[1:-1])
-                        else:
-                            items.append(value)
+                if hasattr(child, "type"):
+                    if child.type == "string":
+                        # Direct string child
+                        value = get_value(child)
+                        if value and len(value) >= 2:
+                            # Remove surrounding quotes
+                            if (value.startswith('"') and value.endswith('"')) or (
+                                value.startswith("'") and value.endswith("'")
+                            ):
+                                items.append(value[1:-1])
+                            else:
+                                items.append(value)
+                    elif child.type in ("testlist_comp", "testlist"):
+                        # testlist_comp contains the actual string nodes
+                        for grandchild in get_children(child):
+                            if hasattr(grandchild, "type") and grandchild.type == "string":
+                                value = get_value(grandchild)
+                                if value and len(value) >= 2:
+                                    # Remove surrounding quotes
+                                    if (value.startswith('"') and value.endswith('"')) or (
+                                        value.startswith("'") and value.endswith("'")
+                                    ):
+                                        items.append(value[1:-1])
+                                    else:
+                                        items.append(value)
             return items if items else None
 
     return None
