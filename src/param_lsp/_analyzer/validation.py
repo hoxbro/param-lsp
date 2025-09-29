@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 logger = logging.getLogger(__name__)
 
-from ..constants import DEPRECATED_PARAMETER_TYPES
+from param_lsp.constants import DEPRECATED_PARAMETER_TYPES
+
 from .parameter_extractor import (
     extract_boolean_value,
     extract_numeric_value,
@@ -31,6 +32,7 @@ from .parso_utils import (
 
 if TYPE_CHECKING:
     from parso.tree import BaseNode, NodeOrLeaf
+
     from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
 
 
