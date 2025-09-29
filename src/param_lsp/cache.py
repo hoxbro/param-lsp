@@ -175,6 +175,7 @@ class ExternalLibraryCache:
                 "allow_None": param_info.allow_None,
                 "default": param_info.default,
                 "location": param_info.location,
+                "objects": param_info.objects,
             }
 
         return {
@@ -206,6 +207,7 @@ class ExternalLibraryCache:
                     allow_None=allow_None_value,
                     default=param_data.get("default"),
                     location=param_data.get("location"),
+                    objects=param_data.get("objects"),
                 )
                 param_class_info.add_parameter(param_info)
 

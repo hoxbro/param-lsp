@@ -12,6 +12,7 @@ from param_lsp.constants import PARAM_TYPES
 
 logger = logging.getLogger(__name__)
 
+from .ast_navigator import SourceAnalyzer
 from .parso_utils import (
     find_arguments_in_trailer,
     find_function_call_trailers,
@@ -233,6 +234,43 @@ def extract_default_from_call(call_node: NodeOrLeaf) -> NodeOrLeaf | None:
     return None
 
 
+def extract_objects_from_call(call_node: NodeOrLeaf) -> list[str] | None:
+    """Extract objects list from Selector parameter call."""
+    kwargs = get_keyword_arguments(call_node)
+    if "objects" in kwargs:
+        # Extract list values from the objects argument
+        return _extract_list_values(kwargs["objects"])
+    return None
+
+
+def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
+    """Extract string values from a list node."""
+    if not list_node or not hasattr(list_node, "type"):
+        return None
+
+    if list_node.type == "atom":
+        # Check if it's a list [item1, item2, ...]
+        children = get_children(list_node)
+        if len(children) >= 3 and get_value(children[0]) == "[" and get_value(children[-1]) == "]":
+            # Extract items between brackets
+            items = []
+            for child in children[1:-1]:  # Skip brackets
+                if hasattr(child, "type") and child.type == "string":
+                    # Extract string value and remove quotes
+                    value = get_value(child)
+                    if value and len(value) >= 2:
+                        # Remove surrounding quotes
+                        if (value.startswith('"') and value.endswith('"')) or (
+                            value.startswith("'") and value.endswith("'")
+                        ):
+                            items.append(value[1:-1])
+                        else:
+                            items.append(value)
+            return items if items else None
+
+    return None
+
+
 def is_none_value(node: NodeOrLeaf) -> bool:
     """Check if a parso node represents None."""
     return (
@@ -390,6 +428,7 @@ def extract_parameter_info_from_assignment(
     allow_None = False
     default = None
     location = None
+    objects = None
 
     # Get the parameter call (right-hand side of assignment)
     param_call = None
@@ -407,11 +446,12 @@ def extract_parameter_info_from_assignment(
         if param_class_info:
             cls = param_class_info["type"]
 
-        # Extract parameter arguments (bounds, doc, default, etc.) from the whole param_call
+        # Extract parameter arguments (bounds, doc, default, objects, etc.) from the whole param_call
         bounds = extract_bounds_from_call(param_call)
         doc = extract_doc_from_call(param_call)
         allow_None_value = extract_allow_None_from_call(param_call)
         default_value = extract_default_from_call(param_call)
+        objects = extract_objects_from_call(param_call)
 
         # Store default value as a string representation
         if default_value is not None:
@@ -428,12 +468,15 @@ def extract_parameter_info_from_assignment(
         try:
             # Get line number from the parso node
             line_number = assignment_node.start_pos[0]
-            # Get the source line from the current file content
+            # Get the multiline source definition from the current file content
             if current_file_content:
                 lines = current_file_content.split("\n")
                 if 0 <= line_number - 1 < len(lines):
-                    source_line = lines[line_number - 1].strip()
-                    location = {"line": line_number, "source": source_line}
+                    # Use multiline extraction to get complete parameter definition
+                    source_definition = SourceAnalyzer.extract_multiline_definition(
+                        lines, line_number - 1
+                    )
+                    location = {"line": line_number, "source": source_definition}
         except (AttributeError, IndexError):
             # If we can't get location info, continue without it
             pass
@@ -447,4 +490,5 @@ def extract_parameter_info_from_assignment(
         allow_None=allow_None,
         default=default,
         location=location,
+        objects=objects,
     )

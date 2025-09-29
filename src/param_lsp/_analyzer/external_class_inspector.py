@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 import param
 
 from param_lsp.cache import external_library_cache
-from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
+from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES, SELECTOR_PARAM_TYPES
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 if TYPE_CHECKING:
@@ -164,6 +164,16 @@ class ExternalClassInspector:
                         # Get default value
                         default = str(param_obj.default) if hasattr(param_obj, "default") else None
 
+                        # Get objects for Selector parameters
+                        objects = None
+                        if (
+                            cls_name in SELECTOR_PARAM_TYPES
+                            and hasattr(param_obj, "objects")
+                            and param_obj.objects is not None
+                        ):
+                            # Convert objects to string list
+                            objects = [str(obj) for obj in param_obj.objects]
+
                         # Try to get source file location for the parameter
                         location = None
                         try:
@@ -185,6 +195,7 @@ class ExternalClassInspector:
                             allow_None=allow_None,
                             default=default,
                             location=location,
+                            objects=objects,
                         )
                         class_info.add_parameter(param_info)
 
@@ -324,6 +335,16 @@ class ExternalClassInspector:
                         # Get default value
                         default = str(param_obj.default) if hasattr(param_obj, "default") else None
 
+                        # Get objects for Selector parameters
+                        objects = None
+                        if (
+                            cls_name in SELECTOR_PARAM_TYPES
+                            and hasattr(param_obj, "objects")
+                            and param_obj.objects is not None
+                        ):
+                            # Convert objects to string list
+                            objects = [str(obj) for obj in param_obj.objects]
+
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
                             name=param_name,
@@ -333,6 +354,7 @@ class ExternalClassInspector:
                             allow_None=allow_None,
                             default=default,
                             location=None,  # No location for external classes
+                            objects=objects,
                         )
                         param_class_info.add_parameter(param_info)
 

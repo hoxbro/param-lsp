@@ -7,7 +7,7 @@ import textwrap
 
 import param
 
-from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
+from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS, SELECTOR_PARAM_TYPES
 
 from .base import LSPServerBase
 
@@ -99,6 +99,11 @@ class HoverMixin(LSPServerBase):
                 left_bracket = "[" if left_inclusive else "("
                 right_bracket = "]" if right_inclusive else ")"
                 header_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
+
+        # Add objects information for Selector parameters
+        if param_info.objects and param_info.cls in SELECTOR_PARAM_TYPES:
+            objects_str = ", ".join([f"`{obj}`" for obj in param_info.objects])
+            header_parts.append(f"Objects: {objects_str}")
 
         hover_sections = ["\n\n".join(header_parts)]
 
