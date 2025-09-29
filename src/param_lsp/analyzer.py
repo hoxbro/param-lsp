@@ -41,7 +41,7 @@ from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
 from ._analyzer.validation import ParameterValidator
-from .constants import PARAM_TYPE_MAP, PARAM_TYPES
+from .constants import PARAM_TYPE_MAP
 from .models import ParameterInfo, ParameterizedInfo
 
 if TYPE_CHECKING:
@@ -134,7 +134,6 @@ class ParamAnalyzer:
             analyze_external_class_ast_func=self._analyze_external_class_ast,
             resolve_full_class_path_func=self.import_resolver.resolve_full_class_path,
         )
-
 
     def _analyze_file_for_import_resolver(
         self, content: str, file_path: str | None = None
@@ -238,14 +237,15 @@ class ParamAnalyzer:
         """Check if a parso assignment statement looks like a parameter definition."""
         return self.parameter_detector.is_parameter_assignment(node)
 
-
     def _handle_class_def(self, node: BaseNode) -> None:
         """Handle class definitions that might inherit from param.Parameterized (parso node)."""
         # Check if class inherits from param.Parameterized (directly or indirectly)
         is_param_class = False
         bases = parso_utils.get_class_bases(node)
         for base in bases:
-            if self.inheritance_resolver.is_param_base(base, getattr(self, "_current_file_path", None)):
+            if self.inheritance_resolver.is_param_base(
+                base, getattr(self, "_current_file_path", None)
+            ):
                 is_param_class = True
                 break
 
@@ -357,7 +357,6 @@ class ParamAnalyzer:
 
         # Fallback: just use the filename with module info
         return f"{library_name}/{path.name}"
-
 
     def _discover_external_param_classes(
         self, tree: NodeOrLeaf, cached_nodes: list[NodeOrLeaf] | None = None

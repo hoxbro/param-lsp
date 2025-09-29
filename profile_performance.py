@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Performance profiling script for param-lsp analyzer."""
 
+from __future__ import annotations
+
 import time
 from pathlib import Path
 
@@ -10,15 +12,15 @@ from src.param_lsp.analyzer import ParamAnalyzer
 def profile_analyzer_performance():
     """Profile the performance of the ParamAnalyzer."""
     # Test content with various complexity levels
-    simple_content = '''
+    simple_content = """
 import param
 
 class SimpleClass(param.Parameterized):
     x = param.Number(default=1.0, bounds=(0, 10))
     name = param.String(default="test")
-'''
+"""
 
-    complex_content = '''
+    complex_content = """
 import param
 from typing import Optional
 
@@ -47,7 +49,7 @@ child.child_param = 3.0  # Valid
 # Create constructor calls
 simple_instance = SimpleClass(x=3.0, name="constructed")
 child_instance = Child(base_param=25, child_param=1.5, flag=False)
-'''
+"""
 
     # Initialize analyzer
     analyzer = ParamAnalyzer()
@@ -57,28 +59,28 @@ child_instance = Child(base_param=25, child_param=1.5, flag=False)
 
     # Profile simple content
     start_time = time.perf_counter()
-    for i in range(100):
+    for _ in range(100):
         analyzer.analyze_file(simple_content)
     simple_time = time.perf_counter() - start_time
 
     print(f"Simple analysis (100 iterations): {simple_time:.4f}s")
-    print(f"Average per simple analysis: {simple_time/100*1000:.2f}ms")
+    print(f"Average per simple analysis: {simple_time / 100 * 1000:.2f}ms")
 
     # Profile complex content
     start_time = time.perf_counter()
-    for i in range(50):
+    for _ in range(50):
         analyzer.analyze_file(complex_content)
     complex_time = time.perf_counter() - start_time
 
     print(f"Complex analysis (50 iterations): {complex_time:.4f}s")
-    print(f"Average per complex analysis: {complex_time/50*1000:.2f}ms")
+    print(f"Average per complex analysis: {complex_time / 50 * 1000:.2f}ms")
 
     # Single detailed analysis for insights
     start_time = time.perf_counter()
     result = analyzer.analyze_file(complex_content)
     single_time = time.perf_counter() - start_time
 
-    print(f"\nSingle complex analysis: {single_time*1000:.2f}ms")
+    print(f"\nSingle complex analysis: {single_time * 1000:.2f}ms")
     print(f"Classes detected: {len(result['param_classes'])}")
     print(f"Imports detected: {len(result['imports'])}")
     print(f"Type errors found: {len(result['type_errors'])}")
@@ -87,7 +89,7 @@ child_instance = Child(base_param=25, child_param=1.5, flag=False)
     test_files = [
         "tests/test_analyzer/test_validation.py",
         "src/param_lsp/analyzer.py",
-        "src/param_lsp/models.py"
+        "src/param_lsp/models.py",
     ]
 
     for test_file in test_files:
@@ -99,7 +101,7 @@ child_instance = Child(base_param=25, child_param=1.5, flag=False)
             result = analyzer.analyze_file(content, test_file)
             file_time = time.perf_counter() - start_time
 
-            print(f"\nReal file analysis ({test_file}): {file_time*1000:.2f}ms")
+            print(f"\nReal file analysis ({test_file}): {file_time * 1000:.2f}ms")
             print(f"  Classes: {len(result['param_classes'])}")
             print(f"  Imports: {len(result['imports'])}")
             print(f"  Errors: {len(result['type_errors'])}")

@@ -16,11 +16,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from param_lsp.constants import PARAM_TYPES
+
 from . import parso_utils
-from ..constants import PARAM_TYPES
 
 if TYPE_CHECKING:
-    from parso.tree import BaseNode, NodeOrLeaf
+    from parso.tree import NodeOrLeaf
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +121,11 @@ class ImportHandler:
         if node.type != "dotted_name":
             return parso_utils.get_value(node)
 
-        parts = []
-        for child in parso_utils.get_children(node):
-            if child.type == "name":
-                parts.append(parso_utils.get_value(child))
+        parts = [
+            parso_utils.get_value(child)
+            for child in parso_utils.get_children(node)
+            if child.type == "name"
+        ]
 
         return ".".join(parts) if parts else None
 

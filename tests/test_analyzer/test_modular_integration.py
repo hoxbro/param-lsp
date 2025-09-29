@@ -3,6 +3,8 @@ Integration tests for modular component interactions.
 Tests the basic coordination between different analyzer modules.
 """
 
+from __future__ import annotations
+
 from parso import parse
 
 from src.param_lsp._analyzer.external_class_inspector import ExternalClassInspector
@@ -28,15 +30,15 @@ class TestModularComponentIntegration:
 
     def test_parameter_extractor_basic_functions(self):
         """Test parameter extraction basic functions work."""
-        code1 = '''
+        code1 = """
 import param
 class Test1(param.Parameterized):
     x = param.Number()
-'''
+"""
 
-        code2 = '''
+        code2 = """
 x = 42  # Not a parameter
-'''
+"""
 
         # Both should be parseable
         tree1 = parse(code1)
@@ -44,12 +46,12 @@ x = 42  # Not a parameter
 
         # Test parameter assignment detection on actual assignments
         for node in walk_tree(tree1):
-            if hasattr(node, 'type') and node.type == "expr_stmt":
+            if hasattr(node, "type") and node.type == "expr_stmt":
                 result = is_parameter_assignment(node)
                 assert isinstance(result, bool)
 
         for node in walk_tree(tree2):
-            if hasattr(node, 'type') and node.type == "expr_stmt":
+            if hasattr(node, "type") and node.type == "expr_stmt":
                 result = is_parameter_assignment(node)
                 assert isinstance(result, bool)
 
@@ -115,12 +117,12 @@ x = 42  # Not a parameter
 
     def test_cross_module_data_flow(self):
         """Test data flow between different modules."""
-        code = '''
+        code = """
 import param
 
 class MyClass(param.Parameterized):
     value = param.Number(default=1.0)
-'''
+"""
         tree = parse(code)
 
         # Step 1: Use parso utils to extract structure
@@ -130,14 +132,14 @@ class MyClass(param.Parameterized):
         # Step 2: Extract imports
         import_nodes = []
         for node in walk_tree(tree):
-            if hasattr(node, 'type') and node.type in ("import_name", "import_from"):
+            if hasattr(node, "type") and node.type in ("import_name", "import_from"):
                 import_nodes.append(node)
 
         assert len(import_nodes) >= 1  # Should find the import statement
 
         # Step 3: Test that extracted data is usable
         for node in walk_tree(tree):
-            if hasattr(node, 'type') and node.type == "expr_stmt":
+            if hasattr(node, "type") and node.type == "expr_stmt":
                 # Should be able to test if it's a parameter assignment
                 result = is_parameter_assignment(node)
                 assert isinstance(result, bool)
@@ -193,13 +195,13 @@ class MyClass(param.Parameterized):
     def test_modular_component_coordination(self):
         """Test that modular components can work together."""
         # Test a realistic scenario where components need to coordinate
-        code = '''
+        code = """
 import param
 
 class TestWidget(param.Parameterized):
     name = param.String(default="widget")
     value = param.Number(default=0.0, bounds=(0, 1))
-'''
+"""
         tree = parse(code)
 
         # Test that all components can process the same tree without issues
@@ -217,7 +219,7 @@ class TestWidget(param.Parameterized):
         # Parameter assignment detection should work
         assignment_count = 0
         for node in walk_tree(tree):
-            if hasattr(node, 'type') and node.type == "expr_stmt":
+            if hasattr(node, "type") and node.type == "expr_stmt":
                 if is_parameter_assignment(node):
                     assignment_count += 1
 

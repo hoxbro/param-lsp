@@ -395,9 +395,9 @@ def extract_parameter_info_from_assignment(
     param_call = None
     found_equals = False
     for child in get_children(assignment_node):
-        if hasattr(child, 'type') and child.type == "operator" and get_value(child) == "=":
+        if hasattr(child, "type") and child.type == "operator" and get_value(child) == "=":
             found_equals = True
-        elif found_equals and hasattr(child, 'type') and child.type in ("power", "atom_expr"):
+        elif found_equals and hasattr(child, "type") and child.type in ("power", "atom_expr"):
             param_call = child
             break
 

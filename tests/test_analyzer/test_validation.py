@@ -124,7 +124,9 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the keyword node for True
         keyword_nodes = [
-            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "True"
+            node
+            for node in walk_tree(tree)
+            if node.type == "keyword" and str(node.value) == "True"
         ]
         assert len(keyword_nodes) == 1
 
@@ -137,7 +139,9 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the keyword node for False
         keyword_nodes = [
-            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "False"
+            node
+            for node in walk_tree(tree)
+            if node.type == "keyword" and str(node.value) == "False"
         ]
         assert len(keyword_nodes) == 1
 
@@ -150,7 +154,9 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the keyword node for None
         keyword_nodes = [
-            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "None"
+            node
+            for node in walk_tree(tree)
+            if node.type == "keyword" and str(node.value) == "None"
         ]
         assert len(keyword_nodes) == 1
 
@@ -163,8 +169,13 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the list literal node (atom containing brackets)
         atom_nodes = [
-            node for node in walk_tree(tree)
-            if node.type == "atom" and any(child.type == "operator" and child.value == "[" for child in getattr(node, "children", []))
+            node
+            for node in walk_tree(tree)
+            if node.type == "atom"
+            and any(
+                child.type == "operator" and child.value == "["
+                for child in getattr(node, "children", [])
+            )
         ]
         assert len(atom_nodes) == 1
 
@@ -177,8 +188,13 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the tuple literal node (atom containing parentheses)
         atom_nodes = [
-            node for node in walk_tree(tree)
-            if node.type == "atom" and any(child.type == "operator" and child.value == "(" for child in getattr(node, "children", []))
+            node
+            for node in walk_tree(tree)
+            if node.type == "atom"
+            and any(
+                child.type == "operator" and child.value == "("
+                for child in getattr(node, "children", [])
+            )
         ]
         assert len(atom_nodes) == 1
 
@@ -191,8 +207,13 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the dict literal node (atom containing braces)
         atom_nodes = [
-            node for node in walk_tree(tree)
-            if node.type == "atom" and any(child.type == "operator" and child.value == "{" for child in getattr(node, "children", []))
+            node
+            for node in walk_tree(tree)
+            if node.type == "atom"
+            and any(
+                child.type == "operator" and child.value == "{"
+                for child in getattr(node, "children", [])
+            )
         ]
         assert len(atom_nodes) == 1
 
@@ -205,7 +226,9 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the keyword node for True
         keyword_nodes = [
-            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "True"
+            node
+            for node in walk_tree(tree)
+            if node.type == "keyword" and str(node.value) == "True"
         ]
         assert len(keyword_nodes) == 1
 
@@ -217,7 +240,9 @@ class TestParameterValidator:
         tree = parse(code)
         # Find the keyword node for False
         keyword_nodes = [
-            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "False"
+            node
+            for node in walk_tree(tree)
+            if node.type == "keyword" and str(node.value) == "False"
         ]
         assert len(keyword_nodes) == 1
 

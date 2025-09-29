@@ -153,7 +153,7 @@ def get_class_name(class_node: BaseNode) -> str | None:
     if class_node is None:
         return None
     for child in get_children(class_node):
-        if hasattr(child, 'type') and child.type == "name":
+        if hasattr(child, "type") and child.type == "name":
             return get_value(child)
     return None
 

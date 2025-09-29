@@ -1,7 +1,8 @@
 """Tests for the AST navigator module."""
 
+from __future__ import annotations
+
 import parso
-import pytest
 
 from param_lsp._analyzer.ast_navigator import (
     ImportHandler,
@@ -193,7 +194,7 @@ class TestSourceAnalyzer:
             "    default=100,",
             "    bounds=(1, 1000),",
             "    doc='Widget width'",
-            ")"
+            ")",
         ]
         result = SourceAnalyzer.extract_multiline_definition(source_lines, 0)
         expected = "\n".join(source_lines)
@@ -205,7 +206,7 @@ class TestSourceAnalyzer:
             "items = param.List(",
             "    default=[func(a, b), other(x, y)],",
             "    doc='List of items'",
-            ")"
+            ")",
         ]
         result = SourceAnalyzer.extract_multiline_definition(source_lines, 0)
         expected = "\n".join(source_lines)
@@ -216,7 +217,7 @@ class TestSourceAnalyzer:
         source_lines = [
             "class MyWidget(param.Parameterized):",
             "    width = param.Integer(default=100)",
-            "    height = param.Integer(default=50)"
+            "    height = param.Integer(default=50)",
         ]
         result = SourceAnalyzer.extract_complete_parameter_definition(source_lines, "width")
         assert result == "width = param.Integer(default=100)"
@@ -225,7 +226,7 @@ class TestSourceAnalyzer:
         """Test when parameter definition is not found."""
         source_lines = [
             "class MyWidget(param.Parameterized):",
-            "    height = param.Integer(default=50)"
+            "    height = param.Integer(default=50)",
         ]
         result = SourceAnalyzer.extract_complete_parameter_definition(source_lines, "width")
         assert result is None
@@ -235,7 +236,7 @@ class TestSourceAnalyzer:
         source_lines = [
             "class MyWidget(param.Parameterized):",
             "    width = param.Integer(default=100)",
-            "    height = param.Integer(default=50)"
+            "    height = param.Integer(default=50)",
         ]
         result = SourceAnalyzer.find_parameter_line_in_source(source_lines, 0, "width")
         assert result == 1  # 0-based index + start_line
@@ -244,7 +245,7 @@ class TestSourceAnalyzer:
         """Test when parameter line is not found."""
         source_lines = [
             "class MyWidget(param.Parameterized):",
-            "    height = param.Integer(default=50)"
+            "    height = param.Integer(default=50)",
         ]
         result = SourceAnalyzer.find_parameter_line_in_source(source_lines, 0, "width")
         assert result is None
