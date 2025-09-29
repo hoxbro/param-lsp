@@ -186,6 +186,14 @@ class ExternalClassInspector:
                             # If we can't get source location, just continue without it
                             logger.debug(f"Could not get source location for {param_name}: {e}")
 
+                        # Extract container constraints for List/Tuple parameters
+                        item_type = None
+                        length = None
+                        if cls_name == "List" and hasattr(param_obj, "item_type"):
+                            item_type = param_obj.item_type
+                        elif cls_name == "Tuple" and hasattr(param_obj, "length"):
+                            length = param_obj.length
+
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
                             name=param_name,
@@ -196,6 +204,8 @@ class ExternalClassInspector:
                             default=default,
                             location=location,
                             objects=objects,
+                            item_type=item_type,
+                            length=length,
                         )
                         class_info.add_parameter(param_info)
 
@@ -345,6 +355,14 @@ class ExternalClassInspector:
                             # Convert objects to string list
                             objects = [str(obj) for obj in param_obj.objects]
 
+                        # Extract container constraints for List/Tuple parameters
+                        item_type = None
+                        length = None
+                        if cls_name == "List" and hasattr(param_obj, "item_type"):
+                            item_type = param_obj.item_type
+                        elif cls_name == "Tuple" and hasattr(param_obj, "length"):
+                            length = param_obj.length
+
                         # Create ParameterInfo object
                         param_info = ParameterInfo(
                             name=param_name,
@@ -355,6 +373,8 @@ class ExternalClassInspector:
                             default=default,
                             location=None,  # No location for external classes
                             objects=objects,
+                            item_type=item_type,
+                            length=length,
                         )
                         param_class_info.add_parameter(param_info)
 

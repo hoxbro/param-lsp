@@ -243,6 +243,52 @@ def extract_objects_from_call(call_node: NodeOrLeaf) -> list[str] | None:
     return None
 
 
+def extract_item_type_from_call(call_node: NodeOrLeaf) -> type | None:
+    """Extract item_type from List parameter call."""
+    kwargs = get_keyword_arguments(call_node)
+    if "item_type" in kwargs:
+        # Extract the type from the item_type argument
+        return _extract_type_value(kwargs["item_type"])
+    return None
+
+
+def extract_length_from_call(call_node: NodeOrLeaf) -> int | None:
+    """Extract length from Tuple parameter call."""
+    kwargs = get_keyword_arguments(call_node)
+    if "length" in kwargs:
+        # Extract the numeric value from the length argument
+        numeric_value = extract_numeric_value(kwargs["length"])
+        # Convert to int if it's a float with no decimal part
+        if isinstance(numeric_value, float) and numeric_value.is_integer():
+            return int(numeric_value)
+        elif isinstance(numeric_value, int):
+            return numeric_value
+    return None
+
+
+def _extract_type_value(type_node: NodeOrLeaf) -> type | None:
+    """Extract a type from a parso node (e.g., str, int, float)."""
+    if not type_node or not hasattr(type_node, "type"):
+        return None
+
+    if type_node.type == "name":
+        type_name = get_value(type_node)
+        if type_name is not None:
+            # Map common type names to Python types
+            type_mapping = {
+                "str": str,
+                "int": int,
+                "float": float,
+                "bool": bool,
+                "list": list,
+                "dict": dict,
+                "tuple": tuple,
+            }
+            return type_mapping.get(type_name)
+
+    return None
+
+
 def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
     """Extract string values from a list node."""
     if not list_node or not hasattr(list_node, "type"):
@@ -505,6 +551,14 @@ def extract_parameter_info_from_assignment(
             # If we can't get location info, continue without it
             pass
 
+    # Extract container constraints
+    item_type = None
+    length = None
+    if cls == "List" and param_call is not None:
+        item_type = extract_item_type_from_call(param_call)
+    elif cls == "Tuple" and param_call is not None:
+        length = extract_length_from_call(param_call)
+
     # Create ParameterInfo object
     return ParameterInfo(
         name=param_name,
@@ -515,4 +569,6 @@ def extract_parameter_info_from_assignment(
         default=default,
         location=location,
         objects=objects,
+        item_type=item_type,
+        length=length,
     )

@@ -208,6 +208,8 @@ class ExternalLibraryCache:
                     default=param_data.get("default"),
                     location=param_data.get("location"),
                     objects=param_data.get("objects"),
+                    item_type=param_data.get("item_type"),
+                    length=param_data.get("length"),
                 )
                 param_class_info.add_parameter(param_info)
 
