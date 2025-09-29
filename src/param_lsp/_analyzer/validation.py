@@ -73,6 +73,7 @@ class ParameterValidator:
         imports: dict[str, str],
         is_parameter_assignment_func,
         workspace_root: str | None = None,
+        external_inspector=None,
     ):
         self.param_type_map = param_type_map
         self.param_classes = param_classes
@@ -80,6 +81,7 @@ class ParameterValidator:
         self.imports = imports
         self.is_parameter_assignment = is_parameter_assignment_func
         self.workspace_root = workspace_root
+        self.external_inspector = external_inspector
         self.type_errors: list[TypeErrorDict] = []
 
     def check_parameter_types(
@@ -853,6 +855,6 @@ class ParameterValidator:
     def _analyze_external_class_ast(self, full_class_path: str):
         """Analyze external class using AST through external class inspector."""
         # Use the external inspector passed during initialization
-        if hasattr(self, "external_inspector"):
+        if hasattr(self, "external_inspector") and self.external_inspector is not None:
             return self.external_inspector.analyze_external_class_ast(full_class_path)
         return None

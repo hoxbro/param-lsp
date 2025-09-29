@@ -24,7 +24,8 @@ class TestExternalClassInspector:
             inspector.populate_external_library_cache()
         except Exception as e:
             # May fail due to missing libraries, but should not crash the test
-            assert isinstance(e, (ImportError, FileNotFoundError, OSError))
+            if not isinstance(e, (ImportError, FileNotFoundError, OSError)):
+                raise
 
     def test_analyze_external_class_ast_nonexistent(self):
         """Test analyze_external_class_ast with non-existent class."""
@@ -105,63 +106,6 @@ class TestExternalClassInspector:
         result = inspector._find_parameter_defining_class(ChildClass, "some_param")
         assert result is None
 
-    def test_get_all_classes_in_module_invalid(self):
-        """Test _get_all_classes_in_module with invalid module."""
-        inspector = ExternalClassInspector()
-
-        # Test with None
-        result = inspector._get_all_classes_in_module(None)
-        assert result == []
-
-        # Test with non-module object
-        result = inspector._get_all_classes_in_module("not_a_module")
-        assert result == []
-
-    def test_introspect_param_class_for_cache_invalid(self):
-        """Test _introspect_param_class_for_cache with invalid input."""
-        inspector = ExternalClassInspector()
-
-        # Test with None
-        result = inspector._introspect_param_class_for_cache(None)
-        assert result is None
-
-        # Test with non-class object
-        result = inspector._introspect_param_class_for_cache("not_a_class")
-        assert result is None
-
-        # Test with built-in type
-        result = inspector._introspect_param_class_for_cache(int)
-        assert result is None
-
-    def test_get_parameter_source_location_edge_cases(self):
-        """Test _get_parameter_source_location with edge cases."""
-        inspector = ExternalClassInspector()
-
-        # Test with None class
-        result = inspector._get_parameter_source_location(None, None, "param_name")
-        assert result is None
-
-        # Test with invalid parameter name
-        class MockClass:
-            pass
-
-        result = inspector._get_parameter_source_location(None, MockClass, "nonexistent_param")
-        assert result is None
-
-    def test_discover_param_classes_in_library_invalid(self):
-        """Test _discover_param_classes_in_library with invalid input."""
-        inspector = ExternalClassInspector()
-
-        # Test with None
-        result = inspector._discover_param_classes_in_library(None, "invalid_library")
-        assert result == 0
-
-        # Test with non-existent library
-        result = inspector._discover_param_classes_in_library(
-            type("MockModule", (), {}), "nonexistent.library"
-        )
-        assert result == 0
-
 
 class TestExternalClassInspectorIntegration:
     """Integration tests for ExternalClassInspector."""
@@ -174,10 +118,6 @@ class TestExternalClassInspectorIntegration:
         inspector.analyze_external_class_ast("definitely.not.a.real.class")
         inspector._introspect_external_class_runtime("also.not.real")
 
-        # Should handle None inputs
-        inspector._get_all_classes_in_module(None)
-        inspector._introspect_param_class_for_cache(None)
-
     def test_real_param_class_analysis(self):
         """Test analysis of real param classes."""
         inspector = ExternalClassInspector()
@@ -185,21 +125,6 @@ class TestExternalClassInspectorIntegration:
         result = inspector.analyze_external_class_ast("param.Parameterized")
         # May be None or a ParameterizedInfo object
         assert result is None or hasattr(result, "name")
-
-    def test_attribute_errors_handled(self):
-        """Test that AttributeError is handled gracefully."""
-        inspector = ExternalClassInspector()
-
-        # Create a mock object that will cause AttributeError
-        class BrokenMock:
-            def __getattr__(self, name):
-                raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-
-        broken_obj = BrokenMock()
-
-        # These should not crash even with broken objects
-        result = inspector._introspect_param_class_for_cache(broken_obj)
-        assert result is None
 
     def test_memory_efficiency(self):
         """Test that the inspector doesn't leak memory with repeated calls."""

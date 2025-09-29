@@ -17,13 +17,16 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from parso.tree import NodeOrLeaf
 
+    from param_lsp._analyzer.validation import TypeErrorDict
+    from param_lsp.models import ParameterizedInfo
+
 
 class AnalysisResult(TypedDict):
     """Type definition for analysis result dictionaries."""
 
-    param_classes: dict[str, object]  # Using object for now, would be ParameterizedInfo
+    param_classes: dict[str, ParameterizedInfo]
     imports: dict[str, str]
-    type_errors: list[dict]
+    type_errors: list[TypeErrorDict]
 
 
 class ImportResolver:

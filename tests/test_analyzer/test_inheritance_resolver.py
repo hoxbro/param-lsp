@@ -31,7 +31,7 @@ class TestInheritanceResolver:
             ParameterInfo(
                 name="local_param",
                 cls="Integer",
-                default=42,
+                default="42",
             )
         )
 
@@ -48,7 +48,7 @@ class TestInheritanceResolver:
             ParameterInfo(
                 name="external_param",
                 cls="Boolean",
-                default=True,
+                default="True",
                 doc="External parameter",
             )
         )
@@ -195,7 +195,7 @@ class TestInheritanceResolver:
 
         assert "external_param" in inherited
         assert inherited["external_param"].cls == "Boolean"
-        assert inherited["external_param"].default is True
+        assert inherited["external_param"].default == "True"
 
     def test_collect_inherited_parameters_multiple_parents(self, resolver):
         """Test collecting parameters from multiple parent classes."""

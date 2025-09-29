@@ -30,7 +30,7 @@ class TestParameterValidator:
             ParameterInfo(
                 name="numeric_param",
                 cls="Number",
-                default=42.0,
+                default="42.0",
                 bounds=(0, 100),
                 doc="Numeric parameter with bounds",
             )
@@ -39,7 +39,7 @@ class TestParameterValidator:
             ParameterInfo(
                 name="bool_param",
                 cls="Boolean",
-                default=True,
+                default="True",
                 doc="Boolean parameter",
             )
         )
@@ -94,7 +94,7 @@ class TestParameterValidator:
         assert len(string_nodes) == 1
 
         inferred_type = validator._infer_value_type(string_nodes[0])
-        assert inferred_type == str
+        assert inferred_type is str
 
     def test_infer_value_type_integer(self, validator):
         """Test _infer_value_type with integer literals."""
@@ -105,7 +105,7 @@ class TestParameterValidator:
         assert len(number_nodes) == 1
 
         inferred_type = validator._infer_value_type(number_nodes[0])
-        assert inferred_type == int
+        assert inferred_type is int
 
     def test_infer_value_type_float(self, validator):
         """Test _infer_value_type with float literals."""
@@ -116,7 +116,7 @@ class TestParameterValidator:
         assert len(number_nodes) == 1
 
         inferred_type = validator._infer_value_type(number_nodes[0])
-        assert inferred_type == float
+        assert inferred_type is float
 
     def test_infer_value_type_boolean_true(self, validator):
         """Test _infer_value_type with boolean True."""
@@ -131,7 +131,7 @@ class TestParameterValidator:
         assert len(keyword_nodes) == 1
 
         inferred_type = validator._infer_value_type(keyword_nodes[0])
-        assert inferred_type == bool
+        assert inferred_type is bool
 
     def test_infer_value_type_boolean_false(self, validator):
         """Test _infer_value_type with boolean False."""
@@ -146,7 +146,7 @@ class TestParameterValidator:
         assert len(keyword_nodes) == 1
 
         inferred_type = validator._infer_value_type(keyword_nodes[0])
-        assert inferred_type == bool
+        assert inferred_type is bool
 
     def test_infer_value_type_none(self, validator):
         """Test _infer_value_type with None."""
@@ -161,7 +161,7 @@ class TestParameterValidator:
         assert len(keyword_nodes) == 1
 
         inferred_type = validator._infer_value_type(keyword_nodes[0])
-        assert inferred_type == type(None)
+        assert inferred_type is type(None)
 
     def test_infer_value_type_list(self, validator):
         """Test _infer_value_type with list literals."""
@@ -180,7 +180,7 @@ class TestParameterValidator:
         assert len(atom_nodes) == 1
 
         inferred_type = validator._infer_value_type(atom_nodes[0])
-        assert inferred_type == list
+        assert inferred_type is list
 
     def test_infer_value_type_tuple(self, validator):
         """Test _infer_value_type with tuple literals."""
@@ -199,7 +199,7 @@ class TestParameterValidator:
         assert len(atom_nodes) == 1
 
         inferred_type = validator._infer_value_type(atom_nodes[0])
-        assert inferred_type == tuple
+        assert inferred_type is tuple
 
     def test_infer_value_type_dict(self, validator):
         """Test _infer_value_type with dict literals."""
@@ -218,7 +218,7 @@ class TestParameterValidator:
         assert len(atom_nodes) == 1
 
         inferred_type = validator._infer_value_type(atom_nodes[0])
-        assert inferred_type == dict
+        assert inferred_type is dict
 
     def test_is_boolean_literal_true(self, validator):
         """Test _is_boolean_literal with True."""
@@ -266,7 +266,8 @@ class TestParameterValidator:
     def test_format_expected_types_multiple(self, validator):
         """Test _format_expected_types with multiple types."""
         formatted = validator._format_expected_types((str, int))
-        assert "str" in formatted and "int" in formatted
+        assert "str" in formatted
+        assert "int" in formatted
 
     def test_parse_bounds_format_tuple(self, validator):
         """Test _parse_bounds_format with tuple bounds."""
@@ -281,7 +282,8 @@ class TestParameterValidator:
     def test_format_bounds_description(self, validator):
         """Test _format_bounds_description."""
         description = validator._format_bounds_description(0, 10, True, True)
-        assert "0" in description and "10" in description
+        assert "0" in description
+        assert "10" in description
 
     def test_get_parameter_type_from_class_existing(self, validator):
         """Test _get_parameter_type_from_class with existing parameter."""

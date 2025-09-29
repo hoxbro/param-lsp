@@ -5,6 +5,9 @@ Tests the basic coordination between different analyzer modules.
 
 from __future__ import annotations
 
+import tempfile
+from contextlib import suppress
+
 from parso import parse
 
 from src.param_lsp._analyzer.external_class_inspector import ExternalClassInspector
@@ -82,7 +85,8 @@ x = 42  # Not a parameter
         result = resolver.resolve_module_path(None, None)
         assert result is None
 
-        result = resolver.resolve_module_path("nonexistent", "/tmp")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = resolver.resolve_module_path("nonexistent", tmpdir)
         # Should handle gracefully
         assert result is None or isinstance(result, str)
 
@@ -103,13 +107,9 @@ x = 42  # Not a parameter
         resolver = ImportResolver()
 
         for test_input in test_inputs:
-            try:
-                if test_input is None:
-                    tree = None
-                else:
-                    tree = parse(test_input)
-            except Exception:
-                tree = None  # If parsing fails, use None
+            with suppress(Exception):
+                # If parsing fails, continue
+                _ = None if test_input is None else parse(test_input)
 
             # All these methods should handle None gracefully
             assert inspector._get_all_classes_in_module(None) == []
@@ -130,10 +130,11 @@ class MyClass(param.Parameterized):
         assert len(nodes) >= 1
 
         # Step 2: Extract imports
-        import_nodes = []
-        for node in walk_tree(tree):
-            if hasattr(node, "type") and node.type in ("import_name", "import_from"):
-                import_nodes.append(node)
+        import_nodes = [
+            node
+            for node in walk_tree(tree)
+            if hasattr(node, "type") and node.type in ("import_name", "import_from")
+        ]
 
         assert len(import_nodes) >= 1  # Should find the import statement
 
@@ -150,11 +151,9 @@ class MyClass(param.Parameterized):
         resolver = ImportResolver()
 
         # Test that if one component fails, others continue working
-        try:
+        with suppress(Exception):
             # This might fail but shouldn't crash the program
             inspector.analyze_external_class_ast("definitely.not.a.real.class")
-        except Exception:
-            pass  # Expected to potentially fail
 
         # Other components should still work
         assert resolver.resolve_module_path(None, None) is None
@@ -188,7 +187,8 @@ class MyClass(param.Parameterized):
 
         # Import resolver should work standalone
         resolver = ImportResolver()
-        result = resolver.resolve_module_path("test", "/tmp")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = resolver.resolve_module_path("test", tmpdir)
         # Should return None or a valid path, but not crash
         assert result is None or isinstance(result, str)
 
@@ -219,9 +219,12 @@ class TestWidget(param.Parameterized):
         # Parameter assignment detection should work
         assignment_count = 0
         for node in walk_tree(tree):
-            if hasattr(node, "type") and node.type == "expr_stmt":
-                if is_parameter_assignment(node):
-                    assignment_count += 1
+            if (
+                hasattr(node, "type")
+                and node.type == "expr_stmt"
+                and is_parameter_assignment(node)
+            ):
+                assignment_count += 1
 
         # Should detect parameter assignments
         assert assignment_count >= 0  # May or may not find assignments depending on implementation

@@ -83,7 +83,6 @@ class TestImportResolver:
         import_nodes = [node for node in walk_tree(tree) if node.type == "import_name"]
         assert len(import_nodes) == 1
 
-        initial_imports = dict(resolver.imports)
         resolver.handle_import(import_nodes[0])
 
         # Should add the import
@@ -246,7 +245,8 @@ class TestImportResolver:
         with pytest.MonkeyPatch().context() as m:
 
             def mock_open(*args, **kwargs):
-                raise OSError("File not found")
+                msg = "File not found"
+                raise OSError(msg)
 
             m.setattr("builtins.open", mock_open)
 
@@ -266,8 +266,8 @@ class TestImportResolver:
         assert "mod2" not in resolver1.imports
 
         # Test independent caches
-        resolver1.module_cache["test1"] = {"data": "cache1"}
-        resolver2.module_cache["test2"] = {"data": "cache2"}
+        resolver1.module_cache["test1"] = {"param_classes": {}, "imports": {}, "type_errors": []}
+        resolver2.module_cache["test2"] = {"param_classes": {}, "imports": {}, "type_errors": []}
 
         assert "test1" in resolver1.module_cache
         assert "test1" not in resolver2.module_cache

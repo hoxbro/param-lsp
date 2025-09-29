@@ -112,9 +112,8 @@ class ParamAnalyzer:
             imports=self.imports,
             is_parameter_assignment_func=self._is_parameter_assignment,
             workspace_root=str(self.workspace_root) if self.workspace_root else None,
+            external_inspector=self.external_inspector,
         )
-        # Pass external inspector to validator for external class analysis
-        self.validator.external_inspector = self.external_inspector
 
         # Use modular import resolver
         self.import_resolver = ImportResolver(
@@ -126,9 +125,13 @@ class ParamAnalyzer:
         )
 
         # Use modular inheritance resolver
+        # Filter out None values from external_param_classes
+        filtered_external_classes = {
+            k: v for k, v in self.external_param_classes.items() if v is not None
+        }
         self.inheritance_resolver = InheritanceResolver(
             param_classes=self.param_classes,
-            external_param_classes=self.external_param_classes,
+            external_param_classes=filtered_external_classes,
             imports=self.imports,
             get_imported_param_class_info_func=self.import_resolver.get_imported_param_class_info,
             analyze_external_class_ast_func=self._analyze_external_class_ast,

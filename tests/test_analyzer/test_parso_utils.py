@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import parso
-import pytest
 
 from param_lsp._analyzer.parso_utils import (
     find_all_parameter_assignments,
@@ -180,9 +179,8 @@ z
 
         assignment_count = 0
         for node in walk_tree(tree):
-            if node.type == "expr_stmt":
-                if is_assignment_stmt(node):
-                    assignment_count += 1
+            if node.type == "expr_stmt" and is_assignment_stmt(node):
+                assignment_count += 1
 
         assert assignment_count == 2  # x = 42 and y = "hello"
 
@@ -231,10 +229,11 @@ x = 42
 """
         tree = parso.parse(code)
 
-        function_calls = []
-        for node in walk_tree(tree):
-            if node.type in ("power", "atom_expr") and is_function_call(node):
-                function_calls.append(node)
+        function_calls = [
+            node
+            for node in walk_tree(tree)
+            if node.type in ("power", "atom_expr") and is_function_call(node)
+        ]
 
         assert len(function_calls) >= 1  # Should find at least one function call
 
@@ -311,9 +310,9 @@ class MyClass:
         # Simple mock parameter assignment checker
         def is_param_assignment(node):
             """Simple check for param.* assignments."""
-            if not is_assignment_stmt(node):
-                return False
-            return True  # For testing, consider all assignments as parameter assignments
+            return is_assignment_stmt(
+                node
+            )  # For testing, consider all assignments as parameter assignments
 
         class_nodes = [node for node in walk_tree(tree) if node.type == "classdef"]
         assert len(class_nodes) == 1

@@ -127,7 +127,9 @@ class ImportHandler:
             if child.type == "name"
         ]
 
-        return ".".join(parts) if parts else None
+        # Filter out None values before joining
+        valid_parts = [part for part in parts if part is not None]
+        return ".".join(valid_parts) if valid_parts else None
 
     def handle_import(self, node: NodeOrLeaf) -> None:
         """Handle 'import' statements (parso node).
