@@ -16,7 +16,28 @@ if TYPE_CHECKING:
 
 
 class InheritanceResolver:
-    """Handles inheritance resolution for parameter classes."""
+    """Resolves parameter inheritance hierarchies for Parameterized classes.
+
+    This class handles the complex task of resolving parameter inheritance
+    from parent classes, supporting both local classes (defined in the same
+    codebase) and external classes (from libraries like Panel, HoloViews).
+
+    Key capabilities:
+    - Identifies Parameterized base classes from AST nodes
+    - Collects inherited parameters from parent classes
+    - Handles multi-level inheritance chains
+    - Resolves external class inheritance via runtime introspection
+    - Manages parameter overriding (child parameters override parent ones)
+
+    The resolver works with both static analysis (for local classes) and
+    runtime introspection (for external library classes) to provide
+    complete inheritance resolution.
+
+    Attributes:
+        param_classes: Local parameterized classes in the codebase
+        external_param_classes: External parameterized classes from libraries
+        imports: Import mappings for resolving class references
+    """
 
     def __init__(
         self,

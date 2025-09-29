@@ -24,7 +24,30 @@ class AnalysisResult(TypedDict):
 
 
 class ImportResolver:
-    """Handles import parsing and module resolution."""
+    """Resolves imports and module paths for cross-file analysis.
+
+    This class provides comprehensive import resolution capabilities for
+    analyzing Parameterized classes across multiple files and modules.
+    It handles both local imports (within the workspace) and external
+    library imports.
+
+    Key capabilities:
+    - Parses and resolves import statements
+    - Resolves module paths relative to workspace
+    - Handles both absolute and relative imports
+    - Caches analyzed modules for performance
+    - Resolves full class paths for external libraries
+    - Manages cross-file parameter inheritance
+
+    The resolver maintains caches of analyzed modules and files to
+    avoid redundant analysis and improve performance.
+
+    Attributes:
+        workspace_root: Root directory of the workspace
+        imports: Import mappings for the current file
+        module_cache: Cache of analyzed modules
+        file_cache: Cache of analyzed files
+    """
 
     def __init__(
         self,

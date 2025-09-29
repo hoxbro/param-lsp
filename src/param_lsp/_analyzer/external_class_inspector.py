@@ -23,7 +23,26 @@ logger = logging.getLogger(__name__)
 
 
 class ExternalClassInspector:
-    """Handles introspection of external Parameterized classes."""
+    """Runtime introspection and analysis of external Parameterized classes.
+
+    This class provides comprehensive analysis of Parameterized classes from
+    external libraries like Panel, HoloViews, Bokeh, and others. It uses
+    runtime introspection to discover parameter definitions, inheritance
+    hierarchies, and parameter metadata.
+
+    Key capabilities:
+    - Discovers all Parameterized classes in external libraries
+    - Extracts parameter definitions with types, bounds, defaults
+    - Caches results for performance
+    - Handles complex inheritance hierarchies
+    - Provides source location information when available
+
+    The inspector maintains a cache of analyzed classes to avoid
+    repeated expensive introspection operations.
+
+    Attributes:
+        external_param_classes: Cache of analyzed external classes
+    """
 
     def __init__(self):
         self.external_param_classes: dict[str, ParameterizedInfo | None] = {}

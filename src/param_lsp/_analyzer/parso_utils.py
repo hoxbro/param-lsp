@@ -14,27 +14,108 @@ if TYPE_CHECKING:
 
 
 def has_value(node: NodeOrLeaf) -> bool:
-    """Check if node has a value attribute."""
+    """Check if a parso node has a value attribute.
+
+    Args:
+        node: The parso node to check
+
+    Returns:
+        True if the node has a 'value' attribute, False otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("x = 1")
+        >>> name_node = tree.children[0].children[0]  # 'x' node
+        >>> has_value(name_node)
+        True
+    """
     return hasattr(node, "value")
 
 
 def get_value(node: NodeOrLeaf) -> str | None:
-    """Safely get value from node."""
+    """Safely extract the string value from a parso node.
+
+    Args:
+        node: The parso node to extract value from
+
+    Returns:
+        The string value of the node if it exists, None otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("x = 'hello'")
+        >>> string_node = tree.children[0].children[2]  # 'hello' node
+        >>> get_value(string_node)
+        "'hello'"
+    """
     return getattr(node, "value", None)
 
 
 def has_children(node: NodeOrLeaf) -> bool:
-    """Check if node has children attribute."""
+    """Check if a parso node has child nodes.
+
+    Args:
+        node: The parso node to check
+
+    Returns:
+        True if the node has a 'children' attribute, False otherwise
+
+    Note:
+        Leaf nodes (like literals, names) typically don't have children,
+        while internal nodes (like expressions, statements) do.
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("x = 1")
+        >>> has_children(tree)  # Module node has children
+        True
+        >>> leaf = tree.children[0].children[0]  # 'x' name node
+        >>> has_children(leaf)  # Name nodes don't have children
+        False
+    """
     return hasattr(node, "children")
 
 
 def get_children(node: NodeOrLeaf) -> list[NodeOrLeaf]:
-    """Safely get children from node."""
+    """Safely extract child nodes from a parso node.
+
+    Args:
+        node: The parso node to extract children from
+
+    Returns:
+        List of child nodes if they exist, empty list otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("x = 1")
+        >>> children = get_children(tree)
+        >>> len(children) > 0  # Module has children
+        True
+        >>> leaf_children = get_children(tree.children[0].children[0])
+        >>> len(leaf_children)  # Name nodes have no children
+        0
+    """
     return getattr(node, "children", [])
 
 
 def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
-    """Walk a parso tree recursively, yielding all nodes."""
+    """Recursively walk a parso AST tree, yielding all nodes in depth-first order.
+
+    Args:
+        node: The root node to start walking from
+
+    Yields:
+        Each node in the tree, starting with the root node, then all descendants
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("x = 1")
+        >>> nodes = list(walk_tree(tree))
+        >>> len(nodes) >= 3  # At least module, expr_stmt, and child nodes
+        True
+        >>> nodes[0] == tree  # First node is the root
+        True
+    """
     yield node
     if has_children(node):
         for child in get_children(node):
@@ -42,7 +123,21 @@ def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
 
 
 def get_class_name(class_node: BaseNode) -> str | None:
-    """Extract class name from parso classdef node."""
+    """Extract the class name from a parso classdef node.
+
+    Args:
+        class_node: A parso node of type 'classdef'
+
+    Returns:
+        The class name as a string if found, None otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("class MyClass: pass")
+        >>> class_def = tree.children[0]  # The classdef node
+        >>> get_class_name(class_def)
+        'MyClass'
+    """
     for child in get_children(class_node):
         if child.type == "name":
             return get_value(child)
@@ -50,7 +145,24 @@ def get_class_name(class_node: BaseNode) -> str | None:
 
 
 def get_class_bases(class_node: BaseNode) -> list[NodeOrLeaf]:
-    """Extract base classes from parso classdef node."""
+    """Extract base class nodes from a parso classdef node.
+
+    Args:
+        class_node: A parso node of type 'classdef'
+
+    Returns:
+        List of parso nodes representing the base classes
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("class Child(Parent, Mixin): pass")
+        >>> class_def = tree.children[0]
+        >>> bases = get_class_bases(class_def)
+        >>> len(bases)
+        2
+        >>> get_value(bases[0])  # First base class
+        'Parent'
+    """
     bases = []
     # Look for bases between parentheses in class definition
     in_parentheses = False
@@ -78,7 +190,25 @@ def get_class_bases(class_node: BaseNode) -> list[NodeOrLeaf]:
 
 
 def is_assignment_stmt(node: NodeOrLeaf) -> bool:
-    """Check if a parso node is an assignment statement."""
+    """Check if a parso node represents an assignment statement.
+
+    Args:
+        node: The parso node to check
+
+    Returns:
+        True if the node contains an assignment operator '=', False otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("x = 1")
+        >>> stmt = tree.children[0]  # The expr_stmt node
+        >>> is_assignment_stmt(stmt)
+        True
+        >>> tree2 = parso.parse("print('hello')")
+        >>> stmt2 = tree2.children[0]
+        >>> is_assignment_stmt(stmt2)
+        False
+    """
     # Look for assignment operator '=' in the children
     return any(
         child.type == "operator" and get_value(child) == "=" for child in get_children(node)
@@ -86,7 +216,21 @@ def is_assignment_stmt(node: NodeOrLeaf) -> bool:
 
 
 def get_assignment_target_name(node: NodeOrLeaf) -> str | None:
-    """Get the target name from an assignment statement."""
+    """Extract the target variable name from an assignment statement.
+
+    Args:
+        node: A parso node representing an assignment statement
+
+    Returns:
+        The name of the variable being assigned to, or None if not found
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("my_var = 42")
+        >>> stmt = tree.children[0]
+        >>> get_assignment_target_name(stmt)
+        'my_var'
+    """
     # The target is typically the first child before the '=' operator
     for child in get_children(node):
         if child.type == "name":
@@ -97,7 +241,25 @@ def get_assignment_target_name(node: NodeOrLeaf) -> str | None:
 
 
 def has_attribute_target(node: NodeOrLeaf) -> bool:
-    """Check if assignment has an attribute target (like obj.attr = value)."""
+    """Check if an assignment statement targets an attribute (like obj.attr = value).
+
+    Args:
+        node: A parso node representing an assignment statement
+
+    Returns:
+        True if the assignment targets an attribute, False otherwise
+
+    Example:
+        >>> import parso
+        >>> tree1 = parso.parse("obj.attr = 1")
+        >>> stmt1 = tree1.children[0]
+        >>> has_attribute_target(stmt1)
+        True
+        >>> tree2 = parso.parse("x = 1")
+        >>> stmt2 = tree2.children[0]
+        >>> has_attribute_target(stmt2)
+        False
+    """
     for child in get_children(node):
         if child.type in ("power", "atom_expr"):
             # Check if this node has attribute access (trailer with '.')
@@ -114,7 +276,25 @@ def has_attribute_target(node: NodeOrLeaf) -> bool:
 
 
 def is_function_call(node: NodeOrLeaf) -> bool:
-    """Check if a parso node represents a function call (has trailing parentheses)."""
+    """Check if a parso node represents a function call (has trailing parentheses).
+
+    Args:
+        node: The parso node to check
+
+    Returns:
+        True if the node represents a function call, False otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("func(arg)")
+        >>> call_node = tree.children[0].children[0]  # The function call
+        >>> is_function_call(call_node)
+        True
+        >>> tree2 = parso.parse("variable")
+        >>> var_node = tree2.children[0].children[0]
+        >>> is_function_call(var_node)
+        False
+    """
     if not hasattr(node, "children"):
         return False
     return any(

@@ -43,7 +43,25 @@ class TypeErrorDict(TypedDict):
 
 
 class ParameterValidator:
-    """Handles validation for parameter assignments including type checking, bounds validation, and constraint checking."""
+    """Validates parameter assignments in Parameterized classes.
+
+    This class provides comprehensive validation for parameter assignments including:
+    - Type checking (ensuring assigned values match parameter types)
+    - Bounds validation (checking numeric values are within specified ranges)
+    - Constraint checking (validating parameter-specific constraints)
+    - Runtime assignment validation (checking obj.param = value statements)
+    - Constructor parameter validation (checking MyClass(param=value) calls)
+
+    The validator works with both local parameter classes and external library classes
+    (like Panel widgets, HoloViews elements) to provide complete validation coverage.
+
+    Attributes:
+        param_type_map: Mapping of parameter type names to Python types
+        param_classes: Local parameterized classes discovered in the code
+        external_param_classes: External parameterized classes from libraries
+        imports: Import mappings for resolving parameter types
+        type_errors: List of validation errors found during analysis
+    """
 
     def __init__(
         self,
@@ -63,7 +81,23 @@ class ParameterValidator:
         self.type_errors: list[TypeErrorDict] = []
 
     def check_parameter_types(self, tree: NodeOrLeaf, lines: list[str]) -> list[TypeErrorDict]:
-        """Check for type errors in parameter assignments."""
+        """Perform comprehensive parameter type validation on a parsed AST.
+
+        Args:
+            tree: The root parso AST node to validate
+            lines: Source code lines for error reporting
+
+        Returns:
+            List of type error dictionaries containing validation errors found
+
+        This method performs three types of validation:
+        1. Class parameter defaults (e.g., name = param.String(default=123))
+        2. Runtime parameter assignments (e.g., obj.name = 123)
+        3. Constructor parameter calls (e.g., MyClass(name=123))
+
+        Each validation checks for type mismatches, bounds violations,
+        and parameter-specific constraints.
+        """
         self.type_errors.clear()
 
         for node in walk_tree(tree):

@@ -1,10 +1,27 @@
 """
-HoloViz Param Language Server Protocol implementation.
-Provides IDE support for Param-based Python code including autocompletion,
-hover information, and diagnostics.
+HoloViz Param Language Server Protocol - Core Analyzer.
 
-This version uses modular components for external class inspection
-while preserving all existing functionality.
+Provides comprehensive analysis of Param-based Python code including:
+- Parameter discovery and type inference
+- Cross-file inheritance resolution
+- External library class introspection
+- Real-time type checking and validation
+- Bounds and constraint checking
+
+Modular Architecture:
+This analyzer uses a modular component architecture for maintainability
+and testability:
+
+- parso_utils: AST navigation and parsing utilities
+- parameter_extractor: Parameter definition extraction
+- validation: Type checking and constraint validation
+- external_class_inspector: Runtime introspection of external classes
+- inheritance_resolver: Parameter inheritance resolution
+- import_resolver: Cross-file import and module resolution
+
+The analyzer orchestrates these components to provide complete IDE support
+for Parameterized classes from both local code and external libraries
+like Panel, HoloViews, Bokeh, and others.
 """
 
 from __future__ import annotations

@@ -29,7 +29,26 @@ BoolValue = bool | None  # Boolean values from nodes
 
 
 def is_parameter_assignment(node: NodeOrLeaf) -> bool:
-    """Check if a parso assignment statement looks like a parameter definition."""
+    """Check if a parso assignment statement represents a parameter definition.
+
+    Args:
+        node: A parso node representing an assignment statement
+
+    Returns:
+        True if the assignment looks like a parameter definition (e.g., x = param.String()),
+        False otherwise
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("name = param.String(default='test')")
+        >>> stmt = tree.children[0]
+        >>> is_parameter_assignment(stmt)
+        True
+        >>> tree2 = parso.parse("x = 42")
+        >>> stmt2 = tree2.children[0]
+        >>> is_parameter_assignment(stmt2)
+        False
+    """
     # Find the right-hand side of the assignment (after '=')
     found_equals = False
     for child in get_children(node):
@@ -42,7 +61,26 @@ def is_parameter_assignment(node: NodeOrLeaf) -> bool:
 
 
 def is_parameter_call(node: NodeOrLeaf) -> bool:
-    """Check if a parso power/atom_expr node represents a parameter type call."""
+    """Check if a parso power/atom_expr node represents a parameter type call.
+
+    Args:
+        node: A parso node of type 'power' or 'atom_expr'
+
+    Returns:
+        True if the node represents a call to a known parameter type (e.g., param.String()),
+        False otherwise
+
+    Note:
+        This function only checks for known parameter types in PARAM_TYPES.
+        For imported parameter types, additional context from the analyzer is needed.
+
+    Example:
+        >>> import parso
+        >>> tree = parso.parse("param.String()")
+        >>> call_node = tree.children[0].children[0]
+        >>> is_parameter_call(call_node)
+        True
+    """
     # Extract the function name and check if it's a param type
     func_name = None
 
@@ -69,7 +107,21 @@ def is_parameter_call(node: NodeOrLeaf) -> bool:
 def extract_parameters(
     node, find_assignments_func, extract_info_func, is_parameter_assignment_func
 ) -> list[ParameterInfo]:
-    """Extract parameter definitions from a Param class (parso node)."""
+    """Extract parameter definitions from a Parameterized class node.
+
+    Args:
+        node: A parso node representing a class definition
+        find_assignments_func: Function to find parameter assignments in the class
+        extract_info_func: Function to extract parameter info from assignments
+        is_parameter_assignment_func: Function to check if an assignment is a parameter
+
+    Returns:
+        List of ParameterInfo objects representing the parameters in the class
+
+    Example:
+        This function is typically used as part of the main analyzer workflow
+        to extract all parameter definitions from a Parameterized class.
+    """
     parameters = []
 
     for assignment_node, target_name in find_assignments_func(node, is_parameter_assignment_func):
