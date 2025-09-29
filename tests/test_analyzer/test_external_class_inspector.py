@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
 
 
@@ -180,20 +178,13 @@ class TestExternalClassInspectorIntegration:
         inspector._get_all_classes_in_module(None)
         inspector._introspect_param_class_for_cache(None)
 
-    @pytest.mark.skipif(True, reason="Requires external libraries and may be slow")
     def test_real_param_class_analysis(self):
         """Test analysis of real param classes."""
         inspector = ExternalClassInspector()
-
-        try:
-            import param
-
-            # Test with actual param.Parameterized if available
-            result = inspector.analyze_external_class_ast("param.Parameterized")
-            # May be None or a ParameterizedInfo object
-            assert result is None or hasattr(result, "name")
-        except ImportError:
-            pytest.skip("param library not available")
+        # Test with actual param.Parameterized if available
+        result = inspector.analyze_external_class_ast("param.Parameterized")
+        # May be None or a ParameterizedInfo object
+        assert result is None or hasattr(result, "name")
 
     def test_attribute_errors_handled(self):
         """Test that AttributeError is handled gracefully."""
