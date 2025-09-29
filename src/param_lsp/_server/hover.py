@@ -85,11 +85,12 @@ class HoverMixin(LSPServerBase):
             header_parts = [f"**{param_info.cls} Parameter '{param_name}' (from {class_name})**"]
         else:
             header_parts = [f"**{param_info.cls} Parameter '{param_name}'**"]
-        # For Selector parameters with objects, show allowed values instead of type
+        # For Selector parameters with objects, show allowed values only
         if param_info.objects and param_info.cls in SELECTOR_PARAM_TYPES:
             objects_str = ", ".join([f'"{obj}"' for obj in param_info.objects])
             header_parts.append(f"Allowed: {objects_str}")
-        else:
+        elif param_info.cls not in SELECTOR_PARAM_TYPES:
+            # Only show "Allowed types" for non-Selector parameters
             python_type = self._get_python_type_name(param_info.cls, param_info.allow_None)
             header_parts.append(f"Allowed types: {python_type}")
 
@@ -119,7 +120,7 @@ class HoverMixin(LSPServerBase):
             line_number = param_info.location.get("line")
             if source_line:
                 # Clean and dedent multiline parameter definitions
-                clean_source = textwrap.dedent(source_line).strip()
+                clean_source = self._clean_source_definition(source_line)
                 if line_number:
                     definition_header = f"Definition (line {line_number}):"
                 else:
@@ -205,3 +206,31 @@ class HoverMixin(LSPServerBase):
         # Clean and dedent the documentation
         clean_doc = textwrap.dedent(doc).strip()
         return clean_doc
+
+    def _clean_source_definition(self, source_line: str) -> str:
+        """Clean and format source definition by removing common leading whitespace."""
+        if not source_line:
+            return source_line
+
+        lines = source_line.split("\n")
+        if len(lines) <= 1:
+            return source_line.strip()
+
+        # Find the minimum indentation (excluding empty lines)
+        non_empty_lines = [line for line in lines if line.strip()]
+        if not non_empty_lines:
+            return source_line.strip()
+
+        min_indent = min(len(line) - len(line.lstrip()) for line in non_empty_lines)
+
+        # Remove the common indentation from all lines
+        cleaned_lines = []
+        for line in lines:
+            if line.strip():  # Non-empty line
+                cleaned_lines.append(
+                    line[min_indent:] if len(line) > min_indent else line.lstrip()
+                )
+            else:  # Empty line
+                cleaned_lines.append("")
+
+        return "\n".join(cleaned_lines).strip()
