@@ -21,6 +21,7 @@ import parso
 
 from ._analyzer import parso_utils
 from ._analyzer.external_class_inspector import ExternalClassInspector
+from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import (
     extract_boolean_value,
@@ -102,15 +103,32 @@ class ParamAnalyzer:
         # Pass external inspector to validator for external class analysis
         self.validator.external_inspector = self.external_inspector
 
+        # Use modular import resolver
+        self.import_resolver = ImportResolver(
+            workspace_root=str(self.workspace_root) if self.workspace_root else None,
+            imports=self.imports,
+            module_cache=self.module_cache,
+            file_cache=self.file_cache,
+            analyze_file_func=self._analyze_file_for_import_resolver,
+        )
+
         # Use modular inheritance resolver
         self.inheritance_resolver = InheritanceResolver(
             param_classes=self.param_classes,
             external_param_classes=self.external_param_classes,
             imports=self.imports,
-            get_imported_param_class_info_func=self._get_imported_param_class_info,
+            get_imported_param_class_info_func=self.import_resolver.get_imported_param_class_info,
             analyze_external_class_ast_func=self._analyze_external_class_ast,
-            resolve_full_class_path_func=self._resolve_full_class_path,
+            resolve_full_class_path_func=self.import_resolver.resolve_full_class_path,
         )
+
+    def _analyze_file_for_import_resolver(self, content: str, file_path: str | None = None) -> AnalysisResult:
+        """Analyze a file for the import resolver (avoiding circular dependencies)."""
+        # Create a new analyzer instance for the imported module to avoid conflicts
+        module_analyzer = ParamAnalyzer(
+            str(self.workspace_root) if self.workspace_root else None
+        )
+        return module_analyzer.analyze_file(content, file_path)
 
     def analyze_file(self, content: str, file_path: str | None = None) -> AnalysisResult:
         """Analyze a Python file for Param usage."""
@@ -867,7 +885,7 @@ class ParamAnalyzer:
         # For parso nodes, we need to find the function name from the power/atom_expr structure
         if call_node.type in ("power", "atom_expr"):
             # First try to resolve the full class path for external classes
-            full_class_path = self._resolve_full_class_path(call_node)
+            full_class_path = self.import_resolver.resolve_full_class_path(call_node)
             if full_class_path:
                 # Check if this is an external Parameterized class
                 class_info = self._analyze_external_class_ast(full_class_path)
@@ -903,34 +921,6 @@ class ParamAnalyzer:
             return last_name
         return None
 
-    def _resolve_full_class_path(self, base) -> str | None:
-        """Resolve the full class path from a parso power/atom_expr node like pn.widgets.IntSlider."""
-        parts = []
-        for child in parso_utils.get_children(base):
-            if child.type == "name":
-                parts.append(parso_utils.get_value(child))
-            elif child.type == "trailer":
-                parts.extend(
-                    [
-                        parso_utils.get_value(trailer_child)
-                        for trailer_child in parso_utils.get_children(child)
-                        if trailer_child.type == "name"
-                    ]
-                )
-
-        if parts:
-            # Resolve the root module through imports
-            root_alias = parts[0]
-            if root_alias in self.imports:
-                full_module_name = self.imports[root_alias]
-                # Replace the alias with the full module name
-                parts[0] = full_module_name
-                return ".".join(parts)
-            else:
-                # Use the alias directly if no import mapping found
-                return ".".join(parts)
-
-        return None
 
     def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
         """Get the parameter type from a class definition."""
@@ -1166,136 +1156,8 @@ class ParamAnalyzer:
                     message = f"Parameter '{param_name}' has empty default but bounds specified"
                     self._create_type_error(node, message, "empty-default-with-bounds", "warning")
 
-    def _resolve_module_path(
-        self, module_name: str, current_file_path: str | None = None
-    ) -> str | None:
-        """Resolve a module name to a file path."""
-        if not self.workspace_root:
-            return None
 
-        # Handle relative imports
-        if module_name.startswith("."):
-            if not current_file_path:
-                return None
-            current_dir = Path(current_file_path).parent
-            # Convert relative module name to absolute path
-            parts = module_name.lstrip(".").split(".")
-            target_path = current_dir
-            for part in parts:
-                if part:
-                    target_path = target_path / part
 
-            # Try .py file
-            py_file = target_path.with_suffix(".py")
-            if py_file.exists():
-                return str(py_file)
-
-            # Try package __init__.py
-            init_file = target_path / "__init__.py"
-            if init_file.exists():
-                return str(init_file)
-
-            return None
-
-        # Handle absolute imports
-        parts = module_name.split(".")
-
-        # Try in workspace root
-        target_path = self.workspace_root
-        for part in parts:
-            target_path = target_path / part
-
-        # Try .py file
-        py_file = target_path.with_suffix(".py")
-        if py_file.exists():
-            return str(py_file)
-
-        # Try package __init__.py
-        init_file = target_path / "__init__.py"
-        if init_file.exists():
-            return str(init_file)
-
-        # Try searching in Python path (for installed packages)
-        try:
-            spec = importlib.util.find_spec(module_name)
-            if spec and spec.origin and spec.origin.endswith(".py"):
-                return spec.origin
-        except (ImportError, ValueError, ModuleNotFoundError):
-            pass
-
-        return None
-
-    def _analyze_imported_module(
-        self, module_name: str, current_file_path: str | None = None
-    ) -> AnalysisResult:
-        """Analyze an imported module and cache the results."""
-        # Check cache first
-        if module_name in self.module_cache:
-            return self.module_cache[module_name]
-
-        # Resolve module path
-        module_path = self._resolve_module_path(module_name, current_file_path)
-        if not module_path:
-            return AnalysisResult(param_classes={}, imports={}, type_errors=[])
-
-        # Check file cache
-        if module_path in self.file_cache:
-            result = self.file_cache[module_path]
-            self.module_cache[module_name] = result
-            return result
-
-        # Read and analyze the module
-        try:
-            with open(module_path, encoding="utf-8") as f:
-                content = f.read()
-
-            # Create a new analyzer instance for the imported module to avoid conflicts
-            module_analyzer = ParamAnalyzer(
-                str(self.workspace_root) if self.workspace_root else None
-            )
-            result = module_analyzer.analyze_file(content)
-
-            # Cache the result
-            self.file_cache[module_path] = result
-            self.module_cache[module_name] = result
-
-            return result
-        except (OSError, UnicodeDecodeError) as e:
-            logger.warning(f"Failed to analyze module {module_name} at {module_path}: {e}")
-            return AnalysisResult(param_classes={}, imports={}, type_errors=[])
-
-    def _get_imported_param_class_info(
-        self, class_name: str, import_name: str, current_file_path: str | None = None
-    ) -> ParameterizedInfo | None:
-        """Get parameter information for a class imported from another module."""
-        # Get the full module name from imports
-        full_import_name = self.imports.get(import_name)
-        if not full_import_name:
-            return None
-
-        # Parse the import to get module name and class name
-        if "." in full_import_name:
-            # Handle "from module import Class" -> "module.Class"
-            module_name, imported_class_name = full_import_name.rsplit(".", 1)
-        else:
-            # Handle "import module" -> "module"
-            module_name = full_import_name
-            imported_class_name = class_name
-
-        # Analyze the imported module
-        module_analysis = self._analyze_imported_module(module_name, current_file_path)
-        if not module_analysis:
-            return None
-
-        # Check if the class exists in the imported module
-        param_classes_dict = module_analysis.get("param_classes", {})
-        if isinstance(param_classes_dict, dict) and imported_class_name in param_classes_dict:
-            class_info = param_classes_dict[imported_class_name]
-            # If it's a ParameterizedInfo object, return it
-            if hasattr(class_info, "parameters"):
-                return class_info
-
-        return None
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using the modular external inspector."""
@@ -1474,7 +1336,7 @@ class ParamAnalyzer:
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
         for node in parso_utils.walk_tree(tree):
             if node.type in ("power", "atom_expr") and parso_utils.is_function_call(node):
-                full_class_path = self._resolve_full_class_path(node)
+                full_class_path = self.import_resolver.resolve_full_class_path(node)
                 if full_class_path:
                     self._analyze_external_class_ast(full_class_path)
 

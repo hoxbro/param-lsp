@@ -26,11 +26,19 @@ class AnalysisResult(TypedDict):
 class ImportResolver:
     """Handles import parsing and module resolution."""
 
-    def __init__(self, workspace_root: str | None = None):
+    def __init__(
+        self,
+        workspace_root: str | None = None,
+        imports: dict[str, str] | None = None,
+        module_cache: dict[str, AnalysisResult] | None = None,
+        file_cache: dict[str, AnalysisResult] | None = None,
+        analyze_file_func=None
+    ):
         self.workspace_root = Path(workspace_root) if workspace_root else None
-        self.imports: dict[str, str] = {}
-        self.module_cache: dict[str, AnalysisResult] = {}
-        self.file_cache: dict[str, AnalysisResult] = {}
+        self.imports: dict[str, str] = imports or {}
+        self.module_cache: dict[str, AnalysisResult] = module_cache or {}
+        self.file_cache: dict[str, AnalysisResult] = file_cache or {}
+        self.analyze_file_func = analyze_file_func
 
     def handle_import(self, node: NodeOrLeaf) -> None:
         """Handle 'import' statements (parso node)."""
@@ -193,5 +201,76 @@ class ImportResolver:
             else:
                 # Use the alias directly if no import mapping found
                 return ".".join(parts)
+
+        return None
+
+    def analyze_imported_module(
+        self, module_name: str, current_file_path: str | None = None
+    ) -> AnalysisResult:
+        """Analyze an imported module and cache the results."""
+        # Check cache first
+        if module_name in self.module_cache:
+            return self.module_cache[module_name]
+
+        # Resolve module path
+        module_path = self.resolve_module_path(module_name, current_file_path)
+        if not module_path:
+            return AnalysisResult(param_classes={}, imports={}, type_errors=[])
+
+        # Check file cache
+        if module_path in self.file_cache:
+            result = self.file_cache[module_path]
+            self.module_cache[module_name] = result
+            return result
+
+        # Read and analyze the module if analyze_file_func is provided
+        if not self.analyze_file_func:
+            return AnalysisResult(param_classes={}, imports={}, type_errors=[])
+
+        try:
+            with open(module_path, encoding="utf-8") as f:
+                content = f.read()
+
+            # Use the provided analyze_file function
+            result = self.analyze_file_func(content, module_path)
+
+            # Cache the result
+            self.file_cache[module_path] = result
+            self.module_cache[module_name] = result
+
+            return result
+        except (OSError, UnicodeDecodeError):
+            return AnalysisResult(param_classes={}, imports={}, type_errors=[])
+
+    def get_imported_param_class_info(
+        self, class_name: str, import_name: str, current_file_path: str | None = None
+    ):
+        """Get parameter information for a class imported from another module."""
+        # Get the full module name from imports
+        full_import_name = self.imports.get(import_name)
+        if not full_import_name:
+            return None
+
+        # Parse the import to get module name and class name
+        if "." in full_import_name:
+            # Handle "from module import Class" -> "module.Class"
+            module_name, imported_class_name = full_import_name.rsplit(".", 1)
+        else:
+            # Handle "import module" -> "module"
+            module_name = full_import_name
+            imported_class_name = class_name
+
+        # Analyze the imported module
+        module_analysis = self.analyze_imported_module(module_name, current_file_path)
+        if not module_analysis:
+            return None
+
+        # Check if the class exists in the imported module
+        param_classes_dict = module_analysis.get("param_classes", {})
+        if isinstance(param_classes_dict, dict) and imported_class_name in param_classes_dict:
+            class_info = param_classes_dict[imported_class_name]
+            # If it's a ParameterizedInfo object, return it
+            if hasattr(class_info, "parameters"):
+                return class_info
 
         return None
