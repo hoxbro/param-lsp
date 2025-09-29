@@ -47,4 +47,4 @@ With the example above, you should see:
 
 - **[Autocompletion](features/autocompletion.md)** when typing parameter names in constructor
 - **[Hover documentation](features/hover-information.md)** when hovering over parameter definitions
-- **[Error diagnostics](features/type-checking.md)** if you set values outside bounds (try `width=1500`)
+- **[Error diagnostics](features/type-validation.md)** if you set values outside bounds (try `width=1500`)
