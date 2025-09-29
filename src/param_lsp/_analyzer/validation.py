@@ -80,12 +80,15 @@ class ParameterValidator:
         self.workspace_root = workspace_root
         self.type_errors: list[TypeErrorDict] = []
 
-    def check_parameter_types(self, tree: NodeOrLeaf, lines: list[str]) -> list[TypeErrorDict]:
+    def check_parameter_types(
+        self, tree: NodeOrLeaf, lines: list[str], cached_nodes: list[NodeOrLeaf] | None = None
+    ) -> list[TypeErrorDict]:
         """Perform comprehensive parameter type validation on a parsed AST.
 
         Args:
             tree: The root parso AST node to validate
             lines: Source code lines for error reporting
+            cached_nodes: Optional pre-computed list of all nodes for performance optimization
 
         Returns:
             List of type error dictionaries containing validation errors found
@@ -100,7 +103,10 @@ class ParameterValidator:
         """
         self.type_errors.clear()
 
-        for node in walk_tree(tree):
+        # Use cached nodes if provided for performance optimization
+        nodes_to_check = cached_nodes if cached_nodes is not None else walk_tree(tree)
+
+        for node in nodes_to_check:
             if node.type == "classdef":
                 self._check_class_parameter_defaults(cast("BaseNode", node), lines)
 

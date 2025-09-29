@@ -158,15 +158,15 @@ class ParamAnalyzer:
 
             # Note: parso handles syntax errors internally with error_recovery=True
 
-            # Walk the parse tree to extract parameter information
-            parso_utils.walk_tree(tree)
+            # Cache the tree walk to avoid multiple expensive traversals
+            all_nodes = list(parso_utils.walk_tree(tree))
         except Exception as e:
             # If parso completely fails, log and return empty result
             logger.error(f"Failed to parse file: {e}")
             return AnalysisResult(param_classes={}, imports={}, type_errors=[])
 
-        # First pass: collect imports
-        for node in parso_utils.walk_tree(tree):
+        # First pass: collect imports using cached nodes
+        for node in all_nodes:
             if node.type == "import_name":
                 self._handle_import(node)
             elif node.type == "import_from":
@@ -175,7 +175,7 @@ class ParamAnalyzer:
         # Second pass: collect class definitions in order, respecting inheritance
         class_nodes: list[BaseNode] = [
             cast("BaseNode", node)
-            for node in parso_utils.walk_tree(tree)
+            for node in all_nodes
             if node.type == "classdef"
         ]
 
@@ -219,11 +219,11 @@ class ParamAnalyzer:
                         processed_classes.add(class_name)
                 break
 
-        # Pre-pass: discover all external Parameterized classes using parso
-        self._discover_external_param_classes(tree)
+        # Pre-pass: discover all external Parameterized classes using cached nodes
+        self._discover_external_param_classes(tree, all_nodes)
 
-        # Perform parameter validation after parsing using modular validator
-        self.type_errors = self.validator.check_parameter_types(tree, content.split("\n"))
+        # Perform parameter validation after parsing using modular validator with cached nodes
+        self.type_errors = self.validator.check_parameter_types(tree, content.split("\n"), all_nodes)
 
         return {
             "param_classes": self.param_classes,
@@ -602,9 +602,10 @@ class ParamAnalyzer:
                 return start_line + i
         return None
 
-    def _discover_external_param_classes(self, tree: NodeOrLeaf) -> None:
+    def _discover_external_param_classes(self, tree: NodeOrLeaf, cached_nodes: list[NodeOrLeaf] | None = None) -> None:
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
-        for node in parso_utils.walk_tree(tree):
+        nodes_to_check = cached_nodes if cached_nodes is not None else parso_utils.walk_tree(tree)
+        for node in nodes_to_check:
             if node.type in ("power", "atom_expr") and parso_utils.is_function_call(node):
                 full_class_path = self.import_resolver.resolve_full_class_path(node)
                 if full_class_path:
