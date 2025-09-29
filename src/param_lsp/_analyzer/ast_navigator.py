@@ -28,15 +28,13 @@ logger = logging.getLogger(__name__)
 class ParameterDetector:
     """Handles detection of parameter assignments and calls in AST."""
 
-    def __init__(self, imports: dict[str, str], param_types: set[str] = None):
+    def __init__(self, imports: dict[str, str]):
         """Initialize parameter detector.
 
         Args:
             imports: Dictionary mapping import aliases to full module names
-            param_types: Set of parameter type names (defaults to PARAM_TYPES)
         """
         self.imports = imports
-        self.param_types = param_types or PARAM_TYPES
 
     def is_parameter_assignment(self, node: NodeOrLeaf) -> bool:
         """Check if a parso assignment statement looks like a parameter definition.
@@ -86,7 +84,7 @@ class ParameterDetector:
 
         if func_name:
             # Check if it's a direct param type
-            if func_name in self.param_types:
+            if func_name in PARAM_TYPES:
                 return True
 
             # Check if it's an imported param type
@@ -94,7 +92,7 @@ class ParameterDetector:
                 imported_full_name = self.imports[func_name]
                 if imported_full_name.startswith("param."):
                     param_type = imported_full_name.split(".")[-1]
-                    return param_type in self.param_types
+                    return param_type in PARAM_TYPES
 
         return False
 

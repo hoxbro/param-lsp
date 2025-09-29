@@ -61,9 +61,9 @@ class ImportResolver:
         analyze_file_func=None,
     ):
         self.workspace_root = Path(workspace_root) if workspace_root else None
-        self.imports: dict[str, str] = imports or {}
-        self.module_cache: dict[str, AnalysisResult] = module_cache or {}
-        self.file_cache: dict[str, AnalysisResult] = file_cache or {}
+        self.imports: dict[str, str] = imports if imports is not None else {}
+        self.module_cache: dict[str, AnalysisResult] = module_cache if module_cache is not None else {}
+        self.file_cache: dict[str, AnalysisResult] = file_cache if file_cache is not None else {}
         self.analyze_file_func = analyze_file_func
 
     def handle_import(self, node: NodeOrLeaf) -> None:

@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 import parso
 
 from ._analyzer import parso_utils
+from ._analyzer.ast_navigator import ImportHandler, ParameterDetector, SourceAnalyzer
 from ._analyzer.external_class_inspector import ExternalClassInspector
 from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
@@ -99,6 +100,10 @@ class ParamAnalyzer:
         # Populate external library cache on initialization using modular component
         self.external_inspector.populate_external_library_cache()
 
+        # Use modular AST navigation components (must be created before validator)
+        self.parameter_detector = ParameterDetector(self.imports)
+        self.import_handler = ImportHandler(self.imports)
+
         # Use modular parameter validator
         self.validator = ParameterValidator(
             param_type_map=self.param_type_map,
@@ -130,6 +135,7 @@ class ParamAnalyzer:
             resolve_full_class_path_func=self.import_resolver.resolve_full_class_path,
         )
 
+
     def _analyze_file_for_import_resolver(
         self, content: str, file_path: str | None = None
     ) -> AnalysisResult:
@@ -159,9 +165,9 @@ class ParamAnalyzer:
         # First pass: collect imports using cached nodes
         for node in all_nodes:
             if node.type == "import_name":
-                self._handle_import(node)
+                self.import_handler.handle_import(node)
             elif node.type == "import_from":
-                self._handle_import_from(node)
+                self.import_handler.handle_import_from(node)
 
         # Second pass: collect class definitions in order, respecting inheritance
         class_nodes: list[BaseNode] = [
@@ -230,125 +236,8 @@ class ParamAnalyzer:
 
     def _is_parameter_assignment(self, node: NodeOrLeaf) -> bool:
         """Check if a parso assignment statement looks like a parameter definition."""
-        # Find the right-hand side of the assignment (after '=')
-        found_equals = False
-        for child in parso_utils.get_children(node):
-            if child.type == "operator" and parso_utils.get_value(child) == "=":
-                found_equals = True
-            elif found_equals and child.type in ("power", "atom_expr"):
-                # Check if it's a parameter type call
-                return self._is_parameter_call(child)
-        return False
+        return self.parameter_detector.is_parameter_assignment(node)
 
-    def _is_parameter_call(self, node: NodeOrLeaf) -> bool:
-        """Check if a parso power/atom_expr node represents a parameter type call."""
-        # Extract the function name and check if it's a param type
-        func_name = None
-
-        # Look through children to find the actual function being called
-        for child in parso_utils.get_children(node):
-            if child.type == "name":
-                # This could be a direct function call (e.g., "String") or module name
-                func_name = parso_utils.get_value(child)
-            elif child.type == "trailer":
-                # Handle dotted calls like param.Integer
-                for trailer_child in parso_utils.get_children(child):
-                    if trailer_child.type == "name":
-                        func_name = parso_utils.get_value(trailer_child)
-                        break
-                # If we found a function name in a trailer, that's the final function name
-                if func_name:
-                    break
-
-        if func_name:
-            # Check if it's a direct param type
-            if func_name in PARAM_TYPES:
-                return True
-
-            # Check if it's an imported param type
-            if func_name in self.imports:
-                imported_full_name = self.imports[func_name]
-                if imported_full_name.startswith("param."):
-                    param_type = imported_full_name.split(".")[-1]
-                    return param_type in PARAM_TYPES
-
-        return False
-
-    def _handle_import(self, node: NodeOrLeaf) -> None:
-        """Handle 'import' statements (parso node)."""
-        # For parso import_name nodes, parse the import statement
-        for child in parso_utils.get_children(node):
-            if child.type == "dotted_as_name":
-                # Handle "import module as alias"
-                module_name = None
-                alias_name = None
-                for part in parso_utils.get_children(child):
-                    if part.type == "name":
-                        if module_name is None:
-                            module_name = parso_utils.get_value(part)
-                        else:
-                            alias_name = parso_utils.get_value(part)
-                if module_name:
-                    self.imports[alias_name or module_name] = module_name
-            elif child.type == "dotted_name":
-                # Handle "import module"
-                module_name = parso_utils.get_value(child)
-                if module_name:
-                    self.imports[module_name] = module_name
-            elif child.type == "name" and parso_utils.get_value(child) not in ("import", "as"):
-                # Simple case: "import module"
-                module_name = parso_utils.get_value(child)
-                if module_name:
-                    self.imports[module_name] = module_name
-
-    def _handle_import_from(self, node: NodeOrLeaf) -> None:
-        """Handle 'from ... import ...' statements (parso node)."""
-        # For parso import_from nodes, parse the from...import statement
-        module_name = None
-        import_names = []
-
-        # First pass: find module name and collect import names
-        for child in parso_utils.get_children(node):
-            if (
-                child.type == "name"
-                and module_name is None
-                and parso_utils.get_value(child) not in ("from", "import")
-            ) or (child.type == "dotted_name" and module_name is None):
-                module_name = parso_utils.get_value(child)
-            elif child.type == "import_as_names":
-                for name_child in parso_utils.get_children(child):
-                    if name_child.type == "import_as_name":
-                        # Handle "from module import name as alias"
-                        import_name = None
-                        alias_name = None
-                        for part in parso_utils.get_children(name_child):
-                            if part.type == "name":
-                                if import_name is None:
-                                    import_name = parso_utils.get_value(part)
-                                else:
-                                    alias_name = parso_utils.get_value(part)
-                        if import_name:
-                            import_names.append((import_name, alias_name))
-                    elif name_child.type == "name":
-                        # Handle "from module import name"
-                        name_value = parso_utils.get_value(name_child)
-                        if name_value:
-                            import_names.append((name_value, None))
-            elif (
-                child.type == "name"
-                and parso_utils.get_value(child) not in ("from", "import")
-                and module_name is not None
-            ):
-                # Handle simple "from module import name" where name is a direct child
-                child_value = parso_utils.get_value(child)
-                if child_value:
-                    import_names.append((child_value, None))
-
-        # Second pass: register all imports
-        if module_name:
-            for import_name, alias_name in import_names:
-                full_name = f"{module_name}.{import_name}"
-                self.imports[alias_name or import_name] = full_name
 
     def _handle_class_def(self, node: BaseNode) -> None:
         """Handle class definitions that might inherit from param.Parameterized (parso node)."""
@@ -356,7 +245,7 @@ class ParamAnalyzer:
         is_param_class = False
         bases = parso_utils.get_class_bases(node)
         for base in bases:
-            if self.inheritance_resolver.is_param_base(base):
+            if self.inheritance_resolver.is_param_base(base, getattr(self, "_current_file_path", None)):
                 is_param_class = True
                 break
 
@@ -414,7 +303,7 @@ class ParamAnalyzer:
             try:
                 # Try to get the source lines and find parameter definition
                 source_lines, _start_line = inspect.getsourcelines(defining_class)
-                source_definition = self._extract_complete_parameter_definition(
+                source_definition = SourceAnalyzer.extract_complete_parameter_definition(
                     source_lines, param_name
                 )
             except (OSError, TypeError):
@@ -469,104 +358,6 @@ class ParamAnalyzer:
         # Fallback: just use the filename with module info
         return f"{library_name}/{path.name}"
 
-    def _extract_complete_parameter_definition(
-        self, source_lines: list[str], param_name: str
-    ) -> str | None:
-        """Extract the complete parameter definition including all lines until closing parenthesis."""
-        # Find the parameter line first using simple string matching (more reliable)
-        for i, line in enumerate(source_lines):
-            if (
-                (f"{param_name} =" in line or f"{param_name}=" in line)
-                and not line.strip().startswith("#")
-                and self._looks_like_parameter_assignment(line)
-            ):
-                # Extract the complete multiline definition
-                return self._extract_multiline_definition(source_lines, i)
-
-        return None
-
-    def _looks_like_parameter_assignment(self, line: str) -> bool:
-        """Check if a line looks like a parameter assignment."""
-        # Remove the assignment part and check if there's a function call
-        if "=" not in line:
-            return False
-
-        right_side = line.split("=", 1)[1].strip()
-
-        # Look for patterns that suggest this is a parameter:
-        # - Contains a function call with parentheses
-        # - Doesn't look like a simple value assignment
-        return (
-            "(" in right_side
-            and not right_side.startswith(("'", '"', "[", "{", "True", "False"))
-            and not right_side.replace(".", "").replace("_", "").isdigit()
-        )
-
-    def _extract_multiline_definition(self, source_lines: list[str], start_index: int) -> str:
-        """Extract a multiline parameter definition by finding matching parentheses."""
-        definition_lines = []
-        paren_count = 0
-        bracket_count = 0
-        brace_count = 0
-        in_string = False
-        string_char = None
-
-        for i in range(start_index, len(source_lines)):
-            line = source_lines[i]
-            definition_lines.append(line.rstrip())
-
-            # Parse character by character to handle nested structures properly
-            j = 0
-            while j < len(line):
-                char = line[j]
-
-                # Handle string literals
-                if char in ('"', "'") and (j == 0 or line[j - 1] != "\\"):
-                    if not in_string:
-                        in_string = True
-                        string_char = char
-                    elif char == string_char:
-                        in_string = False
-                        string_char = None
-
-                # Skip counting if we're inside a string
-                if not in_string:
-                    if char == "(":
-                        paren_count += 1
-                    elif char == ")":
-                        paren_count -= 1
-                    elif char == "[":
-                        bracket_count += 1
-                    elif char == "]":
-                        bracket_count -= 1
-                    elif char == "{":
-                        brace_count += 1
-                    elif char == "}":
-                        brace_count -= 1
-
-                j += 1
-
-            # Check if we've closed all parentheses/brackets/braces
-            if paren_count <= 0 and bracket_count <= 0 and brace_count <= 0:
-                break
-
-        # Join the lines and clean up the formatting
-        complete_definition = "\n".join(definition_lines)
-        return complete_definition.strip()
-
-    def _find_parameter_line_in_source(
-        self, source_lines: list[str], start_line: int, param_name: str
-    ) -> int | None:
-        """Find the line number where a parameter is defined in source code."""
-        # Use the same generic detection logic
-        for i, line in enumerate(source_lines):
-            if (
-                (f"{param_name} =" in line or f"{param_name}=" in line)
-                and not line.strip().startswith("#")
-                and self._looks_like_parameter_assignment(line)
-            ):
-                return start_line + i
-        return None
 
     def _discover_external_param_classes(
         self, tree: NodeOrLeaf, cached_nodes: list[NodeOrLeaf] | None = None

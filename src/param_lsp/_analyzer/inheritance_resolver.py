@@ -58,8 +58,13 @@ class InheritanceResolver:
         self.analyze_external_class_ast = analyze_external_class_ast_func
         self.resolve_full_class_path = resolve_full_class_path_func
 
-    def is_param_base(self, base: NodeOrLeaf) -> bool:
-        """Check if a base class is param.Parameterized or similar (parso node)."""
+    def is_param_base(self, base: NodeOrLeaf, current_file_path: str | None = None) -> bool:
+        """Check if a base class is param.Parameterized or similar (parso node).
+
+        Args:
+            base: The base class AST node to check
+            current_file_path: Path to the current file being analyzed (for cross-file resolution)
+        """
         if base.type == "name":
             base_name = get_value(base)
             if not base_name:
@@ -78,7 +83,7 @@ class InheritanceResolver:
             imported_class_info = self.get_imported_param_class_info(
                 base_name,
                 base_name,
-                None,  # current_file_path will be passed by caller
+                current_file_path,
             )
             if imported_class_info:
                 return True
