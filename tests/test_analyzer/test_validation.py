@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 from parso import parse
 
@@ -68,12 +70,20 @@ class TestParameterValidator:
         return mock_func
 
     @pytest.fixture
+    def mock_external_inspector(self):
+        """Mock external class inspector for testing."""
+        mock = Mock()
+        mock.analyze_external_class_ast.return_value = None
+        return mock
+
+    @pytest.fixture
     def validator(
         self,
         sample_param_classes,
         sample_external_classes,
         sample_imports,
         mock_is_parameter_assignment,
+        mock_external_inspector,
     ):
         """Create a ParameterValidator instance for testing."""
         return ParameterValidator(
@@ -82,6 +92,7 @@ class TestParameterValidator:
             external_param_classes=sample_external_classes,
             imports=sample_imports,
             is_parameter_assignment_func=mock_is_parameter_assignment,
+            external_inspector=mock_external_inspector,
             workspace_root=None,
         )
 
@@ -411,12 +422,16 @@ TestClass().invalid_param = 456
         validator1_classes = {"Class1": ParameterizedInfo(name="Class1")}
         validator2_classes = {"Class2": ParameterizedInfo(name="Class2")}
 
+        mock_inspector = Mock()
+        mock_inspector.analyze_external_class_ast.return_value = None
+
         validator1 = ParameterValidator(
             param_type_map=PARAM_TYPE_MAP,
             param_classes=validator1_classes,
             external_param_classes={},
             imports={},
             is_parameter_assignment_func=lambda x, y: True,
+            external_inspector=mock_inspector,
             workspace_root=None,
         )
 
@@ -426,6 +441,7 @@ TestClass().invalid_param = 456
             external_param_classes={},
             imports={},
             is_parameter_assignment_func=lambda x, y: True,
+            external_inspector=mock_inspector,
             workspace_root=None,
         )
 

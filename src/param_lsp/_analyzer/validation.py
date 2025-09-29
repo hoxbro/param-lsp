@@ -30,6 +30,7 @@ from .parso_utils import (
 
 if TYPE_CHECKING:
     from parso.tree import BaseNode, NodeOrLeaf
+    from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
 
 
 class TypeErrorDict(TypedDict):
@@ -72,8 +73,8 @@ class ParameterValidator:
         external_param_classes: dict,
         imports: dict[str, str],
         is_parameter_assignment_func,
+        external_inspector: ExternalClassInspector,
         workspace_root: str | None = None,
-        external_inspector=None,
     ):
         self.param_type_map = param_type_map
         self.param_classes = param_classes
@@ -854,7 +855,4 @@ class ParameterValidator:
 
     def _analyze_external_class_ast(self, full_class_path: str):
         """Analyze external class using AST through external class inspector."""
-        # Use the external inspector passed during initialization
-        if hasattr(self, "external_inspector") and self.external_inspector is not None:
-            return self.external_inspector.analyze_external_class_ast(full_class_path)
-        return None
+        return self.external_inspector.analyze_external_class_ast(full_class_path)

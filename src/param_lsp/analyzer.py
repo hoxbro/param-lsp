@@ -111,8 +111,8 @@ class ParamAnalyzer:
             external_param_classes=self.external_param_classes,
             imports=self.imports,
             is_parameter_assignment_func=self._is_parameter_assignment,
-            workspace_root=str(self.workspace_root) if self.workspace_root else None,
             external_inspector=self.external_inspector,
+            workspace_root=str(self.workspace_root) if self.workspace_root else None,
         )
 
         # Use modular import resolver
