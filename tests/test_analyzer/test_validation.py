@@ -9,7 +9,6 @@ from parso import parse
 
 from src.param_lsp._analyzer.parso_utils import get_value, walk_tree
 from src.param_lsp._analyzer.validation import ParameterValidator
-from src.param_lsp.constants import PARAM_TYPE_MAP
 from src.param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
@@ -87,7 +86,6 @@ class TestParameterValidator:
     ):
         """Create a ParameterValidator instance for testing."""
         return ParameterValidator(
-            param_type_map=PARAM_TYPE_MAP,
             param_classes=sample_param_classes,
             external_param_classes=sample_external_classes,
             imports=sample_imports,
@@ -426,7 +424,6 @@ TestClass().invalid_param = 456
         mock_inspector.analyze_external_class_ast.return_value = None
 
         validator1 = ParameterValidator(
-            param_type_map=PARAM_TYPE_MAP,
             param_classes=validator1_classes,
             external_param_classes={},
             imports={},
@@ -436,7 +433,6 @@ TestClass().invalid_param = 456
         )
 
         validator2 = ParameterValidator(
-            param_type_map=PARAM_TYPE_MAP,
             param_classes=validator2_classes,
             external_param_classes={},
             imports={},

@@ -10,6 +10,7 @@ import param
 from pygls.server import LanguageServer
 
 from param_lsp.analyzer import ParamAnalyzer
+from param_lsp.constants import PARAM_TYPE_MAP
 
 
 class LSPServerBase(LanguageServer):
@@ -43,8 +44,8 @@ class LSPServerBase(LanguageServer):
 
     def _get_python_type_name(self, cls: str, allow_None: bool = False) -> str:
         """Map param type to Python type name for display using existing param_type_map."""
-        if hasattr(self, "analyzer") and cls in self.analyzer.param_type_map:
-            python_types = self.analyzer.param_type_map[cls]
+        if cls in PARAM_TYPE_MAP:
+            python_types = PARAM_TYPE_MAP[cls]
             if isinstance(python_types, tuple):
                 # Multiple types like (int, float) -> "int or float"
                 type_names = [t.__name__ for t in python_types]

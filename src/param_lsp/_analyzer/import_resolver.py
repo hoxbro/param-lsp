@@ -8,25 +8,12 @@ from __future__ import annotations
 import importlib.util
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+
+from param_lsp._types import AnalysisResult, ImportDict, ParsoNode
 
 from .parso_utils import get_children, get_value
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    from parso.tree import NodeOrLeaf
-
-    from param_lsp._analyzer.validation import TypeErrorDict
-    from param_lsp.models import ParameterizedInfo
-
-
-class AnalysisResult(TypedDict):
-    """Type definition for analysis result dictionaries."""
-
-    param_classes: dict[str, ParameterizedInfo]
-    imports: dict[str, str]
-    type_errors: list[TypeErrorDict]
 
 
 class ImportResolver:
@@ -58,20 +45,20 @@ class ImportResolver:
     def __init__(
         self,
         workspace_root: str | None = None,
-        imports: dict[str, str] | None = None,
+        imports: ImportDict | None = None,
         module_cache: dict[str, AnalysisResult] | None = None,
         file_cache: dict[str, AnalysisResult] | None = None,
         analyze_file_func=None,
     ):
         self.workspace_root = Path(workspace_root) if workspace_root else None
-        self.imports: dict[str, str] = imports if imports is not None else {}
+        self.imports: ImportDict = imports if imports is not None else {}
         self.module_cache: dict[str, AnalysisResult] = (
             module_cache if module_cache is not None else {}
         )
         self.file_cache: dict[str, AnalysisResult] = file_cache if file_cache is not None else {}
         self.analyze_file_func = analyze_file_func
 
-    def handle_import(self, node: NodeOrLeaf) -> None:
+    def handle_import(self, node: ParsoNode) -> None:
         """Handle 'import' statements (parso node)."""
         # For parso import_name nodes, parse the import statement
         for child in get_children(node):
@@ -98,7 +85,7 @@ class ImportResolver:
                 if module_name:
                     self.imports[module_name] = module_name
 
-    def handle_import_from(self, node: NodeOrLeaf) -> None:
+    def handle_import_from(self, node: ParsoNode) -> None:
         """Handle 'from ... import ...' statements (parso node)."""
         # For parso import_from nodes, parse the from...import statement
         module_name = None

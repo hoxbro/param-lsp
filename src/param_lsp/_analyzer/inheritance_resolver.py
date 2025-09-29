@@ -13,7 +13,7 @@ from .parso_utils import get_children, get_class_bases, get_value
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from parso.tree import BaseNode, NodeOrLeaf
+    from parso.tree import NodeOrLeaf
 
     from param_lsp.models import ParameterInfo, ParameterizedInfo
 
@@ -123,7 +123,7 @@ class InheritanceResolver:
         return False
 
     def collect_inherited_parameters(
-        self, node: BaseNode, current_file_path: str | None = None
+        self, node: NodeOrLeaf, current_file_path: str | None = None
     ) -> dict[str, ParameterInfo]:
         """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
         inherited_parameters = {}  # Last wins

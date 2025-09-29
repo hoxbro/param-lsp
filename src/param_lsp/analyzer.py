@@ -30,7 +30,7 @@ import inspect
 import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any
 
 import parso
 
@@ -41,36 +41,22 @@ from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
 from ._analyzer.validation import ParameterValidator
-from .constants import PARAM_TYPE_MAP
+from ._types import AnalysisResult
 from .models import ParameterInfo, ParameterizedInfo
 
 if TYPE_CHECKING:
-    from parso.tree import BaseNode, NodeOrLeaf
+    from parso.tree import NodeOrLeaf
+
+    from ._types import (
+        ImportDict,
+        ParamClassDict,
+        ParsoNode,
+        TypeErrorDict,
+    )
 
 # Type aliases for better type safety
-ParsoNode = "NodeOrLeaf"  # General parso node (BaseNode is a subclass)
 NumericValue = int | float | None  # Numeric values from nodes
 BoolValue = bool | None  # Boolean values from nodes
-
-
-class TypeErrorDict(TypedDict):
-    """Type definition for type error dictionaries."""
-
-    line: int
-    col: int
-    end_line: int
-    end_col: int
-    message: str
-    severity: str
-    code: str
-
-
-class AnalysisResult(TypedDict):
-    """Type definition for analysis result dictionaries."""
-
-    param_classes: dict[str, ParameterizedInfo]
-    imports: dict[str, str]
-    type_errors: list[TypeErrorDict]
 
 
 logging.basicConfig(level=logging.INFO)
@@ -81,12 +67,11 @@ class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
     def __init__(self, workspace_root: str | None = None):
-        self.param_classes: dict[str, ParameterizedInfo] = {}
-        self.imports: dict[str, str] = {}
+        self.param_classes: ParamClassDict = {}
+        self.imports: ImportDict = {}
         # Store file content for source line lookup
         self._current_file_content: str | None = None
         self.type_errors: list[TypeErrorDict] = []
-        self.param_type_map = PARAM_TYPE_MAP
 
         # Workspace-wide analysis
         self.workspace_root = Path(workspace_root) if workspace_root else None
@@ -106,7 +91,6 @@ class ParamAnalyzer:
 
         # Use modular parameter validator
         self.validator = ParameterValidator(
-            param_type_map=self.param_type_map,
             param_classes=self.param_classes,
             external_param_classes=self.external_param_classes,
             imports=self.imports,
@@ -172,9 +156,7 @@ class ParamAnalyzer:
                 self.import_handler.handle_import_from(node)
 
         # Second pass: collect class definitions in order, respecting inheritance
-        class_nodes: list[BaseNode] = [
-            cast("BaseNode", node) for node in all_nodes if node.type == "classdef"
-        ]
+        class_nodes: list[ParsoNode] = [node for node in all_nodes if node.type == "classdef"]
 
         # Process classes in dependency order (parents before children)
         processed_classes = set()
@@ -236,11 +218,11 @@ class ParamAnalyzer:
         self.imports.clear()
         self.type_errors.clear()
 
-    def _is_parameter_assignment(self, node: NodeOrLeaf) -> bool:
+    def _is_parameter_assignment(self, node: ParsoNode) -> bool:
         """Check if a parso assignment statement looks like a parameter definition."""
         return self.parameter_detector.is_parameter_assignment(node)
 
-    def _handle_class_def(self, node: BaseNode) -> None:
+    def _handle_class_def(self, node: ParsoNode) -> None:
         """Handle class definitions that might inherit from param.Parameterized (parso node)."""
         # Check if class inherits from param.Parameterized (directly or indirectly)
         is_param_class = False

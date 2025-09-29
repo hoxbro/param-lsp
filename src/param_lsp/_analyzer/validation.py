@@ -7,11 +7,11 @@ class parameter defaults and runtime assignments.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
-from param_lsp.constants import DEPRECATED_PARAMETER_TYPES
+from param_lsp.constants import DEPRECATED_PARAMETER_TYPES, PARAM_TYPE_MAP
 
 from .parameter_extractor import (
     extract_boolean_value,
@@ -31,21 +31,14 @@ from .parso_utils import (
 )
 
 if TYPE_CHECKING:
-    from parso.tree import BaseNode, NodeOrLeaf
-
     from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
-
-
-class TypeErrorDict(TypedDict):
-    """Type definition for type error dictionaries."""
-
-    line: int
-    col: int
-    end_line: int
-    end_col: int
-    message: str
-    severity: str
-    code: str
+    from param_lsp._types import (
+        ExternalParamClassDict,
+        ImportDict,
+        ParamClassDict,
+        ParsoNode,
+        TypeErrorDict,
+    )
 
 
 class ParameterValidator:
@@ -62,7 +55,6 @@ class ParameterValidator:
     (like Panel widgets, HoloViews elements) to provide complete validation coverage.
 
     Attributes:
-        param_type_map: Mapping of parameter type names to Python types
         param_classes: Local parameterized classes discovered in the code
         external_param_classes: External parameterized classes from libraries
         imports: Import mappings for resolving parameter types
@@ -71,15 +63,13 @@ class ParameterValidator:
 
     def __init__(
         self,
-        param_type_map: dict,
-        param_classes: dict,
-        external_param_classes: dict,
-        imports: dict[str, str],
+        param_classes: ParamClassDict,
+        external_param_classes: ExternalParamClassDict,
+        imports: ImportDict,
         is_parameter_assignment_func,
         external_inspector: ExternalClassInspector,
         workspace_root: str | None = None,
     ):
-        self.param_type_map = param_type_map
         self.param_classes = param_classes
         self.external_param_classes = external_param_classes
         self.imports = imports
@@ -89,7 +79,7 @@ class ParameterValidator:
         self.type_errors: list[TypeErrorDict] = []
 
     def check_parameter_types(
-        self, tree: NodeOrLeaf, lines: list[str], cached_nodes: list[NodeOrLeaf] | None = None
+        self, tree: ParsoNode, lines: list[str], cached_nodes: list[ParsoNode] | None = None
     ) -> list[TypeErrorDict]:
         """Perform comprehensive parameter type validation on a parsed AST.
 
@@ -116,7 +106,7 @@ class ParameterValidator:
 
         for node in nodes_to_check:
             if node.type == "classdef":
-                self._check_class_parameter_defaults(cast("BaseNode", node), lines)
+                self._check_class_parameter_defaults(node, lines)
 
             # Check runtime parameter assignments like obj.param = value
             elif node.type == "expr_stmt" and is_assignment_stmt(node):
@@ -129,7 +119,7 @@ class ParameterValidator:
 
         return self.type_errors.copy()
 
-    def _check_class_parameter_defaults(self, class_node: BaseNode, lines: list[str]) -> None:
+    def _check_class_parameter_defaults(self, class_node: ParsoNode, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
         class_name = get_class_name(class_node)
         if not class_name or class_name not in self.param_classes:
@@ -140,7 +130,7 @@ class ParameterValidator:
         ):
             self._check_parameter_default_type(assignment_node, target_name, lines)
 
-    def _check_constructor_parameter_types(self, node: NodeOrLeaf, lines: list[str]) -> None:
+    def _check_constructor_parameter_types(self, node: ParsoNode, lines: list[str]) -> None:
         """Check for type errors in constructor parameter calls like MyClass(x="A") (parso version)."""
         # Get the class name from the call
         class_name = self._get_instance_class(node)
@@ -174,8 +164,8 @@ class ParameterValidator:
                 # If allow_None is False or not specified, continue with normal type checking
 
             # Check if assigned value matches expected type
-            if cls in self.param_type_map:
-                expected_types = self.param_type_map[cls]
+            if cls in PARAM_TYPE_MAP:
+                expected_types = PARAM_TYPE_MAP[cls]
                 if not isinstance(expected_types, tuple):
                     expected_types = (expected_types,)
 
@@ -201,7 +191,7 @@ class ParameterValidator:
             # Check bounds for numeric parameters in constructor calls
             self._check_constructor_bounds(node, class_name, param_name, cls, param_value)
 
-    def _infer_value_type(self, node: NodeOrLeaf) -> type | None:
+    def _infer_value_type(self, node: ParsoNode) -> type | None:
         """Infer Python type from parso node."""
         if hasattr(node, "type"):
             if node.type == "number":
@@ -238,7 +228,7 @@ class ParameterValidator:
                     return tuple
         return None
 
-    def _is_boolean_literal(self, node: NodeOrLeaf) -> bool:
+    def _is_boolean_literal(self, node: ParsoNode) -> bool:
         """Check if a parso node represents a boolean literal (True/False)."""
         return (node.type == "name" and get_value(node) in ("True", "False")) or (
             node.type == "keyword" and get_value(node) in ("True", "False")
@@ -253,7 +243,7 @@ class ParameterValidator:
             return " or ".join(type_names)
 
     def _create_type_error(
-        self, node: NodeOrLeaf | None, message: str, code: str, severity: str = "error"
+        self, node: ParsoNode | None, message: str, code: str, severity: str = "error"
     ) -> None:
         """Helper function to create and append a type error (parso version)."""
         # Get position information from parso node
@@ -309,7 +299,7 @@ class ParameterValidator:
         right_bracket = "]" if right_inclusive else ")"
         return f"{left_bracket}{min_str}, {max_str}{right_bracket}"
 
-    def _has_attribute_target(self, node: NodeOrLeaf) -> bool:
+    def _has_attribute_target(self, node: ParsoNode) -> bool:
         """Check if assignment has an attribute target (like obj.attr = value)."""
         for child in get_children(node):
             if child.type in ("power", "atom_expr"):
@@ -327,11 +317,11 @@ class ParameterValidator:
 
     def _check_constructor_bounds(
         self,
-        node: NodeOrLeaf,
+        node: ParsoNode,
         class_name: str,
         param_name: str,
         cls: str,
-        param_value: NodeOrLeaf,
+        param_value: ParsoNode,
     ) -> None:
         """Check if constructor parameter value is within parameter bounds."""
         # Only check bounds for numeric types
@@ -378,7 +368,7 @@ class ParameterValidator:
             self._create_type_error(node, message, "constructor-bounds-violation")
 
     def _check_parameter_default_type(
-        self, node: NodeOrLeaf, param_name: str, lines: list[str]
+        self, node: ParsoNode, param_name: str, lines: list[str]
     ) -> None:
         """Check if parameter default value matches declared type (parso version)."""
         # Find the parameter call on the right side of the assignment
@@ -412,8 +402,8 @@ class ParameterValidator:
         if default_value is not None and is_none_value(default_value):
             allow_None = True
 
-        if cls and default_value and cls in self.param_type_map:
-            expected_types = self.param_type_map[cls]
+        if cls and default_value and cls in PARAM_TYPE_MAP:
+            expected_types = PARAM_TYPE_MAP[cls]
             if not isinstance(expected_types, tuple):
                 expected_types = (expected_types,)
 
@@ -445,9 +435,7 @@ class ParameterValidator:
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
 
-    def _check_runtime_parameter_assignment_parso(
-        self, node: NodeOrLeaf, lines: list[str]
-    ) -> None:
+    def _check_runtime_parameter_assignment_parso(self, node: ParsoNode, lines: list[str]) -> None:
         """Check runtime parameter assignments like obj.param = value (parso version)."""
         # Extract target and assigned value from parso expr_stmt node
         target = None
@@ -544,8 +532,8 @@ class ParameterValidator:
             return
 
         # Check if assigned value matches expected type
-        if cls in self.param_type_map:
-            expected_types = self.param_type_map[cls]
+        if cls in PARAM_TYPE_MAP:
+            expected_types = PARAM_TYPE_MAP[cls]
             if not isinstance(expected_types, tuple):
                 expected_types = (expected_types,)
 
@@ -576,11 +564,11 @@ class ParameterValidator:
 
     def _check_runtime_bounds_parso(
         self,
-        node: NodeOrLeaf,
+        node: ParsoNode,
         instance_class: str,
         param_name: str,
         cls: str,
-        assigned_value: NodeOrLeaf,
+        assigned_value: ParsoNode,
     ) -> None:
         """Check if assigned value is within parameter bounds (parso version)."""
         # Only check bounds for numeric types
@@ -739,7 +727,7 @@ class ParameterValidator:
         return False
 
     def _check_parameter_constraints(
-        self, node: NodeOrLeaf, param_name: str, lines: list[str]
+        self, node: ParsoNode, param_name: str, lines: list[str]
     ) -> None:
         """Check for parameter-specific constraints (parso version)."""
         # Find the parameter call on the right side of the assignment
@@ -859,7 +847,7 @@ class ParameterValidator:
                     message = f"Parameter '{param_name}' has empty default but bounds specified"
                     self._create_type_error(node, message, "empty-default-with-bounds", "warning")
 
-    def _check_deprecated_parameter_type(self, node: NodeOrLeaf, param_type: str) -> None:
+    def _check_deprecated_parameter_type(self, node: ParsoNode, param_type: str) -> None:
         """Check if a parameter type is deprecated and emit a warning."""
         if param_type in DEPRECATED_PARAMETER_TYPES:
             deprecation_info = DEPRECATED_PARAMETER_TYPES[param_type]
