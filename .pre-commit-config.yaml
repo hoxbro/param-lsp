@@ -23,6 +23,7 @@ repos:
     hooks:
       - id: codespell
         exclude: vscode-extension/package-lock.json
+        args: ["--ignore-words-list=widht"]
         additional_dependencies:
           - tomli
   - repo: https://github.com/hoxbro/prettier-pre-commit
