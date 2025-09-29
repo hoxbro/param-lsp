@@ -15,7 +15,7 @@ nav:
   - Features:
       - Overview: features/index.md
       - Autocompletion: features/autocompletion.md
-      - Type Validation: features/type-validation.md
+      - Validation: features/validation.md
       - Hover Information: features/hover-information.md
 
 theme:
@@ -26,7 +26,6 @@ theme:
     - content.code.copy
     - navigation.expand
     - navigation.sections
-    - navigation.tabs
     - navigation.top
     - search.highlight
     - search.share

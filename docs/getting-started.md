@@ -28,7 +28,7 @@ class MyWidget(param.Parameterized):
     title = param.String(default="My Widget", doc="Title displayed on the widget")
     enabled = param.Boolean(default=True, doc="Whether the widget is enabled")
 
-    @param.depends("width", "height")
+    `@param.depends("width", "height")`
     def area(self):
         """Calculate the area of the widget."""
         return self.width * self.height
@@ -47,4 +47,4 @@ With the example above, you should see:
 
 - **[Autocompletion](features/autocompletion.md)** when typing parameter names in constructor
 - **[Hover documentation](features/hover-information.md)** when hovering over parameter definitions
-- **[Error diagnostics](features/type-validation.md)** if you set values outside bounds (try `width=1500`)
+- **[Error diagnostics](features/validation.md)** if you set values outside bounds (try `width=1500`)

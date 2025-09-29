@@ -1,4 +1,4 @@
-# Type Validation & Diagnostics
+# Validation & Diagnostics
 
 param-lsp provides real-time validation of parameter values, types, and constraints with immediate error feedback.
 

@@ -23,7 +23,7 @@ New to param-lsp? Follow our step-by-step guides:
 Explore param-lsp's powerful IDE features:
 
 - **[Autocompletion](features/autocompletion.md)** - Context-aware parameter completions
-- **[Validation](features/type-validation.md)** - Real-time validation with error diagnostics
+- **[Validation](features/validation.md)** - Real-time validation with error diagnostics
 - **[Hover Information](features/hover-information.md)** - Rich parameter documentation
 
 ## Need Help?

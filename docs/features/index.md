@@ -12,7 +12,7 @@ Context-aware completions for Param classes, parameters, and decorators:
 - Parameter definition completion
 - `@param.depends` decorator completion
 
-### [Type Validation](type-validation.md)
+### [Validation](validation.md)
 
 Real-time validation with error diagnostics:
 

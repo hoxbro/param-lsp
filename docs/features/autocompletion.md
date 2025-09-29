@@ -35,7 +35,7 @@ When creating instances of Parameterized classes, param-lsp provides intelligent
 - Parameter type information in completion details
 - Default values and bounds shown in completion documentation
 
-## @param.depends Completion
+## `@param.depends` Completion
 
 Smart completion for dependency decorators:
 
@@ -43,7 +43,7 @@ Smart completion for dependency decorators:
 
     ![Param Depends Completion](../assets/param-depends-completion.png)
 
-    Parameter name completions within @param.depends decorator strings
+    Parameter name completions within `@param.depends` decorator strings
 
 === "Code"
 
@@ -54,7 +54,7 @@ Smart completion for dependency decorators:
     class DataProcessor(param.Parameterized):
         input_file = param.String(default="data.csv")
 
-        @param.depends('inp  # <- Completes to 'input_file'
+        `@param.depends('inp`  # <- Completes to 'input_file'
         def process_data(self):
             return pd.read_csv(self.input_file)
     ```
