@@ -122,48 +122,49 @@ class TestParameterValidator:
         """Test _infer_value_type with boolean True."""
         code = "x = True"
         tree = parse(code)
-        # Find the name node for True
-        name_nodes = [
-            node for node in walk_tree(tree) if node.type == "name" and str(node.value) == "True"
+        # Find the keyword node for True
+        keyword_nodes = [
+            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "True"
         ]
-        assert len(name_nodes) == 1
+        assert len(keyword_nodes) == 1
 
-        inferred_type = validator._infer_value_type(name_nodes[0])
+        inferred_type = validator._infer_value_type(keyword_nodes[0])
         assert inferred_type == bool
 
     def test_infer_value_type_boolean_false(self, validator):
         """Test _infer_value_type with boolean False."""
         code = "x = False"
         tree = parse(code)
-        # Find the name node for False
-        name_nodes = [
-            node for node in walk_tree(tree) if node.type == "name" and str(node.value) == "False"
+        # Find the keyword node for False
+        keyword_nodes = [
+            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "False"
         ]
-        assert len(name_nodes) == 1
+        assert len(keyword_nodes) == 1
 
-        inferred_type = validator._infer_value_type(name_nodes[0])
+        inferred_type = validator._infer_value_type(keyword_nodes[0])
         assert inferred_type == bool
 
     def test_infer_value_type_none(self, validator):
         """Test _infer_value_type with None."""
         code = "x = None"
         tree = parse(code)
-        # Find the name node for None
-        name_nodes = [
-            node for node in walk_tree(tree) if node.type == "name" and str(node.value) == "None"
+        # Find the keyword node for None
+        keyword_nodes = [
+            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "None"
         ]
-        assert len(name_nodes) == 1
+        assert len(keyword_nodes) == 1
 
-        inferred_type = validator._infer_value_type(name_nodes[0])
+        inferred_type = validator._infer_value_type(keyword_nodes[0])
         assert inferred_type == type(None)
 
     def test_infer_value_type_list(self, validator):
         """Test _infer_value_type with list literals."""
         code = "x = [1, 2, 3]"
         tree = parse(code)
-        # Find the list literal node (atom with '[' and ']')
+        # Find the list literal node (atom containing brackets)
         atom_nodes = [
-            node for node in walk_tree(tree) if node.type == "atom" and str(node).startswith("[")
+            node for node in walk_tree(tree)
+            if node.type == "atom" and any(child.type == "operator" and child.value == "[" for child in getattr(node, "children", []))
         ]
         assert len(atom_nodes) == 1
 
@@ -174,9 +175,10 @@ class TestParameterValidator:
         """Test _infer_value_type with tuple literals."""
         code = "x = (1, 2, 3)"
         tree = parse(code)
-        # Find the tuple literal node (atom with '(' and ')')
+        # Find the tuple literal node (atom containing parentheses)
         atom_nodes = [
-            node for node in walk_tree(tree) if node.type == "atom" and str(node).startswith("(")
+            node for node in walk_tree(tree)
+            if node.type == "atom" and any(child.type == "operator" and child.value == "(" for child in getattr(node, "children", []))
         ]
         assert len(atom_nodes) == 1
 
@@ -187,9 +189,10 @@ class TestParameterValidator:
         """Test _infer_value_type with dict literals."""
         code = 'x = {"a": 1, "b": 2}'
         tree = parse(code)
-        # Find the dict literal node (atom with '{' and '}')
+        # Find the dict literal node (atom containing braces)
         atom_nodes = [
-            node for node in walk_tree(tree) if node.type == "atom" and str(node).startswith("{")
+            node for node in walk_tree(tree)
+            if node.type == "atom" and any(child.type == "operator" and child.value == "{" for child in getattr(node, "children", []))
         ]
         assert len(atom_nodes) == 1
 
@@ -200,25 +203,25 @@ class TestParameterValidator:
         """Test _is_boolean_literal with True."""
         code = "x = True"
         tree = parse(code)
-        # Find the name node for True
-        name_nodes = [
-            node for node in walk_tree(tree) if node.type == "name" and str(node.value) == "True"
+        # Find the keyword node for True
+        keyword_nodes = [
+            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "True"
         ]
-        assert len(name_nodes) == 1
+        assert len(keyword_nodes) == 1
 
-        assert validator._is_boolean_literal(name_nodes[0]) is True
+        assert validator._is_boolean_literal(keyword_nodes[0]) is True
 
     def test_is_boolean_literal_false(self, validator):
         """Test _is_boolean_literal with False."""
         code = "x = False"
         tree = parse(code)
-        # Find the name node for False
-        name_nodes = [
-            node for node in walk_tree(tree) if node.type == "name" and str(node.value) == "False"
+        # Find the keyword node for False
+        keyword_nodes = [
+            node for node in walk_tree(tree) if node.type == "keyword" and str(node.value) == "False"
         ]
-        assert len(name_nodes) == 1
+        assert len(keyword_nodes) == 1
 
-        assert validator._is_boolean_literal(name_nodes[0]) is True
+        assert validator._is_boolean_literal(keyword_nodes[0]) is True
 
     def test_is_boolean_literal_not_boolean(self, validator):
         """Test _is_boolean_literal with non-boolean."""

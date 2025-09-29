@@ -202,6 +202,9 @@ class ExternalClassInspector:
         self, library: types.ModuleType, library_name: str
     ) -> int:
         """Discover and cache all param.Parameterized classes in a library."""
+        if library is None:
+            return 0
+
         classes_cached = 0
 
         # Get all classes in the library
@@ -274,6 +277,14 @@ class ExternalClassInspector:
     def _introspect_param_class_for_cache(self, cls: type) -> ParameterizedInfo | None:
         """Introspect a param.Parameterized class and return ParameterizedInfo."""
         try:
+            # Check for invalid input
+            if cls is None or not isinstance(cls, type):
+                return None
+
+            # Check if it's a built-in type
+            if cls.__module__ == "builtins":
+                return None
+
             class_name = getattr(cls, "__name__", "Unknown")
             param_class_info = ParameterizedInfo(name=class_name)
 
@@ -373,7 +384,11 @@ class ExternalClassInspector:
                 if hasattr(base_cls, "_param_watchers") or param_name in base_cls.__dict__:
                     return base_cls
 
-        # If we can't find the defining class, return the original class
+        # If we can't find the defining class and this is not a param class, return None
+        if not hasattr(cls, "param"):
+            return None
+
+        # If we can't find the defining class but it is a param class, return the original class
         return cls
 
     def _extract_complete_parameter_definition(

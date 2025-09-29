@@ -5,9 +5,12 @@ Handles extracting parameter information from parso AST nodes.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from param_lsp.constants import PARAM_TYPES
+
+logger = logging.getLogger(__name__)
 
 from .parso_utils import (
     find_arguments_in_trailer,
@@ -376,6 +379,9 @@ def extract_parameter_info_from_assignment(
     current_file_content: str | None = None,
 ) -> ParameterInfo | None:
     """Extract parameter info from a parso assignment statement."""
+    if assignment_node is None or param_name is None:
+        logger.debug("Invalid input: assignment_node or param_name is None")
+        return None
 
     # Initialize parameter info
     cls = ""
@@ -389,9 +395,9 @@ def extract_parameter_info_from_assignment(
     param_call = None
     found_equals = False
     for child in get_children(assignment_node):
-        if child.type == "operator" and get_value(child) == "=":
+        if hasattr(child, 'type') and child.type == "operator" and get_value(child) == "=":
             found_equals = True
-        elif found_equals and child.type in ("power", "atom_expr"):
+        elif found_equals and hasattr(child, 'type') and child.type in ("power", "atom_expr"):
             param_call = child
             break
 

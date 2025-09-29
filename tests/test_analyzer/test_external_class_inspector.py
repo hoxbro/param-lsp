@@ -155,14 +155,14 @@ class TestExternalClassInspector:
         inspector = ExternalClassInspector()
 
         # Test with None
-        result = inspector._discover_param_classes_in_library("invalid_library", None)
-        assert result == []
+        result = inspector._discover_param_classes_in_library(None, "invalid_library")
+        assert result == 0
 
         # Test with non-existent library
         result = inspector._discover_param_classes_in_library(
-            "nonexistent.library", type("MockModule", (), {})
+            type("MockModule", (), {}), "nonexistent.library"
         )
-        assert result == []
+        assert result == 0
 
 
 class TestExternalClassInspectorIntegration:

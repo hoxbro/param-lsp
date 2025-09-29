@@ -5,9 +5,12 @@ Handles parameter inheritance from parent classes both local and external.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from .parso_utils import get_children, get_class_bases, get_value
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from parso.tree import BaseNode, NodeOrLeaf

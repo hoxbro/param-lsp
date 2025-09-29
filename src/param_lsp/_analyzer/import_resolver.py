@@ -6,10 +6,13 @@ Handles parsing imports and resolving module paths.
 from __future__ import annotations
 
 import importlib.util
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
 from .parso_utils import get_children, get_value
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from parso.tree import NodeOrLeaf

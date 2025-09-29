@@ -29,6 +29,8 @@ def has_value(node: NodeOrLeaf) -> bool:
         >>> has_value(name_node)
         True
     """
+    if node is None:
+        return False
     return hasattr(node, "value")
 
 
@@ -48,6 +50,8 @@ def get_value(node: NodeOrLeaf) -> str | None:
         >>> get_value(string_node)
         "'hello'"
     """
+    if node is None:
+        return None
     return getattr(node, "value", None)
 
 
@@ -73,6 +77,8 @@ def has_children(node: NodeOrLeaf) -> bool:
         >>> has_children(leaf)  # Name nodes don't have children
         False
     """
+    if node is None:
+        return False
     return hasattr(node, "children")
 
 
@@ -95,7 +101,10 @@ def get_children(node: NodeOrLeaf) -> list[NodeOrLeaf]:
         >>> len(leaf_children)  # Name nodes have no children
         0
     """
-    return getattr(node, "children", [])
+    if node is None:
+        return []
+    children = getattr(node, "children", [])
+    return children if children is not None else []
 
 
 def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
@@ -116,10 +125,13 @@ def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
         >>> nodes[0] == tree  # First node is the root
         True
     """
+    if node is None:
+        return
     yield node
     if has_children(node):
         for child in get_children(node):
-            yield from walk_tree(child)
+            if child is not None:
+                yield from walk_tree(child)
 
 
 def get_class_name(class_node: BaseNode) -> str | None:
@@ -138,8 +150,10 @@ def get_class_name(class_node: BaseNode) -> str | None:
         >>> get_class_name(class_def)
         'MyClass'
     """
+    if class_node is None:
+        return None
     for child in get_children(class_node):
-        if child.type == "name":
+        if hasattr(child, 'type') and child.type == "name":
             return get_value(child)
     return None
 

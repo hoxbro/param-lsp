@@ -6,7 +6,10 @@ class parameter defaults and runtime assignments.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, TypedDict, cast
+
+logger = logging.getLogger(__name__)
 
 from .parameter_extractor import (
     extract_boolean_value,
