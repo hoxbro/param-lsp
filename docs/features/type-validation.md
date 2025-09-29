@@ -112,32 +112,6 @@ theme = Theme(
 - Case-sensitive matching
 - Support for mixed-type choices
 
-## Regular Expression Validation
-
-String parameters with regex constraints:
-
-```python
-import param
-
-class FormData(param.Parameterized):
-    email = param.String(
-        regex=r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    )
-    phone = param.String(
-        regex=r'^\+?1?[0-9]{10}$'
-    )
-    zip_code = param.String(
-        regex=r'^\d{5}(-\d{4})?$'
-    )
-
-# These will show error diagnostics:
-form = FormData(
-    email="invalid-email",     # ❌ Error: Doesn't match email pattern
-    phone="123",               # ❌ Error: Doesn't match phone pattern
-    zip_code="invalid"         # ❌ Error: Doesn't match zip pattern
-)
-```
-
 ## List and Dict Validation
 
 Complex type validation for collections:
