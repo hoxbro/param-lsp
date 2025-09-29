@@ -78,7 +78,7 @@ class VideoPlayer(param.Parameterized):
         assert hover_info is not None, "Should have hover info for quality parameter"
         assert "Selector Parameter 'quality'" in hover_info, "Should show parameter type and name"
         assert "Video quality setting" in hover_info, "Should include parameter documentation"
-        assert "Allowed types: object" in hover_info, "Should show allowed types"
+        assert "Allowed objects:" in hover_info, "Should show allowed objects"
 
     def test_selector_parameter_analysis(self):
         """Test that Selector parameters are properly analyzed and detected."""
