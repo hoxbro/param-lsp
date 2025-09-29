@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, TypedDict, cast
 
 logger = logging.getLogger(__name__)
 
+from ..constants import DEPRECATED_PARAMETER_TYPES
 from .parameter_extractor import (
     extract_boolean_value,
     extract_numeric_value,
@@ -436,6 +437,9 @@ class ParameterValidator:
                 message = f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}"
                 self._create_type_error(node, message, "type-mismatch")
 
+        # Check for deprecated parameter types
+        self._check_deprecated_parameter_type(node, cls)
+
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
 
@@ -852,6 +856,13 @@ class ParameterValidator:
                 if (is_empty_list or is_empty_tuple) and "bounds" in kwargs:
                     message = f"Parameter '{param_name}' has empty default but bounds specified"
                     self._create_type_error(node, message, "empty-default-with-bounds", "warning")
+
+    def _check_deprecated_parameter_type(self, node: NodeOrLeaf, param_type: str) -> None:
+        """Check if a parameter type is deprecated and emit a warning."""
+        if param_type in DEPRECATED_PARAMETER_TYPES:
+            deprecation_info = DEPRECATED_PARAMETER_TYPES[param_type]
+            message = f"{deprecation_info['message']} (since {deprecation_info['version']})"
+            self._create_type_error(node, message, "deprecated-parameter", "warning")
 
     def _analyze_external_class_ast(self, full_class_path: str):
         """Analyze external class using AST through external class inspector."""
