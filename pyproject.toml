@@ -95,9 +95,10 @@ ignore = [
     "E501", # Line to long
     "E731", # Do not assign a lambda expression, use a def
     "E741", # Ambiguous variable name
-    "PLR2004", # magic-value-comparison
-    "PLR09", # Branches
     "PERF203", # Try/except inside loop
+    "PLC0415", # No top level imports
+    "PLR09", # Branches
+    "PLR2004", # magic-value-comparison
 ]
 extend-unsafe-fixes = [
     "F401", # unused imports
