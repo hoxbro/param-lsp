@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from parso import parse
 
@@ -72,7 +74,7 @@ class TestImportResolver:
             imports=sample_imports,
             analyze_file_func=mock_analyze_file_func,
         )
-        assert str(resolver.workspace_root) == "/test/workspace"
+        assert str(resolver.workspace_root).replace(os.sep, "/") == "/test/workspace"
         assert resolver.imports == sample_imports
         assert resolver.analyze_file_func == mock_analyze_file_func
 
