@@ -982,6 +982,7 @@ source = { editable = "." }
 dependencies = [
     { name = "lsprotocol" },
     { name = "param" },
+    { name = "parso" },
     { name = "platformdirs" },
     { name = "pygls" },
 ]
@@ -1004,6 +1005,7 @@ docs = [
 requires-dist = [
     { name = "lsprotocol" },
     { name = "param" },
+    { name = "parso", specifier = ">=0.8.5" },
     { name = "platformdirs" },
     { name = "pygls" },
 ]
@@ -1020,6 +1022,15 @@ docs = [
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extras = ["python"] },
+]
+
+[[package]]
+name = "parso"
+version = "0.8.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/de/53e0bcf53d13e005bd8c92e7855142494f41171b34c2536b86187474184d/parso-0.8.5.tar.gz", hash = "sha256:034d7354a9a018bdce352f48b2a8a450f05e9d6ee85db84764e9b6bd96dafe5a", size = 401205, upload-time = "2025-08-23T15:15:28.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/16/32/f8e3c85d1d5250232a5d3477a2a28cc291968ff175caeadaf3cc19ce0e4a/parso-0.8.5-py2.py3-none-any.whl", hash = "sha256:646204b5ee239c396d040b90f9e272e9a8017c630092bf59980beb62fd033887", size = 106668, upload-time = "2025-08-23T15:15:25.663Z" },
 ]
 
 [[package]]

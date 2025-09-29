@@ -30,6 +30,9 @@ PARAM_TYPE_MAP = {
     "Foldername": str,
     "Path": str,
     "Color": str,
+    "Selector": object,
+    "ObjectSelector": object,
+    "ListSelector": list,
 }
 
 # Parameter types that are considered to be numeric
@@ -65,6 +68,7 @@ PARAM_TYPES = {
     "FileSelector",
     "ListSelector",
     "ObjectSelector",
+    "Selector",
 }
 
 # =============================================================================
@@ -265,4 +269,17 @@ RX_METHODS = {
 # Reactive expression properties
 RX_PROPERTIES = {
     "value": "Retrieves or sets the current value of the reactive expression",
+}
+
+# =============================================================================
+# DEPRECATION WARNINGS
+# =============================================================================
+
+# Configuration for deprecated parameter types
+DEPRECATED_PARAMETER_TYPES = {
+    "ObjectSelector": {
+        "replacement": "Selector",
+        "message": "ObjectSelector is deprecated, use Selector instead",
+        "version": "param 2.0+",
+    }
 }
