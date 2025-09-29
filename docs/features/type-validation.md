@@ -167,26 +167,3 @@ config = DataConfig(
     coordinates=(1, 2, 3)      # ❌ Error: Expected 2 elements, got 3
 )
 ```
-
-## Cross-Parameter Validation
-
-Some validations check relationships between parameters:
-
-```python
-import param
-
-class Range(param.Parameterized):
-    min_value = param.Number(default=0)
-    max_value = param.Number(default=100)
-
-    @param.depends('min_value', 'max_value')
-    def _validate_range(self):
-        if self.min_value >= self.max_value:
-            raise ValueError("min_value must be less than max_value")
-
-# This will show error diagnostic:
-range_obj = Range(
-    min_value=50,
-    max_value=30  # ❌ Error: min_value >= max_value
-)
-```
