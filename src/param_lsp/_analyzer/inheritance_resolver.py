@@ -1,6 +1,6 @@
 """
-Class inheritance resolution utilities.
-Handles inheritance-related operations for Parameterized classes.
+Inheritance resolution for parameter classes.
+Handles parameter inheritance from parent classes both local and external.
 """
 
 from __future__ import annotations
@@ -10,19 +10,31 @@ from typing import TYPE_CHECKING
 from .parso_utils import get_children, get_class_bases, get_value
 
 if TYPE_CHECKING:
-    from parso.tree import BaseNode
+    from parso.tree import BaseNode, NodeOrLeaf
 
-    from param_lsp.models import ParameterInfo, ParameterizedInfo
+    from ..models import ParameterInfo, ParameterizedInfo
 
 
 class InheritanceResolver:
-    """Handles class inheritance resolution for Parameterized classes."""
+    """Handles inheritance resolution for parameter classes."""
 
-    def __init__(self, imports: dict[str, str], param_classes: dict[str, ParameterizedInfo]):
-        self.imports = imports
+    def __init__(
+        self,
+        param_classes: dict[str, "ParameterizedInfo"],
+        external_param_classes: dict[str, "ParameterizedInfo"],
+        imports: dict[str, str],
+        get_imported_param_class_info_func,
+        analyze_external_class_ast_func,
+        resolve_full_class_path_func,
+    ):
         self.param_classes = param_classes
+        self.external_param_classes = external_param_classes
+        self.imports = imports
+        self.get_imported_param_class_info = get_imported_param_class_info_func
+        self.analyze_external_class_ast = analyze_external_class_ast_func
+        self.resolve_full_class_path = resolve_full_class_path_func
 
-    def is_param_base(self, base, analyzer) -> bool:
+    def is_param_base(self, base: "NodeOrLeaf") -> bool:
         """Check if a base class is param.Parameterized or similar (parso node)."""
         if base.type == "name":
             base_name = get_value(base)
@@ -39,8 +51,8 @@ class InheritanceResolver:
             if base_name in self.param_classes:
                 return True
             # Check if it's an imported param class
-            imported_class_info = analyzer._get_imported_param_class_info(
-                base_name, base_name, getattr(analyzer, "_current_file_path", None)
+            imported_class_info = self.get_imported_param_class_info(
+                base_name, base_name, None  # current_file_path will be passed by caller
             )
             if imported_class_info:
                 return True
@@ -71,19 +83,18 @@ class InheritanceResolver:
                         return True
 
                 # Handle complex attribute access like pn.widgets.IntSlider
-                full_class_path = analyzer._resolve_full_class_path(base)
+                full_class_path = self.resolve_full_class_path(base)
                 if full_class_path:
                     # Check if this external class is a Parameterized class
-                    class_info = analyzer._analyze_external_class_ast(full_class_path)
+                    class_info = self.analyze_external_class_ast(full_class_path)
                     if class_info:
                         return True
         return False
 
     def collect_inherited_parameters(
-        self, node: BaseNode, current_file_path: str | None, analyzer
-    ) -> dict[str, ParameterInfo]:
+        self, node: "BaseNode", current_file_path: str | None = None
+    ) -> dict[str, "ParameterInfo"]:
         """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
-
         inherited_parameters = {}  # Last wins
 
         bases = get_class_bases(node)
@@ -103,7 +114,7 @@ class InheritanceResolver:
                 # If not found locally, check if it's an imported class
                 else:
                     # Check if this class was imported
-                    imported_class_info = analyzer._get_imported_param_class_info(
+                    imported_class_info = self.get_imported_param_class_info(
                         parent_class_name, parent_class_name, current_file_path
                     )
 
@@ -113,10 +124,10 @@ class InheritanceResolver:
 
             elif base.type in ("atom_expr", "power"):
                 # Handle complex attribute access like pn.widgets.IntSlider
-                full_class_path = analyzer._resolve_full_class_path(base)
+                full_class_path = self.resolve_full_class_path(base)
                 if full_class_path:
                     # Check if this external class is a Parameterized class
-                    class_info = analyzer._analyze_external_class_ast(full_class_path)
+                    class_info = self.analyze_external_class_ast(full_class_path)
                     if class_info:
                         for param_name, param_info in class_info.parameters.items():
                             inherited_parameters[param_name] = param_info  # noqa: PERF403
