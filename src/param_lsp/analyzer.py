@@ -29,6 +29,7 @@ from ._analyzer.parameter_extractor import (
     is_none_value,
     resolve_parameter_class,
 )
+from ._analyzer.validation import ParameterValidator
 from .constants import PARAM_TYPE_MAP, PARAM_TYPES
 from .models import ParameterInfo, ParameterizedInfo
 
@@ -87,6 +88,18 @@ class ParamAnalyzer:
 
         # Populate external library cache on initialization using modular component
         self.external_inspector.populate_external_library_cache()
+
+        # Use modular parameter validator
+        self.validator = ParameterValidator(
+            param_type_map=self.param_type_map,
+            param_classes=self.param_classes,
+            external_param_classes=self.external_param_classes,
+            imports=self.imports,
+            is_parameter_assignment_func=self._is_parameter_assignment,
+            workspace_root=str(self.workspace_root) if self.workspace_root else None,
+        )
+        # Pass external inspector to validator for external class analysis
+        self.validator.external_inspector = self.external_inspector
 
     def analyze_file(self, content: str, file_path: str | None = None) -> AnalysisResult:
         """Analyze a Python file for Param usage."""
@@ -163,8 +176,8 @@ class ParamAnalyzer:
         # Pre-pass: discover all external Parameterized classes using parso
         self._discover_external_param_classes(tree)
 
-        # Perform type inference after parsing
-        self._check_parameter_types(tree, content.split("\n"))
+        # Perform parameter validation after parsing using modular validator
+        self.type_errors = self.validator.check_parameter_types(tree, content.split("\n"))
 
         return {
             "param_classes": self.param_classes,
