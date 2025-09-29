@@ -35,7 +35,7 @@ VideoPlayer("""
         # Test completion at end of VideoPlayer(
         position = Position(line=12, character=12)  # After VideoPlayer(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "VideoPlayer(", position.character
+            "file:///test.py", "VideoPlayer(", position
         )
 
         # Should have completions for both volume and quality parameters
@@ -78,7 +78,7 @@ class VideoPlayer(param.Parameterized):
         assert hover_info is not None, "Should have hover info for quality parameter"
         assert "Selector Parameter 'quality'" in hover_info, "Should show parameter type and name"
         assert "Video quality setting" in hover_info, "Should include parameter documentation"
-        assert "Allowed types: object" in hover_info, "Should show allowed types"
+        assert "Allowed objects:" in hover_info, "Should show allowed objects"
 
     def test_selector_parameter_analysis(self):
         """Test that Selector parameters are properly analyzed and detected."""
@@ -138,7 +138,7 @@ Config("""
         # Test completion for all Selector parameters
         position = Position(line=6, character=7)  # After Config(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "Config(", position.character
+            "file:///test.py", "Config(", position
         )
 
         # Should have completions for all three selector parameters

@@ -184,7 +184,7 @@ def completion(params: CompletionParams) -> CompletionList:
 
     # Check if we're in a constructor call context (e.g., P(...) )
     constructor_completions = server._get_constructor_parameter_completions(
-        uri, current_line, position.character
+        uri, current_line, position
     )
     if constructor_completions:
         # Mark as complete and ensure all items are visible

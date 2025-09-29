@@ -191,6 +191,11 @@ class ParameterValidator:
             # Check bounds for numeric parameters in constructor calls
             self._check_constructor_bounds(node, class_name, param_name, cls, param_value)
 
+            # Check container constraints (List item_type, Tuple length)
+            self._check_constructor_container_constraints(
+                node, class_name, param_name, cls, param_value
+            )
+
     def _infer_value_type(self, node: ParsoNode) -> type | None:
         """Infer Python type from parso node."""
         if hasattr(node, "type"):
@@ -366,6 +371,68 @@ class ParameterValidator:
             )
             message = f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}"
             self._create_type_error(node, message, "constructor-bounds-violation")
+
+    def _check_constructor_container_constraints(
+        self,
+        node: ParsoNode,
+        class_name: str,
+        param_name: str,
+        cls: str,
+        param_value: ParsoNode,
+    ) -> None:
+        """Check container constraints for List item_type and Tuple length."""
+        if cls == "List":
+            self._check_list_item_type_constructor(node, class_name, param_name, param_value)
+        elif cls == "Tuple":
+            self._check_tuple_length_constructor(node, class_name, param_name, param_value)
+
+    def _check_list_item_type_constructor(
+        self,
+        node: ParsoNode,
+        class_name: str,
+        param_name: str,
+        param_value: ParsoNode,
+    ) -> None:
+        """Check that all items in a List match the specified item_type."""
+        # Get item_type constraint for this parameter
+        item_type = self._get_parameter_item_type(class_name, param_name)
+        if not item_type:
+            return
+
+        # Extract list items from the parameter value
+        list_items = self._extract_list_items(param_value)
+        if not list_items:
+            return
+
+        # Check each item against the expected type
+        for i, item in enumerate(list_items):
+            item_type_inferred = self._infer_value_type(item)
+            if item_type_inferred and not self._is_type_compatible(item_type_inferred, item_type):
+                message = f"Item {i} in List parameter '{param_name}' has type {item_type_inferred.__name__}, expected {item_type.__name__}"
+                self._create_type_error(node, message, "list-item-type-mismatch")
+
+    def _check_tuple_length_constructor(
+        self,
+        node: ParsoNode,
+        class_name: str,
+        param_name: str,
+        param_value: ParsoNode,
+    ) -> None:
+        """Check that Tuple has the expected length."""
+        # Get length constraint for this parameter
+        expected_length = self._get_parameter_length(class_name, param_name)
+        if expected_length is None:
+            return
+
+        # Extract tuple items from the parameter value
+        tuple_items = self._extract_tuple_items(param_value)
+        if tuple_items is None:
+            return
+
+        actual_length = len(tuple_items)
+        if actual_length != expected_length:
+            message = f"Tuple parameter '{param_name}' has {actual_length} elements, expected {expected_length}"
+            self._create_type_error(node, message, "tuple-length-mismatch")
 
     def _check_parameter_default_type(
         self, node: ParsoNode, param_name: str, lines: list[str]
@@ -857,3 +924,93 @@ class ParameterValidator:
     def _analyze_external_class_ast(self, full_class_path: str):
         """Analyze external class using AST through external class inspector."""
         return self.external_inspector.analyze_external_class_ast(full_class_path)
+
+    def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | None:
+        """Get the item_type constraint for a List parameter."""
+        # Check local classes first
+        if class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            return param_info.item_type if param_info else None
+
+        # Check external classes
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
+            return param_info.item_type if param_info else None
+
+        return None
+
+    def _get_parameter_length(self, class_name: str, param_name: str) -> int | None:
+        """Get the length constraint for a Tuple parameter."""
+        # Check local classes first
+        if class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            return param_info.length if param_info else None
+
+        # Check external classes
+        class_info = self.external_param_classes.get(class_name)
+        if class_info:
+            param_info = class_info.get_parameter(param_name)
+            return param_info.length if param_info else None
+
+        return None
+
+    def _extract_list_items(self, node: ParsoNode) -> list[ParsoNode] | None:
+        """Extract items from a list literal like [1, 2, 3]."""
+        if not hasattr(node, "type") or node.type != "atom":
+            return None
+
+        children = get_children(node)
+        if not children or get_value(children[0]) != "[":
+            return None
+
+        # Find testlist_comp inside the list
+        items = []
+        for child in children:
+            if child.type == "testlist_comp":
+                # Extract individual elements from testlist_comp
+                items.extend(
+                    item_child
+                    for item_child in get_children(child)
+                    if item_child.type not in ("operator",)
+                )
+                break
+
+        return items
+
+    def _extract_tuple_items(self, node: ParsoNode) -> list[ParsoNode] | None:
+        """Extract items from a tuple literal like (1, 2, 3)."""
+        if not hasattr(node, "type") or node.type != "atom":
+            return None
+
+        children = get_children(node)
+        if not children or get_value(children[0]) != "(":
+            return None
+
+        # Find testlist_comp inside the tuple
+        items = []
+        for child in children:
+            if child.type == "testlist_comp":
+                # Extract individual elements from testlist_comp
+                items.extend(
+                    item_child
+                    for item_child in get_children(child)
+                    if item_child.type not in ("operator",)
+                )
+                break
+
+        return items
+
+    def _is_type_compatible(self, inferred_type: type, expected_type: type) -> bool:
+        """Check if inferred type is compatible with expected type."""
+        if inferred_type == expected_type:
+            return True
+
+        # Handle subclass relationships
+        if isinstance(inferred_type, type) and isinstance(expected_type, type):
+            try:
+                return issubclass(inferred_type, expected_type)
+            except TypeError:
+                return False
+
+        return False

@@ -6,7 +6,14 @@ import re
 from typing import TYPE_CHECKING
 
 import param
-from lsprotocol.types import CompletionItem, CompletionItemKind, InsertTextFormat
+from lsprotocol.types import (
+    CompletionItem,
+    CompletionItemKind,
+    InsertTextFormat,
+    Position,
+    Range,
+    TextEdit,
+)
 
 from param_lsp.constants import (
     COMMON_PARAMETER_ATTRIBUTES,
@@ -237,18 +244,32 @@ class CompletionMixin(LSPServerBase):
         return class_info is not None
 
     def _get_constructor_parameter_completions(
-        self, uri: str, line: str, character: int
+        self, uri: str, line: str, position: Position
     ) -> list[CompletionItem]:
         """Get parameter completions for param class constructors like P(...)."""
-        completions = []
-
         if uri not in self.document_cache:
-            return completions
-
-        analysis = self.document_cache[uri]["analysis"]
-        param_classes_dict = analysis.get("param_classes", {})
+            return []
 
         # Find which param class constructor is being called
+        class_name = self._find_constructor_class_name(line, position.character)
+        if not class_name:
+            return []
+
+        # Get class info (local or external)
+        analysis = self.document_cache[uri]["analysis"]
+        param_classes_dict = analysis.get("param_classes", {})
+        analyzer = self.document_cache[uri]["analyzer"]
+        class_info = self._get_class_info(class_name, param_classes_dict, analyzer)
+
+        if not class_info:
+            return []
+
+        # Determine completion context and generate appropriate completions
+        before_cursor = line[: position.character]
+        return self._get_completions_by_context(before_cursor, class_info, class_name, position)
+
+    def _find_constructor_class_name(self, line: str, character: int) -> str | None:
+        """Find the class name being constructed from the line text."""
         before_cursor = line[:character]
 
         # Pattern: find word followed by opening parenthesis
@@ -258,145 +279,183 @@ class CompletionMixin(LSPServerBase):
         if not match:
             match = _re_constructor_call_inside.search(before_cursor)
 
-        if match:
-            class_name = match.group(2)
+        return match.group(2) if match else None
 
-            # Get analyzer for external class resolution
-            analyzer = self.document_cache[uri]["analyzer"]
+    def _get_completions_by_context(
+        self, before_cursor: str, class_info, class_name: str, position: Position
+    ) -> list[CompletionItem]:
+        """Generate completions based on the current typing context."""
+        parameters = class_info.get_parameter_names()
 
-            # Check if this is a known param class
-            if class_name in param_classes_dict:
-                class_info = param_classes_dict[class_name]
-                parameters = class_info.get_parameter_names()
+        # Check for exact parameter match (e.g., "width=")
+        exact_match = self._find_exact_parameter_match(before_cursor, parameters)
+        if exact_match:
+            return self._create_exact_match_completions(exact_match, class_info, class_name)
 
-                # Check if user has typed a specific parameter assignment like "x="
-                specific_param_match = None
-                for param_name in parameters:
-                    param_assignment_match = re.search(
-                        rf"^([^#]*?){re.escape(param_name)}\s*=\s*$", before_cursor, re.MULTILINE
-                    )
-                    if param_assignment_match:
-                        specific_param_match = param_name
-                        break
+        # Check for partial parameter match (e.g., "w=")
+        partial_match, partial_info = self._find_partial_parameter_match(before_cursor, parameters)
+        if partial_match and partial_info:
+            return self._create_partial_match_completions(
+                partial_match, partial_info, class_info, class_name, position
+            )
 
-                if specific_param_match:
-                    # User typed "param_name=", suggest only the default value for that parameter
-                    param_name = specific_param_match
-                    param_info = class_info.parameters.get(param_name)
+        # Default: suggest all unused parameters
+        return self._create_normal_parameter_completions(before_cursor, class_info, class_name)
 
-                    if param_info and param_info.default is not None:
-                        default_value = param_info.default
-                        cls = param_info.cls
-                        display_value = self._format_default_for_display(default_value, cls)
+    def _find_exact_parameter_match(self, before_cursor: str, parameters: list[str]) -> str | None:
+        """Check if user has typed an exact parameter assignment like 'width='."""
+        for param_name in parameters:
+            param_assignment_match = re.search(
+                rf"^([^#]*?){re.escape(param_name)}\s*=\s*$", before_cursor, re.MULTILINE
+            )
+            if param_assignment_match:
+                return param_name
+        return None
 
-                        # Build documentation for this specific parameter
-                        documentation = self._build_parameter_documentation(param_info, class_name)
+    def _find_partial_parameter_match(
+        self, before_cursor: str, parameters: list[str]
+    ) -> tuple[str | None, dict | None]:
+        """Check if user has typed a partial parameter assignment like 'w='."""
+        partial_assignment_match = re.search(r"\b(\w+)\s*=\s*$", before_cursor)
+        if not partial_assignment_match:
+            return None, None
 
-                        completions.append(
-                            CompletionItem(
-                                label=f"{param_name}={display_value}",
-                                kind=CompletionItemKind.Property,
-                                detail=f"Default value for {param_name}",
-                                documentation=documentation,
-                                insert_text=display_value,
-                                filter_text=param_name,
-                                sort_text="0",  # Highest priority
-                                preselect=True,  # Auto-select the default value
-                            )
-                        )
-                else:
-                    # Normal case - suggest all unused parameters
-                    used_params = set()
-                    used_matches = _re_constructor_param_assignment.findall(before_cursor)
-                    used_params.update(used_matches)
+        partial_text = partial_assignment_match.group(1)
+        partial_match_start = partial_assignment_match.start(1)
 
-                    for param_name in parameters:
-                        # Skip parameters that are already used
-                        if param_name in used_params:
-                            continue
-                        # Skip the 'name' parameter as it's rarely set in constructors
-                        if param_name == "name":
-                            continue
+        # Find parameter that starts with this partial text
+        for param_name in parameters:
+            if param_name.startswith(partial_text) and param_name != partial_text:
+                return param_name, {
+                    "partial_text": partial_text,
+                    "partial_match_start": partial_match_start,
+                }
 
-                        param_info = class_info.parameters.get(param_name)
-                        if not param_info:
-                            continue
+        return None, None
 
-                        # Build documentation for the parameter
-                        documentation = self._build_parameter_documentation(param_info, class_name)
+    def _create_exact_match_completions(
+        self, param_name: str, class_info, class_name: str
+    ) -> list[CompletionItem]:
+        """Create completion for exact parameter match (suggests default value)."""
+        param_info = class_info.parameters.get(param_name)
 
-                        # Create insert text with default value if available
-                        if param_info.default is not None:
-                            default_value = param_info.default
-                            cls = param_info.cls
-                            display_value = self._format_default_for_display(default_value, cls)
-                            insert_text = f"{param_name}={display_value}"
-                            label = f"{param_name}={display_value}"
-                        else:
-                            insert_text = f"{param_name}="
-                            label = param_name
+        if not param_info or param_info.default is None:
+            return []
 
-                        completions.append(
-                            CompletionItem(
-                                label=label,
-                                kind=CompletionItemKind.Property,
-                                detail=f"Parameter of {class_name}",
-                                documentation=documentation,
-                                insert_text=insert_text,
-                                filter_text=param_name,
-                                sort_text=f"{param_name:0>3}",
-                                preselect=False,
-                            )
-                        )
+        default_value = param_info.default
+        cls = param_info.cls
+        display_value = self._format_default_for_display(default_value, cls)
+        documentation = self._build_parameter_documentation(param_info, class_name)
+
+        return [
+            CompletionItem(
+                label=f"{param_name}={display_value}",
+                kind=CompletionItemKind.Property,
+                detail=f"Default value for {param_name}",
+                documentation=documentation,
+                insert_text=display_value,
+                filter_text=param_name,
+                sort_text="0",  # Highest priority
+                preselect=True,  # Auto-select the default value
+            )
+        ]
+
+    def _create_partial_match_completions(
+        self, param_name: str, partial_info: dict, class_info, class_name: str, position: Position
+    ) -> list[CompletionItem]:
+        """Create completion for partial parameter match (replaces partial text)."""
+        param_info = class_info.parameters.get(param_name)
+        if not param_info:
+            return []
+
+        # Calculate text replacement range
+        partial_match_start = partial_info["partial_match_start"]
+        character = position.character
+        # For single-line completions, replace_start is just the partial match start
+        replace_start = partial_match_start
+        replace_end = character
+
+        # Create TextEdit to replace the partial text
+        from lsprotocol.types import Position as LSPPosition
+
+        if param_info.default is not None:
+            # Parameter with default value
+            default_value = param_info.default
+            cls = param_info.cls
+            display_value = self._format_default_for_display(default_value, cls)
+            new_text = f"{param_name}={display_value}"
+            label = f"{param_name}={display_value}"
+        else:
+            # Parameter without default value
+            new_text = f"{param_name}="
+            label = param_name
+
+        text_edit = TextEdit(
+            range=Range(
+                start=LSPPosition(line=position.line, character=replace_start),
+                end=LSPPosition(line=position.line, character=replace_end),
+            ),
+            new_text=new_text,
+        )
+
+        documentation = self._build_parameter_documentation(param_info, class_name)
+
+        return [
+            CompletionItem(
+                label=label,
+                kind=CompletionItemKind.Property,
+                detail=f"Complete parameter for {param_name}",
+                documentation=documentation,
+                text_edit=text_edit,
+                filter_text=param_name,
+                sort_text="0",  # Highest priority
+                preselect=True,  # Auto-select the completion
+            )
+        ]
+
+    def _create_normal_parameter_completions(
+        self, before_cursor: str, class_info, class_name: str
+    ) -> list[CompletionItem]:
+        """Create completions for all unused parameters (normal case)."""
+        # Find already used parameters
+        used_params = set(_re_constructor_param_assignment.findall(before_cursor))
+
+        completions = []
+        for param_name in class_info.get_parameter_names():
+            # Skip parameters that are already used or should be filtered
+            if param_name in used_params or param_name == "name":
+                continue
+
+            param_info = class_info.parameters.get(param_name)
+            if not param_info:
+                continue
+
+            # Build documentation and completion item
+            documentation = self._build_parameter_documentation(param_info, class_name)
+
+            # Create insert text with default value if available
+            if param_info.default is not None:
+                default_value = param_info.default
+                cls = param_info.cls
+                display_value = self._format_default_for_display(default_value, cls)
+                insert_text = f"{param_name}={display_value}"
+                label = f"{param_name}={display_value}"
             else:
-                # Handle external param classes (e.g., hv.Curve)
-                full_class_path = self._resolve_external_class_path(class_name, analyzer)
-                class_info = analyzer.external_param_classes.get(full_class_path)
+                insert_text = f"{param_name}="
+                label = param_name
 
-                if class_info is None and full_class_path:
-                    class_info = analyzer._analyze_external_class_ast(full_class_path)
-
-                if class_info:
-                    used_params = set()
-                    used_matches = _re_constructor_param_assignment.findall(before_cursor)
-                    used_params.update(used_matches)
-
-                    for param_name in class_info.get_parameter_names():
-                        if param_name in used_params or param_name == "name":
-                            continue
-
-                        param_info = class_info.parameters.get(param_name)
-                        if not param_info:
-                            continue
-
-                        # Build documentation for external parameter
-                        documentation = self._build_parameter_documentation(
-                            param_info, full_class_path or class_name
-                        )
-
-                        # Create insert text with default value if available
-                        if param_info.default is not None:
-                            default_value = param_info.default
-                            cls = param_info.cls
-                            display_value = self._format_default_for_display(default_value, cls)
-                            insert_text = f"{param_name}={display_value}"
-                            label = f"{param_name}={display_value}"
-                        else:
-                            insert_text = f"{param_name}="
-                            label = param_name
-
-                        completions.append(
-                            CompletionItem(
-                                label=label,
-                                kind=CompletionItemKind.Property,
-                                detail=f"Parameter of {full_class_path}",
-                                documentation=documentation,
-                                insert_text=insert_text,
-                                filter_text=param_name,
-                                sort_text=f"{param_name:0>3}",
-                                preselect=False,
-                            )
-                        )
+            completions.append(
+                CompletionItem(
+                    label=label,
+                    kind=CompletionItemKind.Property,
+                    detail=f"Parameter of {class_name}",
+                    documentation=documentation,
+                    insert_text=insert_text,
+                    filter_text=param_name,
+                    sort_text=f"{param_name:0>3}",
+                    preselect=False,
+                )
+            )
 
         return completions
 

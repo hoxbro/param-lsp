@@ -7,7 +7,7 @@ import textwrap
 
 import param
 
-from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS
+from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS, SELECTOR_PARAM_TYPES
 
 from .base import LSPServerBase
 
@@ -85,8 +85,14 @@ class HoverMixin(LSPServerBase):
             header_parts = [f"**{param_info.cls} Parameter '{param_name}' (from {class_name})**"]
         else:
             header_parts = [f"**{param_info.cls} Parameter '{param_name}'**"]
-        python_type = self._get_python_type_name(param_info.cls, param_info.allow_None)
-        header_parts.append(f"Allowed types: {python_type}")
+        # For Selector parameters with objects, show allowed values only
+        if param_info.objects and param_info.cls in SELECTOR_PARAM_TYPES:
+            objects_str = ", ".join([f'"{obj}"' for obj in param_info.objects])
+            header_parts.append(f"Allowed objects: [{objects_str}]")
+        elif param_info.cls not in SELECTOR_PARAM_TYPES:
+            # Only show "Allowed types" for non-Selector parameters
+            python_type = self._get_python_type_name(param_info.cls, param_info.allow_None)
+            header_parts.append(f"Allowed types: {python_type}")
 
         # Add bounds information to header section
         if param_info.bounds:
@@ -113,11 +119,13 @@ class HoverMixin(LSPServerBase):
             source_line = param_info.location.get("source")
             line_number = param_info.location.get("line")
             if source_line:
+                # Clean and dedent multiline parameter definitions
+                clean_source = textwrap.dedent(source_line).strip()
                 if line_number:
                     definition_header = f"Definition (line {line_number}):"
                 else:
                     definition_header = "Definition:"
-                source_section = f"---\n{definition_header}\n```python\n{source_line}\n```"
+                source_section = f"---\n{definition_header}\n```python\n{clean_source}\n```"
                 hover_sections.append(source_section)
 
         return "\n\n".join(hover_sections)

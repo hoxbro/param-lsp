@@ -31,7 +31,7 @@ P("""
         # Test completion at end of P(
         position = Position(line=7, character=2)  # After P(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(", position.character
+            "file:///test.py", "P(", position
         )
 
         # Should have completions for both x and y parameters
@@ -68,7 +68,7 @@ P(x="""
         # Test completion at end of P(x=
         position = Position(line=7, character=4)  # After P(x=
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(x=", position.character
+            "file:///test.py", "P(x=", position
         )
 
         # Should suggest the default value for x, not the parameter name again
@@ -99,7 +99,7 @@ P(x=5, """
         # Test completion after existing parameter
         position = Position(line=7, character=7)  # After P(x=5,
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(x=5, ", position.character
+            "file:///test.py", "P(x=5, ", position
         )
 
         # Should suggest y and z but not x (already used)
@@ -130,7 +130,7 @@ P("""
         # Test completion at end of P(
         position = Position(line=6, character=2)  # After P(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(", position.character
+            "file:///test.py", "P(", position
         )
 
         # Should have completions for both parameters
@@ -165,7 +165,7 @@ P(x="""
         # Test completion at end of P(x=
         position = Position(line=6, character=4)  # After P(x=
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(x=", position.character
+            "file:///test.py", "P(x=", position
         )
 
         # Should not suggest anything since x has no default value
@@ -193,7 +193,7 @@ Child("""
         # Test completion for Child constructor
         position = Position(line=9, character=6)  # After Child(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "Child(", position.character
+            "file:///test.py", "Child(", position
         )
 
         # Should suggest both inherited and own parameters
@@ -225,7 +225,7 @@ P("""
         # Test completion at end of P(
         position = Position(line=6, character=2)  # After P(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(", position.character
+            "file:///test.py", "P(", position
         )
 
         # Check that completions include bounds information in documentation
@@ -264,7 +264,7 @@ P("""
         # Test completion with param imported as 'p'
         position = Position(line=6, character=2)  # After P(
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "P(", position.character
+            "file:///test.py", "P(", position
         )
 
         # Should still work with aliased import
@@ -288,7 +288,7 @@ hv.Curve("""
         # Test completion after hv.Curve(
         position = Position(line=2, character=9)  # After "hv.Curve("
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", "hv.Curve(", position.character
+            "file:///test.py", "hv.Curve(", position
         )
 
         # Should have completions for hv.Curve parameters
@@ -327,8 +327,9 @@ P(x=1, y=21, """
 
         # Test completion after both parameters are already used
         line = "P(x=1, y=21, "
+        position = Position(line=8, character=len(line))  # Assuming line 8
         completions = server._get_constructor_parameter_completions(
-            "file:///test.py", line, len(line)
+            "file:///test.py", line, position
         )
 
         # Should not suggest any parameters since both x and y are already used

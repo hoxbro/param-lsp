@@ -71,6 +71,9 @@ PARAM_TYPES = {
     "Selector",
 }
 
+# Selector parameter types that support objects
+SELECTOR_PARAM_TYPES = ("Selector", "ObjectSelector", "ListSelector")
+
 # =============================================================================
 # LSP SERVER CONSTANTS
 # =============================================================================
