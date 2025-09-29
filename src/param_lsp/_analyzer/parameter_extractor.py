@@ -490,6 +490,16 @@ def extract_parameter_info_from_assignment(
                     source_definition = SourceAnalyzer.extract_multiline_definition(
                         lines, line_number - 1
                     )
+                    # Preserve the original indentation of the first line
+                    if source_definition and line_number - 1 < len(lines):
+                        original_first_line = lines[line_number - 1]
+                        # If original line has indentation that was stripped, restore it
+                        if original_first_line.lstrip() == source_definition.split("\n")[0]:
+                            # Replace first line with the original indented version
+                            source_lines = source_definition.split("\n")
+                            source_lines[0] = original_first_line
+                            source_definition = "\n".join(source_lines)
+
                     location = {"line": line_number, "source": source_definition}
         except (AttributeError, IndexError):
             # If we can't get location info, continue without it
