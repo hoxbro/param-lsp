@@ -55,7 +55,7 @@ class ImportResolver:
         imports: dict[str, str] | None = None,
         module_cache: dict[str, AnalysisResult] | None = None,
         file_cache: dict[str, AnalysisResult] | None = None,
-        analyze_file_func=None
+        analyze_file_func=None,
     ):
         self.workspace_root = Path(workspace_root) if workspace_root else None
         self.imports: dict[str, str] = imports or {}

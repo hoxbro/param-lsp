@@ -1,25 +1,27 @@
 """Test parso_utils functions independently."""
 
-import pytest
+from __future__ import annotations
+
 import parso
+import pytest
 
 from param_lsp._analyzer.parso_utils import (
+    find_all_parameter_assignments,
+    find_arguments_in_trailer,
+    find_class_suites,
+    find_function_call_trailers,
+    find_parameter_assignments,
+    get_assignment_target_name,
     get_children,
+    get_class_bases,
+    get_class_name,
     get_value,
+    has_attribute_target,
     has_children,
     has_value,
-    walk_tree,
-    get_class_name,
-    get_class_bases,
     is_assignment_stmt,
-    get_assignment_target_name,
-    has_attribute_target,
     is_function_call,
-    find_class_suites,
-    find_parameter_assignments,
-    find_function_call_trailers,
-    find_arguments_in_trailer,
-    find_all_parameter_assignments,
+    walk_tree,
 )
 
 
@@ -36,9 +38,9 @@ class TestBasicUtils:
         name_node = None
         number_node = None
         for node in nodes:
-            if hasattr(node, 'value') and node.value == 'x':
+            if hasattr(node, "value") and node.value == "x":
                 name_node = node
-            elif hasattr(node, 'value') and node.value == '42':
+            elif hasattr(node, "value") and node.value == "42":
                 number_node = node
 
         assert name_node is not None
@@ -61,9 +63,9 @@ class TestBasicUtils:
                     found_values.append(value)
 
         # Should find these key values
-        assert 'x' in found_values
-        assert '=' in found_values
-        assert '42' in found_values
+        assert "x" in found_values
+        assert "=" in found_values
+        assert "42" in found_values
 
     def test_has_children(self):
         """Test has_children function."""
@@ -74,7 +76,7 @@ class TestBasicUtils:
 
         # Find a leaf node
         for node in walk_tree(tree):
-            if hasattr(node, 'value') and node.value == 'x':
+            if hasattr(node, "value") and node.value == "x":
                 assert not has_children(node)  # Name nodes typically don't have children
                 break
 
@@ -99,9 +101,9 @@ class TestBasicUtils:
 
         # Should include values we expect
         values = [get_value(node) for node in nodes if has_value(node)]
-        assert 'x' in values
-        assert '=' in values
-        assert '42' in values
+        assert "x" in values
+        assert "=" in values
+        assert "42" in values
 
 
 class TestClassUtils:
@@ -214,7 +216,7 @@ x = 42
                     regular_assignments.append(node)
 
         assert len(attribute_assignments) == 1  # obj.attr = 42
-        assert len(regular_assignments) == 1    # x = 42
+        assert len(regular_assignments) == 1  # x = 42
 
 
 class TestFunctionCallUtils:

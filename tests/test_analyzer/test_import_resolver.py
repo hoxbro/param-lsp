@@ -25,16 +25,24 @@ class TestImportResolver:
     @pytest.fixture
     def mock_analyze_file_func(self):
         """Mock function for analyzing files."""
+
         def mock_func(content, file_path=None):
             return {
                 "param_classes": {
-                    "TestClass": type("MockParameterizedInfo", (), {
-                        "parameters": {"test_param": type("MockParameterInfo", (), {"cls": "String"})()}
-                    })()
+                    "TestClass": type(
+                        "MockParameterizedInfo",
+                        (),
+                        {
+                            "parameters": {
+                                "test_param": type("MockParameterInfo", (), {"cls": "String"})()
+                            }
+                        },
+                    )()
                 },
                 "imports": {},
-                "type_errors": []
+                "type_errors": [],
             }
+
         return mock_func
 
     @pytest.fixture
@@ -215,10 +223,13 @@ class TestImportResolver:
                 class MockFile:
                     def read(self):
                         return "# mock file content"
+
                     def __enter__(self):
                         return self
+
                     def __exit__(self, *args):
                         pass
+
                 return MockFile()
 
             m.setattr("builtins.open", mock_open)
@@ -233,8 +244,10 @@ class TestImportResolver:
         """Test get_imported_param_class_info with simple import."""
         # Mock a file system operation that will fail
         with pytest.MonkeyPatch().context() as m:
+
             def mock_open(*args, **kwargs):
                 raise OSError("File not found")
+
             m.setattr("builtins.open", mock_open)
 
             result = resolver.get_imported_param_class_info("TestClass", "param", "/test/file.py")

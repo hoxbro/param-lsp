@@ -1,5 +1,7 @@
 """Test external_class_inspector functions independently."""
 
+from __future__ import annotations
+
 import pytest
 
 from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
@@ -12,7 +14,7 @@ class TestExternalClassInspector:
         """Test inspector initialization."""
         inspector = ExternalClassInspector()
         assert inspector is not None
-        assert hasattr(inspector, 'external_param_classes')
+        assert hasattr(inspector, "external_param_classes")
         assert isinstance(inspector.external_param_classes, dict)
 
     def test_populate_external_library_cache(self):
@@ -57,7 +59,9 @@ class TestExternalClassInspector:
         # Test valid parameter assignments
         assert inspector._looks_like_parameter_assignment("x = param.Integer()")
         assert inspector._looks_like_parameter_assignment("name = param.String(default='test')")
-        assert inspector._looks_like_parameter_assignment("    value = param.Number(bounds=(0, 10))")
+        assert inspector._looks_like_parameter_assignment(
+            "    value = param.Number(bounds=(0, 10))"
+        )
 
         # Test invalid assignments
         assert not inspector._looks_like_parameter_assignment("x = 42")
@@ -75,7 +79,7 @@ class TestExternalClassInspector:
             "        default=42,",
             "        bounds=(0, 100)",
             "    )",
-            "    y = param.String()"
+            "    y = param.String()",
         ]
 
         # Test extracting multiline definition
@@ -155,7 +159,9 @@ class TestExternalClassInspector:
         assert result == []
 
         # Test with non-existent library
-        result = inspector._discover_param_classes_in_library("nonexistent.library", type("MockModule", (), {}))
+        result = inspector._discover_param_classes_in_library(
+            "nonexistent.library", type("MockModule", (), {})
+        )
         assert result == []
 
 
@@ -181,10 +187,11 @@ class TestExternalClassInspectorIntegration:
 
         try:
             import param
+
             # Test with actual param.Parameterized if available
             result = inspector.analyze_external_class_ast("param.Parameterized")
             # May be None or a ParameterizedInfo object
-            assert result is None or hasattr(result, 'name')
+            assert result is None or hasattr(result, "name")
         except ImportError:
             pytest.skip("param library not available")
 

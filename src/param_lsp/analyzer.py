@@ -26,8 +26,6 @@ like Panel, HoloViews, Bokeh, and others.
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import inspect
 import logging
 import re
@@ -40,14 +38,7 @@ from ._analyzer import parso_utils
 from ._analyzer.external_class_inspector import ExternalClassInspector
 from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
-from ._analyzer.parameter_extractor import (
-    extract_boolean_value,
-    extract_numeric_value,
-    extract_parameter_info_from_assignment,
-    get_keyword_arguments,
-    is_none_value,
-    resolve_parameter_class,
-)
+from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
 from ._analyzer.validation import ParameterValidator
 from .constants import PARAM_TYPE_MAP, PARAM_TYPES
 from .models import ParameterInfo, ParameterizedInfo
@@ -139,12 +130,12 @@ class ParamAnalyzer:
             resolve_full_class_path_func=self.import_resolver.resolve_full_class_path,
         )
 
-    def _analyze_file_for_import_resolver(self, content: str, file_path: str | None = None) -> AnalysisResult:
+    def _analyze_file_for_import_resolver(
+        self, content: str, file_path: str | None = None
+    ) -> AnalysisResult:
         """Analyze a file for the import resolver (avoiding circular dependencies)."""
         # Create a new analyzer instance for the imported module to avoid conflicts
-        module_analyzer = ParamAnalyzer(
-            str(self.workspace_root) if self.workspace_root else None
-        )
+        module_analyzer = ParamAnalyzer(str(self.workspace_root) if self.workspace_root else None)
         return module_analyzer.analyze_file(content, file_path)
 
     def analyze_file(self, content: str, file_path: str | None = None) -> AnalysisResult:
@@ -174,9 +165,7 @@ class ParamAnalyzer:
 
         # Second pass: collect class definitions in order, respecting inheritance
         class_nodes: list[BaseNode] = [
-            cast("BaseNode", node)
-            for node in all_nodes
-            if node.type == "classdef"
+            cast("BaseNode", node) for node in all_nodes if node.type == "classdef"
         ]
 
         # Process classes in dependency order (parents before children)
@@ -223,7 +212,9 @@ class ParamAnalyzer:
         self._discover_external_param_classes(tree, all_nodes)
 
         # Perform parameter validation after parsing using modular validator with cached nodes
-        self.type_errors = self.validator.check_parameter_types(tree, content.split("\n"), all_nodes)
+        self.type_errors = self.validator.check_parameter_types(
+            tree, content.split("\n"), all_nodes
+        )
 
         return {
             "param_classes": self.param_classes,
@@ -282,7 +273,6 @@ class ParamAnalyzer:
                     return param_type in PARAM_TYPES
 
         return False
-
 
     def _handle_import(self, node: NodeOrLeaf) -> None:
         """Handle 'import' statements (parso node)."""
@@ -390,8 +380,6 @@ class ParamAnalyzer:
 
             self.param_classes[class_name] = class_info
 
-
-
     def _extract_parameters(self, node) -> list[ParameterInfo]:
         """Extract parameter definitions from a Param class (parso node)."""
         parameters = []
@@ -406,28 +394,6 @@ class ParamAnalyzer:
                 parameters.append(param_info)
 
         return parameters
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using the modular external inspector."""
@@ -602,7 +568,9 @@ class ParamAnalyzer:
                 return start_line + i
         return None
 
-    def _discover_external_param_classes(self, tree: NodeOrLeaf, cached_nodes: list[NodeOrLeaf] | None = None) -> None:
+    def _discover_external_param_classes(
+        self, tree: NodeOrLeaf, cached_nodes: list[NodeOrLeaf] | None = None
+    ) -> None:
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
         nodes_to_check = cached_nodes if cached_nodes is not None else parso_utils.walk_tree(tree)
         for node in nodes_to_check:

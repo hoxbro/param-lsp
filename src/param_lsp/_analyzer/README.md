@@ -19,8 +19,10 @@ analyzer.py (orchestrator)
 ## Component Descriptions
 
 ### parso_utils.py
+
 **Purpose**: Low-level AST navigation and parsing utilities
 **Key Functions**:
+
 - `walk_tree()` - Recursive AST traversal
 - `get_class_name()`, `get_class_bases()` - Class structure extraction
 - `is_assignment_stmt()`, `is_function_call()` - Node type checking
@@ -29,8 +31,10 @@ analyzer.py (orchestrator)
 **When to Use**: For low-level AST operations and tree traversal
 
 ### parameter_extractor.py
+
 **Purpose**: Extract parameter definitions from AST nodes
 **Key Functions**:
+
 - `extract_parameter_info_from_assignment()` - Parse parameter assignments
 - `resolve_parameter_class()` - Identify parameter types
 - `get_keyword_arguments()` - Extract function call arguments
@@ -39,11 +43,14 @@ analyzer.py (orchestrator)
 **When to Use**: When you need to extract parameter metadata from code
 
 ### validation.py
+
 **Purpose**: Comprehensive parameter validation
 **Key Classes**:
+
 - `ParameterValidator` - Main validation orchestrator
 
 **Validation Types**:
+
 - Type checking (ensuring values match parameter types)
 - Bounds validation (numeric ranges)
 - Constraint checking (parameter-specific rules)
@@ -53,11 +60,14 @@ analyzer.py (orchestrator)
 **When to Use**: For real-time error checking and diagnostics
 
 ### external_class_inspector.py
+
 **Purpose**: Runtime introspection of external library classes
 **Key Classes**:
+
 - `ExternalClassInspector` - Main introspection engine
 
 **Capabilities**:
+
 - Discovers Parameterized classes in external libraries
 - Extracts parameter definitions via runtime introspection
 - Caches results for performance
@@ -66,11 +76,14 @@ analyzer.py (orchestrator)
 **When to Use**: When analyzing classes from external libraries
 
 ### inheritance_resolver.py
+
 **Purpose**: Resolve parameter inheritance hierarchies
 **Key Classes**:
+
 - `InheritanceResolver` - Inheritance resolution engine
 
 **Capabilities**:
+
 - Identifies Parameterized base classes
 - Collects inherited parameters from parents
 - Handles multi-level inheritance
@@ -79,11 +92,14 @@ analyzer.py (orchestrator)
 **When to Use**: When dealing with class inheritance
 
 ### import_resolver.py
+
 **Purpose**: Cross-file import and module resolution
 **Key Classes**:
+
 - `ImportResolver` - Import resolution engine
 
 **Capabilities**:
+
 - Parses import statements
 - Resolves module paths
 - Handles workspace-relative imports
@@ -95,7 +111,9 @@ analyzer.py (orchestrator)
 ## Design Principles
 
 ### Separation of Concerns
+
 Each module has a single, well-defined responsibility:
+
 - **parso_utils**: Low-level AST operations
 - **parameter_extractor**: Parameter parsing
 - **validation**: Error checking
@@ -104,20 +122,26 @@ Each module has a single, well-defined responsibility:
 - **import_resolver**: Import handling
 
 ### Dependency Management
+
 Components are designed with minimal interdependencies:
+
 - **parso_utils** has no dependencies (pure utility functions)
 - **parameter_extractor** depends only on parso_utils
 - **validation** uses parameter_extractor and parso_utils
 - Higher-level components orchestrate lower-level ones
 
 ### Testability
+
 Each component can be unit tested independently:
+
 - Mock dependencies for isolation
 - Clear input/output contracts
 - Comprehensive test coverage for each module
 
 ### Performance
+
 Caching and optimization strategies:
+
 - **external_class_inspector** caches introspection results
 - **import_resolver** caches analyzed modules
 - **validation** reuses analyzer state
@@ -125,6 +149,7 @@ Caching and optimization strategies:
 ## Usage Examples
 
 ### Basic Parameter Extraction
+
 ```python
 from _analyzer.parameter_extractor import extract_parameter_info_from_assignment
 from _analyzer.parso_utils import walk_tree
@@ -137,6 +162,7 @@ for node in walk_tree(tree):
 ```
 
 ### Validation
+
 ```python
 from _analyzer.validation import ParameterValidator
 
@@ -152,6 +178,7 @@ errors = validator.check_parameter_types(tree, source_lines)
 ```
 
 ### External Class Introspection
+
 ```python
 from _analyzer.external_class_inspector import ExternalClassInspector
 
@@ -162,6 +189,7 @@ class_info = inspector.analyze_external_class_ast("panel.widgets.IntSlider")
 ## Testing Strategy
 
 Each module has comprehensive unit tests in `tests/test_analyzer/`:
+
 - `test_parso_utils.py` - AST utility tests
 - `test_parameter_extractor.py` - Parameter extraction tests
 - `test_validation.py` - Validation logic tests
@@ -174,11 +202,13 @@ Integration tests validate component interactions in `tests/test_integration/`.
 ## Performance Considerations
 
 ### Caching Strategy
+
 - **External classes**: Cached in `external_library_cache` with TTL
 - **Analyzed modules**: Cached in `module_cache` and `file_cache`
 - **Parameter metadata**: Cached in component instances
 
 ### Optimization Opportunities
+
 - Lazy loading of external libraries
 - Incremental analysis for file changes
 - Parallel processing for independent modules
@@ -196,6 +226,7 @@ When modifying the analyzer:
 ## Future Enhancements
 
 Potential improvements to the modular architecture:
+
 - Plugin system for custom parameter types
 - Async analysis for better IDE responsiveness
 - Enhanced caching with persistence
@@ -204,4 +235,4 @@ Potential improvements to the modular architecture:
 
 ---
 
-*This modular architecture was established during Phase 2 of the analyzer refactoring (January 2025) to improve maintainability, testability, and performance while preserving all existing functionality.*
+_This modular architecture was established during Phase 2 of the analyzer refactoring (January 2025) to improve maintainability, testability, and performance while preserving all existing functionality._

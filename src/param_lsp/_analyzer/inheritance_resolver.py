@@ -12,7 +12,7 @@ from .parso_utils import get_children, get_class_bases, get_value
 if TYPE_CHECKING:
     from parso.tree import BaseNode, NodeOrLeaf
 
-    from ..models import ParameterInfo, ParameterizedInfo
+    from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
 class InheritanceResolver:
@@ -41,8 +41,8 @@ class InheritanceResolver:
 
     def __init__(
         self,
-        param_classes: dict[str, "ParameterizedInfo"],
-        external_param_classes: dict[str, "ParameterizedInfo"],
+        param_classes: dict[str, ParameterizedInfo],
+        external_param_classes: dict[str, ParameterizedInfo],
         imports: dict[str, str],
         get_imported_param_class_info_func,
         analyze_external_class_ast_func,
@@ -55,7 +55,7 @@ class InheritanceResolver:
         self.analyze_external_class_ast = analyze_external_class_ast_func
         self.resolve_full_class_path = resolve_full_class_path_func
 
-    def is_param_base(self, base: "NodeOrLeaf") -> bool:
+    def is_param_base(self, base: NodeOrLeaf) -> bool:
         """Check if a base class is param.Parameterized or similar (parso node)."""
         if base.type == "name":
             base_name = get_value(base)
@@ -73,7 +73,9 @@ class InheritanceResolver:
                 return True
             # Check if it's an imported param class
             imported_class_info = self.get_imported_param_class_info(
-                base_name, base_name, None  # current_file_path will be passed by caller
+                base_name,
+                base_name,
+                None,  # current_file_path will be passed by caller
             )
             if imported_class_info:
                 return True
@@ -113,8 +115,8 @@ class InheritanceResolver:
         return False
 
     def collect_inherited_parameters(
-        self, node: "BaseNode", current_file_path: str | None = None
-    ) -> dict[str, "ParameterInfo"]:
+        self, node: BaseNode, current_file_path: str | None = None
+    ) -> dict[str, ParameterInfo]:
         """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
         inherited_parameters = {}  # Last wins
 

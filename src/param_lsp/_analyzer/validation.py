@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict, cast
 
+from .parameter_extractor import (
+    extract_boolean_value,
+    extract_numeric_value,
+    get_keyword_arguments,
+    is_none_value,
+    resolve_parameter_class,
+)
 from .parso_utils import (
     find_all_parameter_assignments,
     get_children,
@@ -17,16 +24,8 @@ from .parso_utils import (
     is_function_call,
     walk_tree,
 )
-from .parameter_extractor import (
-    extract_boolean_value,
-    extract_numeric_value,
-    get_keyword_arguments,
-    is_none_value,
-    resolve_parameter_class,
-)
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from parso.tree import BaseNode, NodeOrLeaf
 
 
@@ -120,7 +119,6 @@ class ParameterValidator:
                 self._check_constructor_parameter_types(node, lines)
 
         return self.type_errors.copy()
-
 
     def _check_class_parameter_defaults(self, class_node: BaseNode, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
@@ -420,8 +418,7 @@ class ParameterValidator:
             if cls == "Boolean" and inferred_type and inferred_type is not bool:
                 # For Boolean parameters, only accept actual boolean values
                 if not (
-                    default_value.type == "name"
-                    and get_value(default_value) in ("True", "False")
+                    default_value.type == "name" and get_value(default_value) in ("True", "False")
                 ):
                     message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}"
                     self._create_type_error(node, message, "boolean-type-mismatch")
@@ -655,10 +652,7 @@ class ParameterValidator:
                 if child.type == "name":
                     last_name = get_value(child)
                 elif child.type == "trailer":
-                    if (
-                        len(get_children(child)) >= 2
-                        and get_children(child)[1].type == "name"
-                    ):
+                    if len(get_children(child)) >= 2 and get_children(child)[1].type == "name":
                         # This is a dot access like .Inner
                         last_name = get_value(get_children(child)[1])
                     elif (
@@ -770,9 +764,7 @@ class ParameterValidator:
                 for child in get_children(inclusive_bounds_node):
                     if child.type == "testlist_comp":
                         elements = [
-                            c
-                            for c in get_children(child)
-                            if c.type in ("name", "keyword")
+                            c for c in get_children(child) if c.type in ("name", "keyword")
                         ]
                         if len(elements) >= 2:
                             left_inclusive = extract_boolean_value(elements[0])
@@ -858,6 +850,6 @@ class ParameterValidator:
     def _analyze_external_class_ast(self, full_class_path: str):
         """Analyze external class using AST through external class inspector."""
         # Use the external inspector passed during initialization
-        if hasattr(self, 'external_inspector'):
+        if hasattr(self, "external_inspector"):
             return self.external_inspector.analyze_external_class_ast(full_class_path)
         return None

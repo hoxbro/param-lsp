@@ -70,6 +70,7 @@ class TestInheritanceResolver:
     @pytest.fixture
     def mock_functions(self, sample_external_classes):
         """Create mock functions for the resolver."""
+
         def mock_get_imported_param_class_info(class_name, import_name, file_path):
             # Mock external class lookup
             if class_name == "Button":
@@ -94,7 +95,9 @@ class TestInheritanceResolver:
         )
 
     @pytest.fixture
-    def resolver(self, sample_param_classes, sample_external_classes, sample_imports, mock_functions):
+    def resolver(
+        self, sample_param_classes, sample_external_classes, sample_imports, mock_functions
+    ):
         """Create an InheritanceResolver instance for testing."""
         mock_get, mock_analyze, mock_resolve = mock_functions
 
@@ -243,7 +246,9 @@ class TestInheritanceResolver:
 
         assert inherited == {}
 
-    def test_inheritance_resolver_state_isolation(self, sample_param_classes, sample_external_classes, sample_imports, mock_functions):
+    def test_inheritance_resolver_state_isolation(
+        self, sample_param_classes, sample_external_classes, sample_imports, mock_functions
+    ):
         """Test that resolver instances maintain their own state."""
         mock_get, mock_analyze, mock_resolve = mock_functions
 
