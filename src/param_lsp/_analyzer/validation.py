@@ -253,11 +253,11 @@ class ParameterValidator:
             return " or ".join(type_names)
 
     def _create_type_error(
-        self, node: NodeOrLeaf, message: str, code: str, severity: str = "error"
+        self, node: NodeOrLeaf | None, message: str, code: str, severity: str = "error"
     ) -> None:
         """Helper function to create and append a type error (parso version)."""
         # Get position information from parso node
-        if hasattr(node, "start_pos"):
+        if node is not None and hasattr(node, "start_pos"):
             line = node.start_pos[0] - 1  # Convert to 0-based
             col = node.start_pos[1]
             end_line = node.end_pos[0] - 1 if hasattr(node, "end_pos") else line

@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 from parso import parse
 
-from src.param_lsp._analyzer.parso_utils import walk_tree
+from src.param_lsp._analyzer.parso_utils import get_value, walk_tree
 from src.param_lsp._analyzer.validation import ParameterValidator
 from src.param_lsp.constants import PARAM_TYPE_MAP
 from src.param_lsp.models import ParameterInfo, ParameterizedInfo
@@ -137,7 +137,7 @@ class TestParameterValidator:
         keyword_nodes = [
             node
             for node in walk_tree(tree)
-            if node.type == "keyword" and str(node.value) == "True"
+            if node.type == "keyword" and get_value(node) == "True"
         ]
         assert len(keyword_nodes) == 1
 
@@ -152,7 +152,7 @@ class TestParameterValidator:
         keyword_nodes = [
             node
             for node in walk_tree(tree)
-            if node.type == "keyword" and str(node.value) == "False"
+            if node.type == "keyword" and get_value(node) == "False"
         ]
         assert len(keyword_nodes) == 1
 
@@ -167,7 +167,7 @@ class TestParameterValidator:
         keyword_nodes = [
             node
             for node in walk_tree(tree)
-            if node.type == "keyword" and str(node.value) == "None"
+            if node.type == "keyword" and get_value(node) == "None"
         ]
         assert len(keyword_nodes) == 1
 
@@ -239,7 +239,7 @@ class TestParameterValidator:
         keyword_nodes = [
             node
             for node in walk_tree(tree)
-            if node.type == "keyword" and str(node.value) == "True"
+            if node.type == "keyword" and get_value(node) == "True"
         ]
         assert len(keyword_nodes) == 1
 
@@ -253,7 +253,7 @@ class TestParameterValidator:
         keyword_nodes = [
             node
             for node in walk_tree(tree)
-            if node.type == "keyword" and str(node.value) == "False"
+            if node.type == "keyword" and get_value(node) == "False"
         ]
         assert len(keyword_nodes) == 1
 

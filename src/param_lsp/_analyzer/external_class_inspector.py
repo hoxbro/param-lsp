@@ -236,9 +236,11 @@ class ExternalClassInspector:
         return classes_cached
 
     def _get_all_classes_in_module(
-        self, module: types.ModuleType, visited_modules: set[str] | None = None
+        self, module: types.ModuleType | None, visited_modules: set[str] | None = None
     ) -> list[type]:
         """Recursively get all classes in a module and its submodules."""
+        if module is None:
+            return []
         if visited_modules is None:
             visited_modules = set()
 
@@ -274,7 +276,7 @@ class ExternalClassInspector:
 
         return classes
 
-    def _introspect_param_class_for_cache(self, cls: type) -> ParameterizedInfo | None:
+    def _introspect_param_class_for_cache(self, cls: type | None) -> ParameterizedInfo | None:
         """Introspect a param.Parameterized class and return ParameterizedInfo."""
         try:
             # Check for invalid input

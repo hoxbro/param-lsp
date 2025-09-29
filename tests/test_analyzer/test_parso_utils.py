@@ -37,9 +37,9 @@ class TestBasicUtils:
         name_node = None
         number_node = None
         for node in nodes:
-            if hasattr(node, "value") and node.value == "x":
+            if get_value(node) == "x":
                 name_node = node
-            elif hasattr(node, "value") and node.value == "42":
+            elif get_value(node) == "42":
                 number_node = node
 
         assert name_node is not None
@@ -75,7 +75,7 @@ class TestBasicUtils:
 
         # Find a leaf node
         for node in walk_tree(tree):
-            if hasattr(node, "value") and node.value == "x":
+            if get_value(node) == "x":
                 assert not has_children(node)  # Name nodes typically don't have children
                 break
 

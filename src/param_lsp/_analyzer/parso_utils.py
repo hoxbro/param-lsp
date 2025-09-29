@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from parso.tree import BaseNode, NodeOrLeaf
+    from parso.tree import NodeOrLeaf
 
 
-def has_value(node: NodeOrLeaf) -> bool:
+def has_value(node: NodeOrLeaf | None) -> bool:
     """Check if a parso node has a value attribute.
 
     Args:
@@ -34,7 +34,7 @@ def has_value(node: NodeOrLeaf) -> bool:
     return hasattr(node, "value")
 
 
-def get_value(node: NodeOrLeaf) -> str | None:
+def get_value(node: NodeOrLeaf | None) -> str | None:
     """Safely extract the string value from a parso node.
 
     Args:
@@ -55,7 +55,7 @@ def get_value(node: NodeOrLeaf) -> str | None:
     return getattr(node, "value", None)
 
 
-def has_children(node: NodeOrLeaf) -> bool:
+def has_children(node: NodeOrLeaf | None) -> bool:
     """Check if a parso node has child nodes.
 
     Args:
@@ -82,7 +82,7 @@ def has_children(node: NodeOrLeaf) -> bool:
     return hasattr(node, "children")
 
 
-def get_children(node: NodeOrLeaf) -> list[NodeOrLeaf]:
+def get_children(node: NodeOrLeaf | None) -> list[NodeOrLeaf]:
     """Safely extract child nodes from a parso node.
 
     Args:
@@ -107,7 +107,7 @@ def get_children(node: NodeOrLeaf) -> list[NodeOrLeaf]:
     return children if children is not None else []
 
 
-def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
+def walk_tree(node: NodeOrLeaf | None) -> Generator[NodeOrLeaf, None, None]:
     """Recursively walk a parso AST tree, yielding all nodes in depth-first order.
 
     Args:
@@ -134,7 +134,7 @@ def walk_tree(node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
                 yield from walk_tree(child)
 
 
-def get_class_name(class_node: BaseNode) -> str | None:
+def get_class_name(class_node: NodeOrLeaf) -> str | None:
     """Extract the class name from a parso classdef node.
 
     Args:
@@ -158,7 +158,7 @@ def get_class_name(class_node: BaseNode) -> str | None:
     return None
 
 
-def get_class_bases(class_node: BaseNode) -> list[NodeOrLeaf]:
+def get_class_bases(class_node: NodeOrLeaf) -> list[NodeOrLeaf]:
     """Extract base class nodes from a parso classdef node.
 
     Args:
@@ -319,7 +319,7 @@ def is_function_call(node: NodeOrLeaf) -> bool:
     )
 
 
-def find_class_suites(class_node: BaseNode) -> Generator[NodeOrLeaf, None, None]:
+def find_class_suites(class_node: NodeOrLeaf) -> Generator[NodeOrLeaf, None, None]:
     """Generator that yields class suite nodes from a class definition."""
     for child in get_children(class_node):
         if child.type == "suite":
@@ -383,7 +383,7 @@ def find_arguments_in_arglist(arglist_node: NodeOrLeaf) -> Generator[NodeOrLeaf,
 
 
 def find_all_parameter_assignments(
-    class_node: BaseNode,
+    class_node: NodeOrLeaf,
     is_parameter_assignment_func,
 ) -> Generator[tuple[NodeOrLeaf, str], None, None]:
     """Generator that yields all parameter assignments in a class."""

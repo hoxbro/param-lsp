@@ -148,10 +148,10 @@ class ImportResolver:
                 self.imports[alias_name or import_name] = full_name
 
     def resolve_module_path(
-        self, module_name: str, current_file_path: str | None = None
+        self, module_name: str | None, current_file_path: str | None = None
     ) -> str | None:
         """Resolve a module name to a file path."""
-        if not self.workspace_root:
+        if not self.workspace_root or module_name is None:
             return None
 
         # Handle relative imports
@@ -236,9 +236,12 @@ class ImportResolver:
         return None
 
     def analyze_imported_module(
-        self, module_name: str, current_file_path: str | None = None
+        self, module_name: str | None, current_file_path: str | None = None
     ) -> AnalysisResult:
         """Analyze an imported module and cache the results."""
+        if module_name is None:
+            return AnalysisResult(param_classes={}, imports={}, type_errors=[])
+
         # Check cache first
         if module_name in self.module_cache:
             return self.module_cache[module_name]
