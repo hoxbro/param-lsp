@@ -85,8 +85,13 @@ class HoverMixin(LSPServerBase):
             header_parts = [f"**{param_info.cls} Parameter '{param_name}' (from {class_name})**"]
         else:
             header_parts = [f"**{param_info.cls} Parameter '{param_name}'**"]
-        python_type = self._get_python_type_name(param_info.cls, param_info.allow_None)
-        header_parts.append(f"Allowed types: {python_type}")
+        # For Selector parameters with objects, show allowed values instead of type
+        if param_info.objects and param_info.cls in SELECTOR_PARAM_TYPES:
+            objects_str = ", ".join([f'"{obj}"' for obj in param_info.objects])
+            header_parts.append(f"Allowed: {objects_str}")
+        else:
+            python_type = self._get_python_type_name(param_info.cls, param_info.allow_None)
+            header_parts.append(f"Allowed types: {python_type}")
 
         # Add bounds information to header section
         if param_info.bounds:
@@ -99,11 +104,6 @@ class HoverMixin(LSPServerBase):
                 left_bracket = "[" if left_inclusive else "("
                 right_bracket = "]" if right_inclusive else ")"
                 header_parts.append(f"Bounds: `{left_bracket}{min_val}, {max_val}{right_bracket}`")
-
-        # Add objects information for Selector parameters
-        if param_info.objects and param_info.cls in SELECTOR_PARAM_TYPES:
-            objects_str = ", ".join([f"`{obj}`" for obj in param_info.objects])
-            header_parts.append(f"Objects: {objects_str}")
 
         hover_sections = ["\n\n".join(header_parts)]
 
