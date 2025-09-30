@@ -110,7 +110,7 @@ class HoverMixin(LSPServerBase):
 
         # Add documentation section
         if param_info.doc:
-            clean_doc = self._clean_and_format_documentation(param_info.doc)
+            clean_doc = textwrap.dedent(param_info.doc).strip()
             doc_section = "---\nDescription:\n\n" + clean_doc
             hover_sections.append(doc_section)
 
@@ -197,12 +197,3 @@ class HoverMixin(LSPServerBase):
             return "\n".join(hover_parts)
 
         return None
-
-    def _clean_and_format_documentation(self, doc: str) -> str:
-        """Clean and format documentation text."""
-        if not doc:
-            return doc
-
-        # Clean and dedent the documentation
-        clean_doc = textwrap.dedent(doc).strip()
-        return clean_doc

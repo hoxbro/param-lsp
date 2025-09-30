@@ -17,7 +17,7 @@ class ParameterInfo:
     allow_None: bool = False
     default: str | None = None
     location: dict[str, Any] | None = None
-    objects: list[str] | None = None  # For Selector parameters
+    objects: list[Any] | None = None  # For Selector parameters
     item_type: type | None = None  # For List parameters
     length: int | None = None  # For Tuple parameters
 
