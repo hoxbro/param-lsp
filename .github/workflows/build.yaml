@@ -69,6 +69,7 @@ jobs:
         run: |
           cd vscode-extension
           npm install
+          npm run compile-prod
       - name: Bump package version
         if: |
           (github.event_name == 'workflow_dispatch' && (github.event.inputs.target == 'dev' || github.event.inputs.target == 'main')) ||
