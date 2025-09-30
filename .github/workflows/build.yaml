@@ -51,6 +51,7 @@ jobs:
     permissions:
       id-token: write
       contents: write
+      pull-requests: write
     environment:
       name: publish
       url: https://marketplace.visualstudio.com/items?itemName=hoxbro.param-lsp
