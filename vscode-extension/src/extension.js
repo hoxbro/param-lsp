@@ -80,6 +80,35 @@ function detectPythonEnvironment() {
 }
 
 /**
+ * Create server options for a given command
+ * @param {string} command - The command to run
+ * @param {string[]} args - Arguments for the command (optional)
+ * @returns {import('vscode-languageclient/node').ServerOptions}
+ */
+function createServerOptions(command, args = []) {
+  return {
+    command,
+    args,
+    transport: TransportKind.stdio,
+  };
+}
+
+/**
+ * Try to create server options for a Python command
+ * @param {string} pythonCommand - The Python command to try
+ * @returns {Promise<import('vscode-languageclient/node').ServerOptions | null>}
+ */
+async function tryPythonCommand(pythonCommand) {
+  const pythonExists = await commandExists(pythonCommand);
+  if (!pythonExists) return null;
+
+  const hasParamLsp = await pythonHasParamLsp(pythonCommand);
+  if (!hasParamLsp) return null;
+
+  return createServerOptions(pythonCommand, ["-m", "param_lsp"]);
+}
+
+/**
  * Get server options based on configuration
  * @param {vscode.WorkspaceConfiguration} config - The configuration
  * @returns {Promise<import('vscode-languageclient/node').ServerOptions | null>}
@@ -87,99 +116,58 @@ function detectPythonEnvironment() {
 async function getServerOptions(config) {
   const pythonPath = config.get("pythonPath");
 
-  // Try different approaches in order of preference
-  let serverOptions = null;
-
+  // 1. Use explicitly configured Python path
   if (pythonPath) {
-    // 1. Use explicitly configured Python path
     const pythonExists = await commandExists(pythonPath);
     if (!pythonExists) {
       showInstallationError(`Python interpreter not found: ${pythonPath}`);
       return null;
     }
+    return createServerOptions(pythonPath, ["-m", "param_lsp"]);
+  }
 
-    serverOptions = {
-      command: pythonPath,
-      args: ["-m", "param_lsp"],
-      transport: TransportKind.stdio,
-    };
-  } else {
-    // 2. Try active Python environment first
-    const envPython = detectPythonEnvironment();
-    if (envPython) {
-      const pythonExists = await commandExists(envPython);
-      if (pythonExists) {
-        const hasParamLsp = await pythonHasParamLsp(envPython);
-        if (hasParamLsp) {
-          serverOptions = {
-            command: envPython,
-            args: ["-m", "param_lsp"],
-            transport: TransportKind.stdio,
-          };
-        } else {
-          // Active environment exists but doesn't have param-lsp
-          const envType = process.env.VIRTUAL_ENV
-            ? "virtual environment"
-            : "conda environment";
-          const envPath = process.env.VIRTUAL_ENV || process.env.CONDA_PREFIX;
-          showInstallationError(
-            `Active ${envType} (${envPath}) does not have param-lsp installed. Please run 'pip install param-lsp' in this environment.`,
-          );
-          return null;
-        }
-      }
-    }
-
-    // 3. Try direct command if no environment or environment failed
-    if (!serverOptions) {
-      const commandExists_ = await commandExists("param-lsp");
-      if (commandExists_) {
-        serverOptions = {
-          command: "param-lsp",
-          transport: TransportKind.stdio,
-        };
-      }
-    }
-
-    // 4. Try system python
-    if (!serverOptions) {
-      const pythonExists = await commandExists("python");
-      if (pythonExists) {
-        const hasParamLsp = await pythonHasParamLsp("python");
-        if (hasParamLsp) {
-          serverOptions = {
-            command: "python",
-            args: ["-m", "param_lsp"],
-            transport: TransportKind.stdio,
-          };
-        }
-      }
-    }
-
-    // 5. Final fallback to python3
-    if (!serverOptions) {
-      const python3Exists = await commandExists("python3");
-      if (python3Exists) {
-        const hasParamLsp = await pythonHasParamLsp("python3");
-        if (hasParamLsp) {
-          serverOptions = {
-            command: "python3",
-            args: ["-m", "param_lsp"],
-            transport: TransportKind.stdio,
-          };
-        }
+  // 2. Try active Python environment first
+  const envPython = detectPythonEnvironment();
+  if (envPython) {
+    const pythonExists = await commandExists(envPython);
+    if (pythonExists) {
+      const hasParamLsp = await pythonHasParamLsp(envPython);
+      if (hasParamLsp) {
+        return createServerOptions(envPython, ["-m", "param_lsp"]);
+      } else {
+        // Active environment exists but doesn't have param-lsp
+        const envType = process.env.VIRTUAL_ENV
+          ? "virtual environment"
+          : "conda environment";
+        const envPath = process.env.VIRTUAL_ENV || process.env.CONDA_PREFIX;
+        showInstallationError(
+          `Active ${envType} (${envPath}) does not have param-lsp installed. Please run 'pip install param-lsp' in this environment.`,
+        );
+        return null;
       }
     }
   }
 
-  if (!serverOptions) {
-    showInstallationError(
-      `Cannot find param-lsp. Please install it with 'pip install param-lsp' or configure the path.`,
-    );
-    return null;
+  // 3. Try direct command
+  const directCommandExists = await commandExists("param-lsp");
+  if (directCommandExists) {
+    return createServerOptions("param-lsp");
   }
 
-  return serverOptions;
+  // 4. Try system python commands
+  const pythonCommands = ["python", "python3"];
+  for (const pythonCommand of pythonCommands) {
+    const serverOptions = await tryPythonCommand(pythonCommand);
+    if (serverOptions) {
+      return serverOptions;
+    }
+  }
+
+  // No valid server found
+  showInstallationError(
+    `Cannot find param-lsp. Please install it with 'pip install param-lsp' or configure the path.`,
+  );
+  return null;
 }
 
 /**
