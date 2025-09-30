@@ -100,7 +100,7 @@ async function getServerOptions(config) {
 
     serverOptions = {
       command: pythonPath,
-      args: ["-c", "import param_lsp.__main__; param_lsp.__main__.main()"],
+      args: ["-m", "param_lsp"],
       transport: TransportKind.stdio,
     };
   } else {
@@ -113,10 +113,7 @@ async function getServerOptions(config) {
         if (hasParamLsp) {
           serverOptions = {
             command: envPython,
-            args: [
-              "-c",
-              "import param_lsp.__main__; param_lsp.__main__.main()",
-            ],
+            args: ["-m", "param_lsp"],
             transport: TransportKind.stdio,
           };
         } else {
@@ -152,10 +149,7 @@ async function getServerOptions(config) {
         if (hasParamLsp) {
           serverOptions = {
             command: "python",
-            args: [
-              "-c",
-              "import param_lsp.__main__; param_lsp.__main__.main()",
-            ],
+            args: ["-m", "param_lsp"],
             transport: TransportKind.stdio,
           };
         }
@@ -170,10 +164,7 @@ async function getServerOptions(config) {
         if (hasParamLsp) {
           serverOptions = {
             command: "python3",
-            args: [
-              "-c",
-              "import param_lsp.__main__; param_lsp.__main__.main()",
-            ],
+            args: ["-m", "param_lsp"],
             transport: TransportKind.stdio,
           };
         }
