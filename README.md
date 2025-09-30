@@ -29,30 +29,6 @@ Configure your IDE to use param-lsp as the language server for Python files cont
 
 Install the param-lsp VS Code extension from the marketplace.
 
-#### Configuration
-
-The extension provides simple configuration options:
-
-- **`param-lsp.enable`**: Enable/disable the extension (default: `true`)
-- **`param-lsp.pythonPath`**: Path to Python interpreter with param-lsp installed (optional)
-
-**Auto-detection:** If `pythonPath` is not specified, the extension automatically detects param-lsp from:
-
-1. Active virtual environment (`VIRTUAL_ENV`)
-2. Active conda environment (`CONDA_PREFIX`)
-3. Direct `param-lsp` command in PATH
-4. System `python` or `python3` with param-lsp installed
-
-**Example configuration:**
-
-```json
-{
-  "param-lsp.pythonPath": "/path/to/python"
-}
-```
-
-Most users won't need any configuration - the extension automatically finds param-lsp in your active environment.
-
 ### Other IDEs
 
 Configure your IDE's LSP client to use `param-lsp` as the language server command.
