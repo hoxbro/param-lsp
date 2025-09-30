@@ -44,6 +44,10 @@
           "default": true,
           "description": "Enable/disable Param LSP"
         },
+        "param-lsp.pythonPath": {
+          "type": "string",
+          "description": "Path to Python interpreter with param-lsp installed. If not specified, will auto-detect from active environment."
+        },
         "param-lsp.trace.server": {
           "scope": "window",
           "type": "string",

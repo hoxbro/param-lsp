@@ -49,3 +49,7 @@ def main():
     else:
         logger.info(f"Starting Param LSP server ({__version__}) on stdio")
         server.start_io()
+
+
+if __name__ == "__main__":
+    main()

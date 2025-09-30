@@ -86,3 +86,29 @@ jobs:
         run: |
           cd vscode-extension
           npm run publish
+      - name: Bump package version
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'main') ||
+          (github.event_name == 'push' && !(contains(steps.vars.outputs.tag, 'a') || contains(steps.vars.outputs.tag, 'b') || contains(steps.vars.outputs.tag, 'rc')))
+        run: |
+          cd vscode-extension
+          # Bump minor version
+          NEW_VERSION=$(npm version --no-git-tag-version minor)
+          echo "Bumped package.json version to: $NEW_VERSION"
+
+          # Configure git for commit
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          # Commit the version change
+          git add package.json
+          git commit -m "chore: bump VS Code extension version to $NEW_VERSION" || echo "No changes to commit"
+      - name: Push version update
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'main') ||
+          (github.event_name == 'push' && !(contains(steps.vars.outputs.tag, 'a') || contains(steps.vars.outputs.tag, 'b') || contains(steps.vars.outputs.tag, 'rc')))
+        permissions:
+          contents: write
+        run: |
+          # Push the commit back to the repository
+          git push origin HEAD:main || echo "No changes to push"
