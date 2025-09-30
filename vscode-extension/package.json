@@ -27,12 +27,14 @@
   "activationEvents": [
     "onLanguage:python"
   ],
-  "main": "./src/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "python",
-        "extensions": [".py"]
+        "extensions": [
+          ".py"
+        ]
       }
     ],
     "configuration": {
@@ -63,6 +65,10 @@
     }
   },
   "scripts": {
+    "compile": "webpack --mode none",
+    "compile-prod": "webpack --mode production",
+    "watch": "webpack --mode none --watch",
+    "prepackage": "npm run compile-prod",
     "package": "vsce package",
     "package-pre": "vsce package --pre-release",
     "install-ext": "code --install-extension *.vsix",
@@ -73,6 +79,8 @@
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.0.0"
+    "@vscode/vsce": "^3.0.0",
+    "webpack": "^5.102.0",
+    "webpack-cli": "^6.0.1"
   }
 }
