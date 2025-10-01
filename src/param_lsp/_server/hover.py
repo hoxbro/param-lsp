@@ -87,7 +87,14 @@ class HoverMixin(LSPServerBase):
             header_parts = [f"**{param_info.cls} Parameter '{param_name}'**"]
         # For Selector parameters with objects, show allowed values only
         if param_info.objects and param_info.cls in SELECTOR_PARAM_TYPES:
-            objects_str = ", ".join([f'"{obj}"' for obj in param_info.objects])
+            # Format objects: numbers without quotes, strings with quotes
+            formatted_objects = []
+            for obj in param_info.objects:
+                if isinstance(obj, (int, float)):
+                    formatted_objects.append(str(obj))
+                else:
+                    formatted_objects.append(f'"{obj}"')
+            objects_str = ", ".join(formatted_objects)
             header_parts.append(f"Allowed objects: [{objects_str}]")
         elif param_info.cls not in SELECTOR_PARAM_TYPES:
             # Only show "Allowed types" for non-Selector parameters

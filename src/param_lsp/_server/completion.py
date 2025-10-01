@@ -629,6 +629,9 @@ class CompletionMixin(LSPServerBase):
         # Extract partial text being typed to filter completions
         partial_text = self._extract_partial_parameter_text(lines, position)
 
+        # Check if we're inside an unclosed quote
+        inside_quote = self._is_inside_quote(lines, position)
+
         for param_name in parameters:
             # Skip parameters that are already used
             if param_name in used_params:
@@ -649,14 +652,24 @@ class CompletionMixin(LSPServerBase):
             # Build documentation for the parameter
             documentation = self._build_parameter_documentation(param_info, containing_class)
 
+            # Adjust label and insert_text based on whether we're inside quotes
+            if inside_quote:
+                # User is inside an unclosed quote, just complete the parameter name
+                label = param_name
+                insert_text = param_name + '"'
+            else:
+                # User hasn't started typing a quote, provide full quoted string
+                label = f'"{param_name}"'
+                insert_text = f'"{param_name}"'
+
             # Create completion item with quoted string for param.depends
             completions.append(
                 CompletionItem(
-                    label=f'"{param_name}"',
+                    label=label,
                     kind=CompletionItemKind.Property,
                     detail=f"Parameter of {containing_class}",
                     documentation=documentation,
-                    insert_text=f'"{param_name}"',
+                    insert_text=insert_text,
                     filter_text=param_name,
                     sort_text=f"{param_name:0>3}",
                 )
@@ -706,6 +719,23 @@ class CompletionMixin(LSPServerBase):
                         return True
 
         return False
+
+    def _is_inside_quote(self, lines: list[str], position: Position) -> bool:
+        """Check if the cursor is inside an unclosed quote."""
+        if position.line >= len(lines):
+            return False
+
+        line = lines[position.line]
+        text_before_cursor = line[: position.character]
+
+        # Find all quote positions
+        double_quotes = [m.start() for m in re.finditer(r'"', text_before_cursor)]
+        single_quotes = [m.start() for m in re.finditer(r"'", text_before_cursor)]
+
+        # Check for unclosed quote (odd number means unclosed)
+        has_unclosed_double = bool(double_quotes) and len(double_quotes) % 2 == 1
+        has_unclosed_single = bool(single_quotes) and len(single_quotes) % 2 == 1
+        return has_unclosed_double or has_unclosed_single
 
     def _extract_partial_parameter_text(self, lines: list[str], position: Position) -> str:
         """Extract the partial parameter text being typed."""
