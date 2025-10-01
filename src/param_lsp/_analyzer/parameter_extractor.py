@@ -290,7 +290,7 @@ def _extract_type_value(type_node: NodeOrLeaf) -> type | None:
 
 
 def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
-    """Extract string values from a list node."""
+    """Extract values from a list node and convert them to strings for display."""
     if not list_node or not hasattr(list_node, "type"):
         return None
 
@@ -313,18 +313,28 @@ def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
                                 items.append(value[1:-1])
                             else:
                                 items.append(value)
+                    elif child.type == "number":
+                        # Direct number child
+                        value = get_value(child)
+                        if value is not None:
+                            items.append(value)
                     elif child.type in ("testlist_comp", "testlist"):
-                        # testlist_comp contains the actual string nodes
+                        # testlist_comp contains the actual nodes
                         for grandchild in get_children(child):
-                            if hasattr(grandchild, "type") and grandchild.type == "string":
-                                value = get_value(grandchild)
-                                if value and len(value) >= 2:
-                                    # Remove surrounding quotes
-                                    if (value.startswith('"') and value.endswith('"')) or (
-                                        value.startswith("'") and value.endswith("'")
-                                    ):
-                                        items.append(value[1:-1])
-                                    else:
+                            if hasattr(grandchild, "type"):
+                                if grandchild.type == "string":
+                                    value = get_value(grandchild)
+                                    if value and len(value) >= 2:
+                                        # Remove surrounding quotes
+                                        if (value.startswith('"') and value.endswith('"')) or (
+                                            value.startswith("'") and value.endswith("'")
+                                        ):
+                                            items.append(value[1:-1])
+                                        else:
+                                            items.append(value)
+                                elif grandchild.type == "number":
+                                    value = get_value(grandchild)
+                                    if value is not None:
                                         items.append(value)
             return items if items else None
 

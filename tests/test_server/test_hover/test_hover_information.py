@@ -394,3 +394,34 @@ obj.param.update(x=10, y="world")
         assert "Example" in hover_info
         assert "obj.param.update(x=10, y='new_value')" in hover_info
         assert "Efficiently updates multiple parameters" in hover_info
+
+    def test_hover_selector_with_numeric_objects(self, lsp_server):
+        """Test hover information for Selector parameter with numeric objects."""
+        code_py = """\
+import param
+
+class TestClass(param.Parameterized):
+    numeric_selector = param.Selector(default=1, objects=[1, 2, 3], doc="Selector with numeric objects")
+    string_selector = param.Selector(default="a", objects=["a", "b", "c"], doc="Selector with string objects")
+"""
+
+        uri = "file:///test.py"
+        lsp_server._analyze_document(uri, code_py)
+
+        # Test hover for numeric selector parameter
+        hover_info = lsp_server._get_hover_info(uri, "numeric_selector", "numeric_selector")
+
+        assert hover_info is not None
+        assert "Selector Parameter 'numeric_selector'" in hover_info
+        assert "Allowed objects:" in hover_info
+        assert '["1", "2", "3"]' in hover_info
+        assert "Selector with numeric objects" in hover_info
+
+        # Test hover for string selector parameter
+        hover_info = lsp_server._get_hover_info(uri, "string_selector", "string_selector")
+
+        assert hover_info is not None
+        assert "Selector Parameter 'string_selector'" in hover_info
+        assert "Allowed objects:" in hover_info
+        assert '["a", "b", "c"]' in hover_info
+        assert "Selector with string objects" in hover_info
