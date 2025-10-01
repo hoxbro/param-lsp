@@ -82,7 +82,7 @@ jobs:
           git config --local user.name "GitHub Action"
 
           # Commit the version change
-          git add package.json
+          git add package.json package-lock.json
           git commit -m "chore: bump VS Code extension version to $NEW_VERSION" || echo "No changes to commit"
       - name: Ready
         run: |
