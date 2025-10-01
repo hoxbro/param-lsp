@@ -6,7 +6,7 @@ Handles extracting parameter information from parso AST nodes.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from param_lsp.constants import PARAM_TYPES
 
@@ -234,7 +234,7 @@ def extract_default_from_call(call_node: NodeOrLeaf) -> NodeOrLeaf | None:
     return None
 
 
-def extract_objects_from_call(call_node: NodeOrLeaf) -> list[str] | None:
+def extract_objects_from_call(call_node: NodeOrLeaf) -> list[Any] | None:
     """Extract objects list from Selector parameter call."""
     kwargs = get_keyword_arguments(call_node)
     if "objects" in kwargs:
@@ -289,8 +289,8 @@ def _extract_type_value(type_node: NodeOrLeaf) -> type | None:
     return None
 
 
-def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
-    """Extract values from a list node and convert them to strings for display."""
+def _extract_list_values(list_node: NodeOrLeaf) -> list[Any] | None:
+    """Extract values from a list node, preserving their original types."""
     if not list_node or not hasattr(list_node, "type"):
         return None
 
@@ -306,7 +306,7 @@ def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
                         # Direct string child
                         value = get_value(child)
                         if value and len(value) >= 2:
-                            # Remove surrounding quotes
+                            # Remove surrounding quotes and return as string
                             if (value.startswith('"') and value.endswith('"')) or (
                                 value.startswith("'") and value.endswith("'")
                             ):
@@ -314,10 +314,10 @@ def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
                             else:
                                 items.append(value)
                     elif child.type == "number":
-                        # Direct number child
-                        value = get_value(child)
-                        if value is not None:
-                            items.append(value)
+                        # Direct number child - extract as actual number
+                        numeric_value = extract_numeric_value(child)
+                        if numeric_value is not None:
+                            items.append(numeric_value)
                     elif child.type in ("testlist_comp", "testlist"):
                         # testlist_comp contains the actual nodes
                         for grandchild in get_children(child):
@@ -325,7 +325,7 @@ def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
                                 if grandchild.type == "string":
                                     value = get_value(grandchild)
                                     if value and len(value) >= 2:
-                                        # Remove surrounding quotes
+                                        # Remove surrounding quotes and return as string
                                         if (value.startswith('"') and value.endswith('"')) or (
                                             value.startswith("'") and value.endswith("'")
                                         ):
@@ -333,9 +333,10 @@ def _extract_list_values(list_node: NodeOrLeaf) -> list[str] | None:
                                         else:
                                             items.append(value)
                                 elif grandchild.type == "number":
-                                    value = get_value(grandchild)
-                                    if value is not None:
-                                        items.append(value)
+                                    # Extract as actual number
+                                    numeric_value = extract_numeric_value(grandchild)
+                                    if numeric_value is not None:
+                                        items.append(numeric_value)
             return items if items else None
 
     return None

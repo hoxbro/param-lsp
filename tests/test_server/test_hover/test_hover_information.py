@@ -414,7 +414,7 @@ class TestClass(param.Parameterized):
         assert hover_info is not None
         assert "Selector Parameter 'numeric_selector'" in hover_info
         assert "Allowed objects:" in hover_info
-        assert '["1", "2", "3"]' in hover_info
+        assert "[1, 2, 3]" in hover_info  # Numbers without quotes
         assert "Selector with numeric objects" in hover_info
 
         # Test hover for string selector parameter
@@ -423,5 +423,5 @@ class TestClass(param.Parameterized):
         assert hover_info is not None
         assert "Selector Parameter 'string_selector'" in hover_info
         assert "Allowed objects:" in hover_info
-        assert '["a", "b", "c"]' in hover_info
+        assert '["a", "b", "c"]' in hover_info  # Strings with quotes
         assert "Selector with string objects" in hover_info
