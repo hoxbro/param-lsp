@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from lsprotocol.types import Position, TextEdit
 
-from param_lsp._server.server import ParamLanguageServer
+from param_lsp.server import ParamLanguageServer
 
 
 class TestPartialParameterCompletion:

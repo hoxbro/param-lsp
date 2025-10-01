@@ -37,11 +37,16 @@ def main():
     parser.add_argument(
         "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
     )
+    parser.add_argument("--stdio", action="store_true", help="Use stdio (default)")
 
     args = parser.parse_args()
 
+    # Check for mutually exclusive options
+    if args.tcp and args.stdio:
+        parser.error("--tcp and --stdio are mutually exclusive")
+
     # Import server only when actually needed to avoid loading during --help/--version
-    from ._server.server import server
+    from .server import server
 
     if args.tcp:
         logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from lsprotocol.types import CompletionItemKind, Position
 
-from param_lsp._server.server import ParamLanguageServer
+from param_lsp.server import ParamLanguageServer
 
 
 class TestParamUpdateCompletion:

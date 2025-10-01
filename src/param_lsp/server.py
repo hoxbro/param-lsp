@@ -23,9 +23,9 @@ from lsprotocol.types import (
 
 from param_lsp import __version__
 
-from .completion import CompletionMixin
-from .hover import HoverMixin
-from .validation import ValidationMixin
+from ._server.completion import CompletionMixin
+from ._server.hover import HoverMixin
+from ._server.validation import ValidationMixin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

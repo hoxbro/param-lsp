@@ -59,6 +59,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 100
+          token: ${{ secrets.PAT_TOKEN }}
       - name: Fetching tags
         id: vars
         run: |
@@ -105,27 +106,8 @@ jobs:
         run: |
           cd vscode-extension
           npm run publish
-      - name: Push version update via PR
+      - name: Push version update
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if there are changes to push
-          if git diff --quiet HEAD origin/main; then
-            echo "No changes to commit"
-          else
-            # Create a branch for the version bump
-            BRANCH_NAME="version-bump-$(date +%s)"
-            git checkout -b "$BRANCH_NAME"
-            git push origin "$BRANCH_NAME"
-
-            # Create PR with auto-merge enabled
-            gh pr create \
-              --title "chore: bump VS Code extension version" \
-              --body "Automated version bump from release workflow" \
-              --base main \
-              --head "$BRANCH_NAME"
-
-            # Enable auto-merge
-            gh pr merge --auto --squash "$BRANCH_NAME"
-          fi
+          # Push the commit back to the repository
+          git push origin HEAD:main || echo "No changes to push"
