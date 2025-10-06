@@ -73,6 +73,15 @@ class StaticExternalAnalyzer:
             logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
             class_info = self._analyze_class_from_source(full_class_path)
             self.parsed_classes[full_class_path] = class_info
+
+            # Store successful analysis in global cache for persistence
+            if class_info:
+                try:
+                    external_library_cache.set(root_module, full_class_path, class_info)
+                    logger.debug(f"Stored {full_class_path} in cache")
+                except Exception as e:
+                    logger.debug(f"Failed to store {full_class_path} in cache: {e}")
+
             return class_info
         except Exception as e:
             logger.debug(f"Failed to analyze {full_class_path}: {e}")

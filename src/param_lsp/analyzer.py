@@ -347,12 +347,8 @@ class ParamAnalyzer:
         self, tree: NodeOrLeaf, cached_nodes: list[NodeOrLeaf] | None = None
     ) -> None:
         """Pre-pass to discover all external Parameterized classes using parso analysis."""
-        nodes_to_check = cached_nodes if cached_nodes is not None else parso_utils.walk_tree(tree)
-        for node in nodes_to_check:
-            if node.type in ("power", "atom_expr") and parso_utils.is_function_call(node):
-                full_class_path = self.import_resolver.resolve_full_class_path(node)
-                if full_class_path:
-                    self._analyze_external_class_ast(full_class_path)
+        # For performance, we don't do expensive external analysis during discovery.
+        # External classes are analyzed on-demand during validation or when explicitly requested.
 
     def resolve_class_name_from_context(
         self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str
