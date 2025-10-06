@@ -36,10 +36,10 @@ import parso
 
 from ._analyzer import parso_utils
 from ._analyzer.ast_navigator import ImportHandler, ParameterDetector, SourceAnalyzer
-from ._analyzer.external_class_inspector import ExternalClassInspector
 from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
+from ._analyzer.static_external_analyzer import StaticExternalAnalyzer
 from ._analyzer.validation import ParameterValidator
 from ._types import AnalysisResult
 from .models import ParameterInfo, ParameterizedInfo
@@ -78,12 +78,12 @@ class ParamAnalyzer:
         self.module_cache: dict[str, AnalysisResult] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
-        # Use modular external class inspector
-        self.external_inspector = ExternalClassInspector()
-        self.external_param_classes = self.external_inspector.external_param_classes
+        # Use static external analyzer for external class analysis
+        self.external_analyzer = StaticExternalAnalyzer()
 
-        # Populate external library cache on initialization using modular component
-        self.external_inspector.populate_external_library_cache()
+        # Maintain compatibility with external_param_classes interface
+        # The static analyzer doesn't need pre-caching, so this can be empty
+        self.external_param_classes: dict[str, ParameterizedInfo | None] = {}
 
         # Use modular AST navigation components (must be created before validator)
         self.parameter_detector = ParameterDetector(self.imports)
@@ -95,7 +95,7 @@ class ParamAnalyzer:
             external_param_classes=self.external_param_classes,
             imports=self.imports,
             is_parameter_assignment_func=self._is_parameter_assignment,
-            external_inspector=self.external_inspector,
+            external_analyzer=self.external_analyzer,
             workspace_root=str(self.workspace_root) if self.workspace_root else None,
         )
 
@@ -271,7 +271,7 @@ class ParamAnalyzer:
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using the modular external inspector."""
-        return self.external_inspector.analyze_external_class_ast(full_class_path)
+        return self.external_analyzer.analyze_external_class(full_class_path)
 
     def _get_parameter_source_location(
         self, param_obj: Any, cls: type, param_name: str

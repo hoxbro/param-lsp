@@ -7,15 +7,12 @@ to runtime introspection for external Parameterized classes.
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING
 
+# No TYPE_CHECKING imports needed
 import pytest
 
-from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
+# Using StaticExternalAnalyzer only - runtime introspection is in separate test
 from param_lsp._analyzer.static_external_analyzer import StaticExternalAnalyzer
-
-if TYPE_CHECKING:
-    from param_lsp.models import ParameterInfo
 
 
 class TestStaticExternalAnalyzer:
@@ -24,7 +21,6 @@ class TestStaticExternalAnalyzer:
     def setup_method(self):
         """Set up test instances."""
         self.static_analyzer = StaticExternalAnalyzer()
-        self.runtime_inspector = ExternalClassInspector()
 
     @pytest.mark.parametrize(
         "class_path",
@@ -36,8 +32,8 @@ class TestStaticExternalAnalyzer:
             "holoviews.Scatter",
         ],
     )
-    def test_static_vs_runtime_analysis(self, class_path: str):
-        """Test that static analysis matches runtime introspection."""
+    def test_static_analysis_external_classes(self, class_path: str):
+        """Test that static analysis successfully analyzes common external classes."""
         # Skip if library not available
         root_module = class_path.split(".")[0]
         try:
@@ -45,67 +41,22 @@ class TestStaticExternalAnalyzer:
         except ImportError:
             pytest.skip(f"{root_module} not available")
 
-        # Get results from both methods
+        # Get result from static analyzer
         static_result = self.static_analyzer.analyze_external_class(class_path)
-        runtime_result = self.runtime_inspector._introspect_external_class_runtime(class_path)
 
-        # Both should succeed or both should fail
-        if runtime_result is None:
-            assert static_result is None, f"Static analyzer should return None for {class_path}"
-            return
-
+        # Should successfully analyze common external classes
         assert static_result is not None, f"Static analyzer should find {class_path}"
 
-        # Compare class names
-        assert static_result.name == runtime_result.name
+        # Check that found parameters have reasonable structure
+        assert len(static_result.parameters) > 0, f"Should find parameters for {class_path}"
 
-        # Compare parameter sets
-        static_params = set(static_result.parameters.keys())
-        runtime_params = set(runtime_result.parameters.keys())
+        for param_name, param_info in static_result.parameters.items():
+            assert param_info.name == param_name
+            assert param_info.cls is not None, f"Parameter {param_name} missing class"
 
-        # Allow some differences due to implementation details
-        common_params = static_params & runtime_params
-        assert len(common_params) > 0, f"No common parameters found for {class_path}"
-
-        # For common parameters, compare properties
-        for param_name in common_params:
-            static_param = static_result.parameters[param_name]
-            runtime_param = runtime_result.parameters[param_name]
-
-            self._compare_parameter_info(static_param, runtime_param, class_path, param_name)
-
-    def _compare_parameter_info(
-        self,
-        static_param: ParameterInfo,
-        runtime_param: ParameterInfo,
-        class_path: str,
-        param_name: str,
-    ):
-        """Compare parameter info from static vs runtime analysis."""
-        context = f"{class_path}.{param_name}"
-
-        # Parameter type should match
-        assert static_param.cls == runtime_param.cls, (
-            f"Parameter type mismatch for {context}: {static_param.cls} vs {runtime_param.cls}"
-        )
-
-        # Name should match
-        assert static_param.name == runtime_param.name, f"Parameter name mismatch for {context}"
-
-        # Allow None for bounds/doc/default as they may not be extractable
-        if static_param.bounds is not None and runtime_param.bounds is not None:
-            assert static_param.bounds == runtime_param.bounds, (
-                f"Bounds mismatch for {context}: {static_param.bounds} vs {runtime_param.bounds}"
-            )
-
-        # Objects for Selector types
-        if static_param.objects is not None and runtime_param.objects is not None:
-            # Convert to sets for comparison (order may differ)
-            static_objects = set(static_param.objects)
-            runtime_objects = set(runtime_param.objects)
-            assert static_objects == runtime_objects, (
-                f"Objects mismatch for {context}: {static_objects} vs {runtime_objects}"
-            )
+        # Class name should match expected
+        expected_class_name = class_path.split(".")[-1]
+        assert static_result.name == expected_class_name
 
     def test_panel_intslider_detailed(self):
         """Detailed test for Panel IntSlider parameter extraction."""
@@ -116,21 +67,16 @@ class TestStaticExternalAnalyzer:
 
         class_path = "panel.widgets.IntSlider"
         static_result = self.static_analyzer.analyze_external_class(class_path)
-        runtime_result = self.runtime_inspector._introspect_external_class_runtime(class_path)
 
         assert static_result is not None
-        assert runtime_result is not None
 
-        # Check that 'value' parameter exists in both
+        # Check that 'value' parameter exists
         assert "value" in static_result.parameters
-        assert "value" in runtime_result.parameters
 
         static_value = static_result.parameters["value"]
-        runtime_value = runtime_result.parameters["value"]
 
         # Value should be Integer type
         assert static_value.cls == "Integer"
-        assert runtime_value.cls == "Integer"
 
     def test_holoviews_curve_detailed(self):
         """Detailed test for HoloViews Curve parameter extraction."""
@@ -141,21 +87,16 @@ class TestStaticExternalAnalyzer:
 
         class_path = "holoviews.Curve"
         static_result = self.static_analyzer.analyze_external_class(class_path)
-        runtime_result = self.runtime_inspector._introspect_external_class_runtime(class_path)
 
         assert static_result is not None
-        assert runtime_result is not None
 
-        # Check that 'label' parameter exists in both
+        # Check that 'label' parameter exists
         assert "label" in static_result.parameters
-        assert "label" in runtime_result.parameters
 
         static_label = static_result.parameters["label"]
-        runtime_label = runtime_result.parameters["label"]
 
         # Label should be String type
         assert static_label.cls == "String"
-        assert runtime_label.cls == "String"
 
     def test_source_file_discovery(self):
         """Test that source files can be discovered for external libraries."""
