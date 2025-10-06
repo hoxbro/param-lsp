@@ -1,0 +1,127 @@
+Cross-File Inheritance Resolution Implementation Plan
+========================================================
+
+GOAL: Follow inheritance chains across multiple files in external libraries
+      to properly determine if a class inherits from param.Parameterized
+
+CURRENT STATE:
+- Single-file AST analysis works (IntSlider → ContinuousSlider → _SliderBase)
+- Inheritance resolution stops at imported classes (Widget from base.py)
+- Using heuristics instead of proper resolution
+
+TARGET: IntSlider → ContinuousSlider → _SliderBase → Widget → Reactive → ... → param.Parameterized
+
+IMPLEMENTATION PHASES:
+
+Phase 1: Import Path Resolution (45 min)
+----------------------------------------
+Files to modify: src/param_lsp/_analyzer/static_external_analyzer.py
+
+1.1 Add method _resolve_import_to_file_path(import_statement, current_file_path)
+    - Handle "from .base import Widget" → find base.py in same directory
+    - Handle "from ..core import Base" → find core.py in parent directory
+    - Handle "from panel.widgets.base import Widget" → absolute path resolution
+    - Return absolute file path or None if not found
+
+1.2 Add method _parse_import_statement(import_path, imported_name)
+    - Parse import mappings to extract module path and class name
+    - Handle different import formats (relative, absolute, aliases)
+
+1.3 Test with Panel imports:
+    - "base.Widget" should resolve to panel/widgets/base.py
+    - Verify file exists and can be read
+
+Phase 2: Multi-File Analysis Queue (60 min)
+-------------------------------------------
+Files to modify: src/param_lsp/_analyzer/static_external_analyzer.py
+
+2.1 Add file analysis queue system:
+    - analysis_queue: list of (file_path, reason) to analyze
+    - analyzed_files: set of file paths already processed
+    - Prevent circular analysis
+
+2.2 Modify analyze_external_class() to use queue:
+    - Start with target class file
+    - Process queue until empty or inheritance resolved
+    - Add dependency files to queue when imports encountered
+
+2.3 Add method _queue_file_for_analysis(file_path, reason):
+    - Add file to queue if not already analyzed
+    - Track why each file is being analyzed (debugging)
+
+2.4 Add method _process_analysis_queue():
+    - Process files in order
+    - Cache all class nodes from each file
+    - Continue until queue empty
+
+Phase 3: Cross-File Inheritance Resolution (30 min)
+---------------------------------------------------
+Files to modify: src/param_lsp/_analyzer/static_external_analyzer.py
+
+3.1 Enhance _try_resolve_from_imports():
+    - When class not found in current file, resolve import to file path
+    - Queue the imported file for analysis
+    - Continue processing until class found or queue empty
+
+3.2 Update _is_known_parameterized_pattern():
+    - Remove heuristics
+    - Use actual cross-file class definitions
+    - Follow inheritance chain across files
+
+3.3 Enhance inheritance checking:
+    - Look up base classes across all analyzed files
+    - Maintain single global class_ast_cache across files
+    - Handle name conflicts (same class name in different files)
+
+Phase 4: Testing and Integration (45 min)
+-----------------------------------------
+Files to test: tests/test_cache/test_cache.py
+
+4.1 Test inheritance resolution:
+    - Verify IntSlider → param.Parameterized resolution works
+    - Test with multiple Panel widget types
+    - Test with HoloViews classes
+
+4.2 Test edge cases:
+    - Circular imports (should not cause infinite loops)
+    - Missing files (graceful degradation)
+    - Non-Parameterized classes (should return False)
+
+4.3 Performance testing:
+    - Ensure analysis doesn't take too long
+    - Verify caching prevents re-analysis of same files
+    - Test with isolated cache (test environment)
+
+4.4 Integration testing:
+    - Run failing test: test_analyzer_populates_cache
+    - Verify cache population works correctly
+    - Check no regressions in other tests
+
+IMPLEMENTATION ORDER:
+1. _resolve_import_to_file_path() - core import resolution
+2. _queue_file_for_analysis() - queue management
+3. _process_analysis_queue() - orchestration
+4. Enhanced _try_resolve_from_imports() - integration
+5. Remove heuristics, test end-to-end
+
+SUCCESS CRITERIA:
+- test_analyzer_populates_cache passes
+- No hardcoded class names or heuristics
+- Works for Panel, HoloViews, and other external libraries
+- Proper inheritance chain resolution to param.Parameterized
+
+DEBUGGING STRATEGY:
+- Add detailed logging at each step
+- Log inheritance chain resolution step-by-step
+- Verify each file analysis and class discovery
+- Confirm final inheritance resolution
+
+RISKS:
+- Performance impact of analyzing many files
+- Complex import resolution edge cases
+- Circular dependencies in external libraries
+
+MITIGATION:
+- Limit analysis depth (max 10 files per inheritance chain)
+- Cache aggressively to avoid re-analysis
+- Graceful fallback to heuristics if analysis fails

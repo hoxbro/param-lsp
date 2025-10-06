@@ -6,8 +6,6 @@ to runtime introspection for external Parameterized classes.
 
 from __future__ import annotations
 
-import importlib
-
 # No TYPE_CHECKING imports needed
 import pytest
 
@@ -36,10 +34,7 @@ class TestStaticExternalAnalyzer:
         """Test that static analysis successfully analyzes common external classes."""
         # Skip if library not available
         root_module = class_path.split(".")[0]
-        try:
-            importlib.import_module(root_module)
-        except ImportError:
-            pytest.skip(f"{root_module} not available")
+        pytest.importorskip(root_module)
 
         # Get result from static analyzer
         static_result = self.static_analyzer.analyze_external_class(class_path)
@@ -60,10 +55,7 @@ class TestStaticExternalAnalyzer:
 
     def test_panel_intslider_detailed(self):
         """Detailed test for Panel IntSlider parameter extraction."""
-        try:
-            importlib.import_module("panel")
-        except ImportError:
-            pytest.skip("Panel not available")
+        pytest.importorskip("panel")
 
         class_path = "panel.widgets.IntSlider"
         static_result = self.static_analyzer.analyze_external_class(class_path)
@@ -80,10 +72,7 @@ class TestStaticExternalAnalyzer:
 
     def test_holoviews_curve_detailed(self):
         """Detailed test for HoloViews Curve parameter extraction."""
-        try:
-            importlib.import_module("holoviews")
-        except ImportError:
-            pytest.skip("HoloViews not available")
+        pytest.importorskip("holoviews")
 
         class_path = "holoviews.Curve"
         static_result = self.static_analyzer.analyze_external_class(class_path)
@@ -100,10 +89,7 @@ class TestStaticExternalAnalyzer:
 
     def test_source_file_discovery(self):
         """Test that source files can be discovered for external libraries."""
-        try:
-            importlib.import_module("panel")
-        except ImportError:
-            pytest.skip("Panel not available")
+        pytest.importorskip("panel")
 
         # Test source file discovery
         panel_sources = self.static_analyzer._discover_library_sources("panel")
@@ -252,10 +238,7 @@ class Widget3(param.Parameterized):
 
     def test_caching_behavior(self):
         """Test that analysis results are properly cached."""
-        try:
-            importlib.import_module("panel")
-        except ImportError:
-            pytest.skip("Panel not available")
+        pytest.importorskip("panel")
 
         class_path = "panel.widgets.IntSlider"
 

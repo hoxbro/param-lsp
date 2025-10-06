@@ -41,6 +41,8 @@ class StaticExternalAnalyzer:
         self.library_source_paths: dict[str, list[Path]] = {}
         self.parsed_classes: dict[str, ParameterizedInfo | None] = {}
         self.analyzed_files: dict[Path, dict[str, Any]] = {}
+        # Cache all class AST nodes for inheritance resolution
+        self.class_ast_cache: dict[str, tuple[NodeOrLeaf, dict[str, str]]] = {}
 
     def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
@@ -238,10 +240,30 @@ class StaticExternalAnalyzer:
         import_handler = ImportHandler(imports)
         self._walk_ast_for_imports(tree, import_handler)
 
+        # Cache all class AST nodes for inheritance resolution
+        self._cache_all_class_nodes(tree, imports)
+
         # Find and analyze classes
         self._walk_ast_for_classes(tree, imports, classes, source_code.split("\n"))
 
         return classes
+
+    def _cache_all_class_nodes(self, node: NodeOrLeaf, imports: dict[str, str]) -> None:
+        """Cache all class AST nodes for later inheritance resolution.
+
+        Args:
+            node: AST node to search
+            imports: Import mappings for this file
+        """
+        if hasattr(node, "type") and node.type == "classdef":
+            class_name = self._get_class_name(node)
+            if class_name:
+                # Store the class node and its imports context
+                self.class_ast_cache[class_name] = (node, imports.copy())
+
+        # Recursively cache children
+        for child in parso_utils.get_children(node):
+            self._cache_all_class_nodes(child, imports)
 
     def _walk_ast_for_imports(self, node: NodeOrLeaf, import_handler: ImportHandler) -> None:
         """Walk AST to find and parse import statements.
@@ -385,7 +407,8 @@ class StaticExternalAnalyzer:
     def _is_known_parameterized_pattern(self, base_class: str, imports: dict[str, str]) -> bool:
         """Check if a base class is a known pattern that inherits from Parameterized.
 
-        This attempts to resolve the inheritance chain dynamically by looking up base classes.
+        This checks if the base class is already cached from the current file analysis,
+        and if so, recursively checks its inheritance.
 
         Args:
             base_class: Base class name to check
@@ -394,7 +417,7 @@ class StaticExternalAnalyzer:
         Returns:
             True if base class is known to inherit from Parameterized
         """
-        # Avoid infinite recursion with a visited set
+        # Avoid infinite recursion
         if not hasattr(self, "_inheritance_check_visited"):
             self._inheritance_check_visited = set()
 
@@ -404,9 +427,25 @@ class StaticExternalAnalyzer:
         self._inheritance_check_visited.add(base_class)
 
         try:
-            # Try to resolve the base class by finding its definition
-            result = self._resolve_inheritance_chain(base_class, imports)
-            return result
+            # First check if this base class is already in our AST cache
+            # (meaning it was found in the same file we're currently analyzing)
+            class_info = self._find_class_definition(base_class)
+            if class_info:
+                class_definition, class_imports = class_info
+                return self._inherits_from_parameterized(class_definition, class_imports)
+
+            # If not found in current file, check if it's an import from the same library
+            # This is a reasonable heuristic for external library widgets
+            if base_class in imports:
+                import_path = imports[base_class]
+                # If it's imported from within the same library (relative import),
+                # it's likely a Parameterized class
+                if import_path.startswith(
+                    ("base.", "core.", "widgets.")
+                ) or not import_path.startswith(("typing.", "collections.", "__future__.")):
+                    return True
+
+            return False
         finally:
             self._inheritance_check_visited.discard(base_class)
 
@@ -427,6 +466,46 @@ class StaticExternalAnalyzer:
         # Check if class_name is imported and resolve it
         resolved_name = imports.get(class_name, class_name)
         return resolved_name == "param.Parameterized"
+
+    def _find_class_definition(self, class_name: str) -> tuple[NodeOrLeaf, dict[str, str]] | None:
+        """Find the AST node for a class definition.
+
+        Args:
+            class_name: Name of the class to find
+
+        Returns:
+            Tuple of (AST node, imports) of the class definition if found, None otherwise
+        """
+        # Check the AST cache first
+        if class_name in self.class_ast_cache:
+            return self.class_ast_cache[class_name]
+
+        return None
+
+    def _search_for_class_in_ast(
+        self, node: NodeOrLeaf, target_class_name: str
+    ) -> NodeOrLeaf | None:
+        """Recursively search for a class definition in an AST.
+
+        Args:
+            node: Current AST node to search
+            target_class_name: Name of the class to find
+
+        Returns:
+            AST node of the class definition if found, None otherwise
+        """
+        if hasattr(node, "type") and node.type == "classdef":
+            class_name = self._get_class_name(node)
+            if class_name == target_class_name:
+                return node
+
+        # Recursively search children
+        for child in parso_utils.get_children(node):
+            result = self._search_for_class_in_ast(child, target_class_name)
+            if result:
+                return result
+
+        return None
 
     def _is_parameterized_base_class_name(
         self, base_class_name: str, imports: dict[str, str]

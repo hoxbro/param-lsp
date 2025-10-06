@@ -395,6 +395,7 @@ w.value = "invalid"  # should error
 
     def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test, isolated_cache):
         """Test that the analyzer populates the cache after introspection."""
+        pytest.importorskip("panel")
 
         # Verify cache is initially empty
         assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
@@ -402,11 +403,8 @@ w.value = "invalid"  # should error
         # Trigger external class analysis directly (this is what would happen during validation)
         class_info = analyzer.external_analyzer.analyze_external_class("panel.widgets.IntSlider")
 
-        # Skip test if external analysis failed (e.g., panel not available or analysis failed)
-        if class_info is None:
-            pytest.skip(
-                "External class analysis failed - likely panel not available or analysis error"
-            )
+        # Analysis should succeed now that we've verified panel is available
+        assert class_info is not None
 
         # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
