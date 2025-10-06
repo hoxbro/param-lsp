@@ -95,8 +95,13 @@
 - ✅ `tests/test_analyzer/test_static_external_analyzer.py` - Comprehensive tests
 
 #### ✅ Enhanced Files:
-- ✅ `src/param_lsp/_analyzer/static_external_analyzer.py` - Integrated with ExternalLibraryCache
-- ✅ Enhanced inheritance detection and cache-first lookup strategy
+- ✅ `src/param_lsp/analyzer.py` - Updated to use StaticExternalAnalyzer as external_analyzer
+- ✅ `src/param_lsp/_analyzer/validation.py` - Updated to use StaticExternalAnalyzer
+- ✅ `src/param_lsp/_analyzer/__init__.py` - Updated exports
+
+#### ✅ Removed Files:
+- ✅ `src/param_lsp/_analyzer/external_class_inspector.py` - No longer needed
+- ✅ `tests/test_analyzer/test_external_class_inspector.py` - No longer needed
 
 ### 11. ✅ Testing Strategy
 ✅ **IMPLEMENTED**:
@@ -136,7 +141,7 @@
 
 ## 🎉 Implementation Status: FULLY COMPLETED ✅
 
-The static external analyzer is **fully implemented, tested, and deployed**. It provides a complete AST-based solution for analyzing external Parameterized classes without any module loading or imports.
+The static external analyzer is **fully implemented, tested, and deployed**. It provides a complete AST-based solution for analyzing external Parameterized classes without any module loading or imports. The old runtime-based ExternalClassInspector has been completely removed and replaced.
 
 ## ✅ Final Achievement Summary
 
