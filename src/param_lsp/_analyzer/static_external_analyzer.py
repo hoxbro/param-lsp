@@ -846,12 +846,9 @@ class StaticExternalAnalyzer:
             result = self._inherits_from_parameterized(class_definition, class_imports)
             return result
 
-        # If we still can't find it, fall back to reasonable heuristics
-        # for common external library patterns
-        if import_path.startswith(("base.", "core.", "widgets.", "components.")):
-            logger.debug(f"Using heuristic: {import_path} is likely Parameterized")
-            return True
-
+        # If we can't resolve the inheritance chain, return False
+        # This is more honest than guessing based on module names
+        logger.debug(f"Could not resolve inheritance for {import_path} - static analysis failed")
         return False
 
     def _get_current_file_from_context(self) -> Path | None:
