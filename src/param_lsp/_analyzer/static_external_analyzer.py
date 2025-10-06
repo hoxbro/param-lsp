@@ -848,7 +848,7 @@ class StaticExternalAnalyzer:
 
         # If we can't resolve the inheritance chain, return False
         # This is more honest than guessing based on module names
-        logger.debug(f"Could not resolve inheritance for {import_path} - static analysis failed")
+        logger.error(f"Could not resolve inheritance for {import_path} - static analysis failed")
         return False
 
     def _get_current_file_from_context(self) -> Path | None:
