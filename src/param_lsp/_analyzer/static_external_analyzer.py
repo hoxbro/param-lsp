@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import parso
 
+from param_lsp.cache import external_library_cache
 from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 
@@ -61,6 +62,15 @@ class StaticExternalAnalyzer:
             return None
 
         try:
+            # First, try to get from cache (which may contain pre-populated data)
+            class_info = external_library_cache.get(root_module, full_class_path)
+            if class_info:
+                logger.debug(f"Found cached metadata for {full_class_path}")
+                self.parsed_classes[full_class_path] = class_info
+                return class_info
+
+            # Fallback to dynamic AST analysis
+            logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
             class_info = self._analyze_class_from_source(full_class_path)
             self.parsed_classes[full_class_path] = class_info
             return class_info
@@ -318,35 +328,103 @@ class StaticExternalAnalyzer:
         Returns:
             True if class inherits from param.Parameterized
         """
-        # Look for base classes between parentheses
+        # First check direct inheritance
+        base_classes = self._get_base_classes(class_node)
+
+        for base_class in base_classes:
+            if self._is_parameterized_base_class_name(base_class, imports):
+                return True
+
+            # For indirect inheritance, we need to resolve the base class
+            # This would require deeper analysis across files, which is complex
+            # For now, check some common patterns that we know inherit from Parameterized
+            if self._is_known_parameterized_pattern(base_class, imports):
+                return True
+
+        return False
+
+    def _get_base_classes(self, class_node: NodeOrLeaf) -> list[str]:
+        """Extract base class names from class definition.
+
+        Args:
+            class_node: Class definition AST node
+
+        Returns:
+            List of base class names
+        """
+        base_classes = []
         in_parentheses = False
+
         for child in parso_utils.get_children(class_node):
             if child.type == "operator" and parso_utils.get_value(child) == "(":
                 in_parentheses = True
             elif child.type == "operator" and parso_utils.get_value(child) == ")":
                 in_parentheses = False
-            elif (
-                in_parentheses
-                and child.type in ("name", "power", "atom_expr")
-                and self._is_parameterized_base_class(child, imports)
-            ):
-                return True
-        return False
+            elif in_parentheses and child.type in ("name", "power", "atom_expr"):
+                base_class_name = self._resolve_base_class_name(child)
+                if base_class_name:
+                    base_classes.append(base_class_name)
 
-    def _is_parameterized_base_class(self, base_node: NodeOrLeaf, imports: dict[str, str]) -> bool:
-        """Check if a base class node represents param.Parameterized.
+        return base_classes
+
+    def _is_known_parameterized_pattern(self, base_class: str, imports: dict[str, str]) -> bool:
+        """Check if a base class is a known pattern that inherits from Parameterized.
+
+        This attempts to resolve the inheritance chain dynamically by looking up base classes.
 
         Args:
-            base_node: AST node representing a base class
+            base_class: Base class name to check
+            imports: Import mappings
+
+        Returns:
+            True if base class is known to inherit from Parameterized
+        """
+        # Avoid infinite recursion with a visited set
+        if not hasattr(self, "_inheritance_check_visited"):
+            self._inheritance_check_visited = set()
+
+        if base_class in self._inheritance_check_visited:
+            return False
+
+        self._inheritance_check_visited.add(base_class)
+
+        try:
+            # Try to resolve the base class by finding its definition
+            result = self._resolve_inheritance_chain(base_class, imports)
+            return result
+        finally:
+            self._inheritance_check_visited.discard(base_class)
+
+    def _resolve_inheritance_chain(self, class_name: str, imports: dict[str, str]) -> bool:
+        """Resolve inheritance chain to check if it leads to param.Parameterized.
+
+        Args:
+            class_name: Name of the class to check
+            imports: Import mappings from current file
+
+        Returns:
+            True if inheritance chain leads to param.Parameterized
+        """
+        # Direct check for param.Parameterized
+        if class_name in ("param.Parameterized", "Parameterized"):
+            return True
+
+        # Check if class_name is imported and resolve it
+        resolved_name = imports.get(class_name, class_name)
+        return resolved_name == "param.Parameterized"
+
+    def _is_parameterized_base_class_name(
+        self, base_class_name: str, imports: dict[str, str]
+    ) -> bool:
+        """Check if a base class name represents param.Parameterized.
+
+        Args:
+            base_class_name: Name of the base class
             imports: Import mappings
 
         Returns:
             True if base class is param.Parameterized
         """
-        base_class_name = self._resolve_base_class_name(base_node)
-        if not base_class_name:
-            return False
-
         # Check direct reference
         if base_class_name == "param.Parameterized":
             return True
