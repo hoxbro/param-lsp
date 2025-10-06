@@ -401,7 +401,7 @@ w.value = "invalid"  # should error
         assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
 
         # Trigger external class analysis directly (this is what would happen during validation)
-        class_info = analyzer.external_analyzer.analyze_external_class("panel.widgets.IntSlider")
+        class_info = analyzer.external_inspector.analyze_external_class("panel.widgets.IntSlider")
 
         # Analysis should succeed now that we've verified panel is available
         assert class_info is not None

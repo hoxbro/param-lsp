@@ -79,7 +79,7 @@ class ParamAnalyzer:
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
         # Use static external analyzer for external class analysis
-        self.external_analyzer = StaticExternalAnalyzer()
+        self.external_inspector = StaticExternalAnalyzer()
 
         # Maintain compatibility with external_param_classes interface
         # The static analyzer doesn't need pre-caching, so this can be empty
@@ -95,7 +95,7 @@ class ParamAnalyzer:
             external_param_classes=self.external_param_classes,
             imports=self.imports,
             is_parameter_assignment_func=self._is_parameter_assignment,
-            external_analyzer=self.external_analyzer,
+            external_inspector=self.external_inspector,
             workspace_root=str(self.workspace_root) if self.workspace_root else None,
         )
 
@@ -271,7 +271,7 @@ class ParamAnalyzer:
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze external classes using the modular external inspector."""
-        return self.external_analyzer.analyze_external_class(full_class_path)
+        return self.external_inspector.analyze_external_class(full_class_path)
 
     def _get_parameter_source_location(
         self, param_obj: Any, cls: type, param_name: str

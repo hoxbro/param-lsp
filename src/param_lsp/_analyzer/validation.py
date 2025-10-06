@@ -67,7 +67,7 @@ class ParameterValidator:
         external_param_classes: ExternalParamClassDict,
         imports: ImportDict,
         is_parameter_assignment_func,
-        external_analyzer: StaticExternalAnalyzer,
+        external_inspector: StaticExternalAnalyzer,
         workspace_root: str | None = None,
     ):
         self.param_classes = param_classes
@@ -75,7 +75,7 @@ class ParameterValidator:
         self.imports = imports
         self.is_parameter_assignment = is_parameter_assignment_func
         self.workspace_root = workspace_root
-        self.external_analyzer = external_analyzer
+        self.external_inspector = external_inspector
         self.type_errors: list[TypeErrorDict] = []
 
     def check_parameter_types(
@@ -925,7 +925,7 @@ class ParameterValidator:
 
     def _analyze_external_class_ast(self, full_class_path: str):
         """Analyze external class using AST through external class inspector."""
-        return self.external_analyzer.analyze_external_class(full_class_path)
+        return self.external_inspector.analyze_external_class(full_class_path)
 
     def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | None:
         """Get the item_type constraint for a List parameter."""

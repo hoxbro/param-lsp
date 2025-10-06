@@ -69,8 +69,8 @@ class TestParameterValidator:
         return mock_func
 
     @pytest.fixture
-    def mock_external_analyzer(self):
-        """Mock external analyzer for testing."""
+    def mock_external_inspector(self):
+        """Mock external inspector for testing."""
         mock = Mock()
         mock.analyze_external_class.return_value = None
         return mock
@@ -82,7 +82,7 @@ class TestParameterValidator:
         sample_external_classes,
         sample_imports,
         mock_is_parameter_assignment,
-        mock_external_analyzer,
+        mock_external_inspector,
     ):
         """Create a ParameterValidator instance for testing."""
         return ParameterValidator(
@@ -90,7 +90,7 @@ class TestParameterValidator:
             external_param_classes=sample_external_classes,
             imports=sample_imports,
             is_parameter_assignment_func=mock_is_parameter_assignment,
-            external_analyzer=mock_external_analyzer,
+            external_inspector=mock_external_inspector,
             workspace_root=None,
         )
 
@@ -428,7 +428,7 @@ TestClass().invalid_param = 456
             external_param_classes={},
             imports={},
             is_parameter_assignment_func=lambda x, y: True,
-            external_analyzer=mock_inspector,
+            external_inspector=mock_inspector,
             workspace_root=None,
         )
 
@@ -437,7 +437,7 @@ TestClass().invalid_param = 456
             external_param_classes={},
             imports={},
             is_parameter_assignment_func=lambda x, y: True,
-            external_analyzer=mock_inspector,
+            external_inspector=mock_inspector,
             workspace_root=None,
         )
 
