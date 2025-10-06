@@ -41,6 +41,9 @@ class StaticExternalAnalyzer:
         self.library_source_paths: dict[str, list[Path]] = {}
         self.parsed_classes: dict[str, ParameterizedInfo | None] = {}
         self.analyzed_files: dict[Path, dict[str, Any]] = {}
+        self.file_source_cache: dict[
+            Path, list[str]
+        ] = {}  # Store source lines for parameter extraction
         # Cache all class AST nodes for inheritance resolution
         self.class_ast_cache: dict[str, tuple[NodeOrLeaf, dict[str, str]]] = {}
         # Multi-file analysis queue
@@ -137,7 +140,7 @@ class StaticExternalAnalyzer:
                     if self._inherits_from_parameterized(class_definition, class_imports):
                         # Convert AST node to ParameterizedInfo
                         return self._convert_ast_to_class_info(
-                            class_definition, class_imports, full_class_path
+                            class_definition, class_imports, full_class_path, source_path
                         )
 
             except Exception as e:
@@ -679,7 +682,11 @@ class StaticExternalAnalyzer:
 
                 # Read and parse the file
                 source_code = file_path.read_text(encoding="utf-8")
+                source_lines = source_code.split("\n")
                 tree = parso.parse(source_code)
+
+                # Store source lines for parameter extraction
+                self.file_source_cache[file_path] = source_lines
 
                 # Analyze the file (this may queue additional files)
                 file_analysis = self._analyze_file_ast(tree, source_code)
@@ -697,7 +704,11 @@ class StaticExternalAnalyzer:
                 self.currently_analyzing.discard(file_path)
 
     def _convert_ast_to_class_info(
-        self, class_node: NodeOrLeaf, imports: dict[str, str], full_class_path: str
+        self,
+        class_node: NodeOrLeaf,
+        imports: dict[str, str],
+        full_class_path: str,
+        file_path: Path,
     ) -> ParameterizedInfo:
         """Convert an AST class node to ParameterizedInfo.
 
@@ -722,16 +733,75 @@ class StaticExternalAnalyzer:
 
         parameter_detector = ParameterDetector(imports)
 
-        # We need the source lines for parameter extraction
-        # This is a simplified approach - in a full implementation we'd want to
-        # get the actual source lines for this specific file
-        source_lines = [""] * 1000  # Placeholder
+        # Get the actual source lines for parameter extraction
+        source_lines = self.file_source_cache.get(file_path)
+        if source_lines is None:
+            # If not in cache, read the file directly
+            try:
+                source_code = file_path.read_text(encoding="utf-8")
+                source_lines = source_code.split("\n")
+                # Cache it for future use
+                self.file_source_cache[file_path] = source_lines
+            except Exception as e:
+                logger.error(f"Failed to read source file {file_path}: {e}")
+                source_lines = [""]  # Minimal fallback, not 1000 empty lines
 
         self._extract_class_parameters(
             class_node, parameter_detector, class_info, source_lines, imports
         )
 
+        # Also extract parameters from parent classes within the same file
+        self._extract_inherited_parameters(
+            class_node, parameter_detector, class_info, source_lines, imports
+        )
+
         return class_info
+
+    def _extract_inherited_parameters(
+        self,
+        class_node: NodeOrLeaf,
+        parameter_detector: ParameterDetector,
+        class_info: ParameterizedInfo,
+        source_lines: list[str],
+        imports: dict[str, str],
+    ) -> None:
+        """Extract parameters from parent classes within the same file.
+
+        Args:
+            class_node: Class definition AST node
+            parameter_detector: Detector for parameter assignments
+            class_info: Class info to populate with inherited parameters
+            source_lines: Source code lines
+            imports: Import mappings
+        """
+        # Get direct parent classes
+        base_classes = self._get_base_classes(class_node)
+
+        for base_class in base_classes:
+            # Look for parent class definition in the same file (class_ast_cache)
+            parent_info = self._find_class_definition(base_class)
+            if parent_info:
+                parent_node, parent_imports = parent_info
+
+                # Extract parameters from parent class
+                parent_class_info = ParameterizedInfo(name=base_class)
+                self._extract_class_parameters(
+                    parent_node,
+                    parameter_detector,
+                    parent_class_info,
+                    source_lines,
+                    parent_imports,
+                )
+
+                # Add parent parameters to child (child parameters take precedence)
+                for param_name, param_info in parent_class_info.parameters.items():
+                    if param_name not in class_info.parameters:
+                        class_info.parameters[param_name] = param_info
+
+                # Recursively check parent's parents
+                self._extract_inherited_parameters(
+                    parent_node, parameter_detector, class_info, source_lines, parent_imports
+                )
 
     def _resolve_imported_class_inheritance(
         self, class_name: str, import_path: str, context_imports: dict[str, str]
