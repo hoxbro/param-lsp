@@ -1,0 +1,94 @@
+# Parameter LSP TODO
+
+## ✅ COMPLETED
+
+### Cross-file Inheritance Resolution (Major Feature)
+- [x] Implement cross-file inheritance resolution for external classes
+- [x] Added multi-file analysis queue system for traversing inheritance chains
+- [x] Enhanced base class parsing to handle arglist nodes (multiple inheritance)
+- [x] Implemented import path resolution for relative and absolute imports
+- [x] Added cross-file inheritance checking without runtime inspection
+
+### Source File Reading Fixes
+- [x] Replace placeholder source lines (`[""] * 1000`) with real file reading
+- [x] Implement proper file source caching mechanism
+- [x] Add fallback to read files directly when not in cache
+- [x] Improve error logging for file read failures (debug -> error)
+
+### Discovery Method Restoration
+- [x] Restore original `_discover_external_param_classes` functionality
+- [x] Remove misleading no-op implementation that was added for performance
+
+## ❌ REMAINING LIMITATIONS
+
+### Parameter Inheritance Resolution (Major Architecture Issue)
+
+**Problem**: Static analysis cannot extract inherited parameters from parent classes.
+
+**Example**:
+- `panel.widgets.Checkbox` inherits `value` parameter from `_BooleanWidget`
+- `_BooleanWidget` defines `value = param.Boolean(default=False)`
+- Our analyzer only looks at `Checkbox` class body (no parameters found)
+- Cannot perform type checking without parameter information
+
+**Root Cause**: Fundamental limitation of current static analysis approach.
+
+**What's Needed**:
+1. **Cross-file parameter inheritance tracking**
+   - Follow inheritance chains across multiple files
+   - Extract parameters from all parent classes
+   - Handle complex inheritance hierarchies
+
+2. **Parameter merging and override logic**
+   - Child parameters override parent parameters
+   - Handle multiple inheritance parameter conflicts
+   - Preserve parameter metadata (types, defaults, docs)
+
+3. **Circular dependency handling**
+   - Prevent infinite loops in inheritance resolution
+   - Track visited classes during parameter collection
+   - Handle complex cross-file dependencies
+
+4. **Performance optimization**
+   - Cache parameter inheritance results
+   - Avoid re-analyzing same inheritance chains
+   - Efficient file parsing and caching
+
+**Impact**:
+- Tests fail expecting 2 type errors, get 1 (missing Checkbox parameter validation)
+- External library support incomplete without parameter inheritance
+- Static analysis accuracy limited for inherited parameters
+
+**Effort Estimate**: 2-3 weeks for complete implementation
+- Week 1: Design and implement basic parameter inheritance framework
+- Week 2: Cross-file parameter resolution and merging logic
+- Week 3: Testing, optimization, and edge case handling
+
+## 📋 IMMEDIATE NEXT STEPS
+
+If continuing with parameter inheritance resolution:
+
+1. **Design Phase**
+   - Map out complete parameter inheritance architecture
+   - Define parameter merging and override rules
+   - Plan caching strategy for inherited parameters
+
+2. **Implementation Phase**
+   - Extend `_extract_inherited_parameters` for cross-file resolution
+   - Implement parameter collection from parent class chains
+   - Add parameter merging logic with proper override handling
+
+3. **Testing Phase**
+   - Create comprehensive test suite for parameter inheritance
+   - Test complex inheritance scenarios (Panel, HoloViews)
+   - Validate performance with large external libraries
+
+## 🎯 CURRENT STATUS
+
+- **Basic cross-file inheritance detection**: ✅ WORKING
+- **Source file reading**: ✅ FIXED
+- **Parameter extraction from direct class definitions**: ✅ WORKING
+- **Parameter inheritance resolution**: ❌ NOT IMPLEMENTED
+- **External library type checking**: ⚠️ PARTIAL (works for classes with direct parameters)
+
+**Tests Passing**: 403/408 (5 failing due to parameter inheritance limitation)
