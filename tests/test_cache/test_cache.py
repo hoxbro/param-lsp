@@ -400,11 +400,11 @@ w.value = "invalid"  # should error
         # Verify cache is initially empty
         assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
 
-        # Trigger external class analysis directly (this is what would happen during validation)
-        class_info = analyzer.external_inspector.analyze_external_class("panel.widgets.IntSlider")
-
-        # Analysis should succeed now that we've verified panel is available
-        assert class_info is not None
+        code_py = """\
+import panel as pn
+w = pn.widgets.IntSlider()
+"""
+        analyzer.analyze_file(code_py)
 
         # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
