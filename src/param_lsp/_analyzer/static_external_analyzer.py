@@ -51,6 +51,12 @@ class StaticExternalAnalyzer:
         Returns:
             ParameterizedInfo if successful, None otherwise
         """
+        # Quick check for core param types that are not Parameterized classes
+        if full_class_path.startswith("param."):
+            # These are parameter types, not Parameterized classes - cache and return None
+            self.parsed_classes[full_class_path] = None
+            return None
+
         if full_class_path in self.parsed_classes:
             return self.parsed_classes[full_class_path]
 
