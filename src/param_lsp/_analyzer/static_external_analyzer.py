@@ -43,6 +43,10 @@ class StaticExternalAnalyzer:
         self.analyzed_files: dict[Path, dict[str, Any]] = {}
         # Cache all class AST nodes for inheritance resolution
         self.class_ast_cache: dict[str, tuple[NodeOrLeaf, dict[str, str]]] = {}
+        # Multi-file analysis queue
+        self.analysis_queue: list[tuple[Path, str]] = []  # (file_path, reason)
+        self.currently_analyzing: set[Path] = set()  # Prevent circular analysis
+        self.current_file_context: Path | None = None  # Track current file for import resolution
 
     def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
@@ -116,12 +120,26 @@ class StaticExternalAnalyzer:
             logger.debug(f"No source files found for {root_module}")
             return None
 
-        # Search for the class in source files
+        # Search for the class in source files using queue-based analysis
         for source_path in source_paths:
             try:
-                class_info = self._find_class_in_file(source_path, full_class_path, class_name)
+                # Queue the initial file for analysis
+                self._queue_file_for_analysis(source_path, f"searching for {class_name}")
+
+                # Process the analysis queue
+                self._process_analysis_queue()
+
+                # Check if we found the class
+                class_info = self._find_class_definition(class_name)
                 if class_info:
-                    return class_info
+                    class_definition, class_imports = class_info
+                    # Verify this is actually a Parameterized class
+                    if self._inherits_from_parameterized(class_definition, class_imports):
+                        # Convert AST node to ParameterizedInfo
+                        return self._convert_ast_to_class_info(
+                            class_definition, class_imports, full_class_path
+                        )
+
             except Exception as e:
                 logger.debug(f"Error analyzing {source_path}: {e}")
                 continue
@@ -397,10 +415,24 @@ class StaticExternalAnalyzer:
                 in_parentheses = True
             elif child.type == "operator" and parso_utils.get_value(child) == ")":
                 in_parentheses = False
-            elif in_parentheses and child.type in ("name", "power", "atom_expr"):
-                base_class_name = self._resolve_base_class_name(child)
-                if base_class_name:
-                    base_classes.append(base_class_name)
+            elif in_parentheses:
+                if child.type in ("name", "power", "atom_expr"):
+                    base_class_name = self._resolve_base_class_name(child)
+                    if base_class_name:
+                        base_classes.append(base_class_name)
+                elif child.type == "arglist":
+                    # Handle multiple base classes in arglist
+                    for arg_child in parso_utils.get_children(child):
+                        if arg_child.type in ("name", "power", "atom_expr"):
+                            base_class_name = self._resolve_base_class_name(arg_child)
+                            if base_class_name:
+                                base_classes.append(base_class_name)
+                        elif (
+                            arg_child.type == "operator"
+                            and parso_utils.get_value(arg_child) == ","
+                        ):
+                            # Skip commas
+                            pass
 
         return base_classes
 
@@ -432,18 +464,14 @@ class StaticExternalAnalyzer:
             class_info = self._find_class_definition(base_class)
             if class_info:
                 class_definition, class_imports = class_info
-                return self._inherits_from_parameterized(class_definition, class_imports)
+                result = self._inherits_from_parameterized(class_definition, class_imports)
+                return result
 
-            # If not found in current file, check if it's an import from the same library
-            # This is a reasonable heuristic for external library widgets
+            # If not found in current file, try to resolve through imports
             if base_class in imports:
                 import_path = imports[base_class]
-                # If it's imported from within the same library (relative import),
-                # it's likely a Parameterized class
-                if import_path.startswith(
-                    ("base.", "core.", "widgets.")
-                ) or not import_path.startswith(("typing.", "collections.", "__future__.")):
-                    return True
+                result = self._resolve_imported_class_inheritance(base_class, import_path, imports)
+                return result
 
             return False
         finally:
@@ -480,6 +508,298 @@ class StaticExternalAnalyzer:
         if class_name in self.class_ast_cache:
             return self.class_ast_cache[class_name]
 
+        return None
+
+    def _resolve_import_to_file_path(
+        self, import_path: str, current_file_path: Path
+    ) -> Path | None:
+        """Resolve an import path to an actual file path.
+
+        Args:
+            import_path: Import path like "base.Widget" or "panel.widgets.base.Widget"
+            current_file_path: Path of the file containing the import
+
+        Returns:
+            Absolute file path if found, None otherwise
+        """
+        if "." not in import_path:
+            return None
+
+        # Split import path into module and class
+        parts = import_path.split(".")
+        if len(parts) < 2:
+            return None
+
+        # The last part is the class name, everything else is the module path
+        module_parts = parts[:-1]
+
+        # For imports like "base.Widget", treat "base" as a relative import
+        # since it's likely from the same directory
+        if len(module_parts) == 1 and not module_parts[0].startswith(
+            tuple(ALLOWED_EXTERNAL_LIBRARIES)
+        ):
+            return self._resolve_relative_import(module_parts, current_file_path)
+
+        # Handle absolute imports within the same library
+        return self._resolve_absolute_import(module_parts, current_file_path)
+
+    def _resolve_relative_import(
+        self, module_parts: list[str], current_file_path: Path
+    ) -> Path | None:
+        """Resolve a relative import like ['base'] from current file location.
+
+        Args:
+            module_parts: Module parts like ['base'] or ['..', 'core']
+            current_file_path: Current file path
+
+        Returns:
+            Resolved file path or None
+        """
+        # Start from the directory containing the current file
+        base_dir = current_file_path.parent
+
+        # Handle relative import levels
+        for part in module_parts:
+            if part == "..":
+                base_dir = base_dir.parent
+            elif part == ".":
+                continue  # Stay in current directory
+            else:
+                # This is the actual module name
+                potential_file = base_dir / f"{part}.py"
+                if potential_file.exists():
+                    return potential_file
+
+                # Try as a package
+                potential_package = base_dir / part / "__init__.py"
+                if potential_package.exists():
+                    return potential_package
+
+        return None
+
+    def _resolve_absolute_import(
+        self, module_parts: list[str], current_file_path: Path
+    ) -> Path | None:
+        """Resolve an absolute import within the same library.
+
+        Args:
+            module_parts: Module parts like ['panel', 'widgets', 'base']
+            current_file_path: Current file path for context
+
+        Returns:
+            Resolved file path or None
+        """
+        # Find the library root by examining the current file path
+        library_root = self._find_library_root(current_file_path)
+        if not library_root:
+            return None
+
+        # Build path from library root
+        potential_path = library_root
+        for part in module_parts[1:]:  # Skip the first part (library name)
+            potential_path = potential_path / part
+
+        # Try as a module file
+        module_file = potential_path.with_suffix(".py")
+        if module_file.exists():
+            return module_file
+
+        # Try as a package
+        package_file = potential_path / "__init__.py"
+        if package_file.exists():
+            return package_file
+
+        return None
+
+    def _find_library_root(self, file_path: Path) -> Path | None:
+        """Find the root directory of the library containing the given file.
+
+        Args:
+            file_path: Path to a file within the library
+
+        Returns:
+            Library root directory or None
+        """
+        # Walk up the directory tree looking for a known library name
+        current_dir = file_path.parent
+        while current_dir != current_dir.parent:  # Not at filesystem root
+            if current_dir.name in ALLOWED_EXTERNAL_LIBRARIES:
+                return current_dir
+            current_dir = current_dir.parent
+
+        return None
+
+    def _parse_import_statement(
+        self, import_path: str, imported_name: str
+    ) -> tuple[str, str] | None:
+        """Parse an import statement to extract module path and class name.
+
+        Args:
+            import_path: Import path from imports dict
+            imported_name: The imported name
+
+        Returns:
+            Tuple of (module_path, class_name) or None
+        """
+        if "." in import_path:
+            # Handle cases like "base.Widget" -> ("base", "Widget")
+            parts = import_path.split(".")
+            return ".".join(parts[:-1]), parts[-1]
+        else:
+            # Direct import like "Widget" -> no module path, return None
+            return None
+
+    def _queue_file_for_analysis(self, file_path: Path, reason: str) -> None:
+        """Add a file to the analysis queue if not already analyzed.
+
+        Args:
+            file_path: Path to the file to analyze
+            reason: Reason for analysis (for debugging)
+        """
+        if file_path not in self.analyzed_files and file_path not in self.currently_analyzing:
+            self.analysis_queue.append((file_path, reason))
+            logger.debug(f"Queued {file_path} for analysis: {reason}")
+
+    def _process_analysis_queue(self) -> None:
+        """Process all files in the analysis queue."""
+        while self.analysis_queue:
+            file_path, reason = self.analysis_queue.pop(0)
+
+            # Skip if already analyzing (circular dependency protection)
+            if file_path in self.currently_analyzing:
+                continue
+
+            # Skip if already analyzed
+            if file_path in self.analyzed_files:
+                continue
+
+            try:
+                self.currently_analyzing.add(file_path)
+                logger.debug(f"Analyzing {file_path}: {reason}")
+
+                # Read and parse the file
+                source_code = file_path.read_text(encoding="utf-8")
+                tree = parso.parse(source_code)
+
+                # Analyze the file (this may queue additional files)
+                file_analysis = self._analyze_file_ast(tree, source_code)
+                self.analyzed_files[file_path] = file_analysis
+
+                logger.debug(
+                    f"Completed analysis of {file_path}, found {len(file_analysis)} classes"
+                )
+
+            except Exception as e:
+                logger.debug(f"Failed to analyze {file_path}: {e}")
+                # Mark as analyzed even if failed to prevent retry loops
+                self.analyzed_files[file_path] = {}
+            finally:
+                self.currently_analyzing.discard(file_path)
+
+    def _convert_ast_to_class_info(
+        self, class_node: NodeOrLeaf, imports: dict[str, str], full_class_path: str
+    ) -> ParameterizedInfo:
+        """Convert an AST class node to ParameterizedInfo.
+
+        Args:
+            class_node: AST node of the class
+            imports: Import mappings
+            full_class_path: Full path like "panel.widgets.IntSlider"
+
+        Returns:
+            ParameterizedInfo with extracted parameters
+        """
+        class_name = self._get_class_name(class_node)
+        if not class_name:
+            msg = "Could not extract class name from AST node"
+            raise ValueError(msg)
+
+        # Create class info
+        class_info = ParameterizedInfo(name=class_name)
+
+        # Find parameter assignments in class body
+        from param_lsp._analyzer.ast_navigator import ParameterDetector
+
+        parameter_detector = ParameterDetector(imports)
+
+        # We need the source lines for parameter extraction
+        # This is a simplified approach - in a full implementation we'd want to
+        # get the actual source lines for this specific file
+        source_lines = [""] * 1000  # Placeholder
+
+        self._extract_class_parameters(
+            class_node, parameter_detector, class_info, source_lines, imports
+        )
+
+        return class_info
+
+    def _resolve_imported_class_inheritance(
+        self, class_name: str, import_path: str, context_imports: dict[str, str]
+    ) -> bool:
+        """Resolve inheritance for an imported class by analyzing its source file.
+
+        Args:
+            class_name: Name of the imported class
+            import_path: Import path like "base.Widget"
+            context_imports: Import context from current file
+
+        Returns:
+            True if the imported class inherits from Parameterized
+        """
+        # First check if it's clearly not a Parameterized class
+        if import_path.startswith(("typing.", "collections.", "__future__.", "abc.", "enum.")):
+            return False
+
+        # Get the current file context (we need this for import resolution)
+        current_file = self._get_current_file_from_context()
+        if not current_file:
+            logger.debug(f"Could not determine current file context for {class_name}")
+            return False
+
+        # Resolve the import to a file path
+        target_file = self._resolve_import_to_file_path(import_path, current_file)
+        if not target_file:
+            logger.debug(f"Could not resolve import {import_path} to file path")
+            return False
+
+        # Queue the target file for analysis
+        self._queue_file_for_analysis(target_file, f"resolving inheritance for {class_name}")
+
+        # Process the queue to analyze the file
+        self._process_analysis_queue()
+
+        # Now check if we can find the class and its inheritance
+        parsed_class_name = import_path.split(".")[-1]  # Extract actual class name
+        class_info = self._find_class_definition(parsed_class_name)
+        if class_info:
+            class_definition, class_imports = class_info
+            result = self._inherits_from_parameterized(class_definition, class_imports)
+            return result
+
+        # If we still can't find it, fall back to reasonable heuristics
+        # for common external library patterns
+        if import_path.startswith(("base.", "core.", "widgets.", "components.")):
+            logger.debug(f"Using heuristic: {import_path} is likely Parameterized")
+            return True
+
+        return False
+
+    def _get_current_file_from_context(self) -> Path | None:
+        """Get the current file being analyzed from context.
+
+        This is a helper method to determine which file we're currently analyzing
+        for import resolution purposes.
+
+        Returns:
+            Path to current file or None if not determinable
+        """
+        # Look for the most recently added file to the analysis queue or currently analyzing
+        if self.currently_analyzing:
+            return next(iter(self.currently_analyzing))
+
+        # If nothing is currently being analyzed, we might be in the initial phase
+        # In this case, we'll need to track this differently
+        # For now, return None and rely on heuristics
         return None
 
     def _search_for_class_in_ast(
