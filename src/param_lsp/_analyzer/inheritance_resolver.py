@@ -115,11 +115,10 @@ class InheritanceResolver:
 
                 # Handle complex attribute access like pn.widgets.IntSlider
                 full_class_path = self.resolve_full_class_path(base)
-                if full_class_path:
-                    # Check if this external class is a Parameterized class
-                    class_info = self.analyze_external_class_ast(full_class_path)
-                    if class_info:
-                        return True
+                # Check if this external class is a Parameterized class
+                class_info = self.analyze_external_class_ast(full_class_path)
+                if class_info:
+                    return True
         return False
 
     def collect_inherited_parameters(
@@ -156,15 +155,14 @@ class InheritanceResolver:
             elif base.type in ("atom_expr", "power"):
                 # Handle complex attribute access like pn.widgets.IntSlider
                 full_class_path = self.resolve_full_class_path(base)
-                if full_class_path:
-                    # Skip analysis of param.Parameterized itself (base class has no parameters)
-                    if full_class_path == "param.Parameterized":
-                        continue  # param.Parameterized itself has no custom parameters to inherit
+                # Skip analysis of param.Parameterized itself (base class has no parameters)
+                if full_class_path == "param.Parameterized":
+                    continue  # param.Parameterized itself has no custom parameters to inherit
 
-                    # Check if this external class is a Parameterized class
-                    class_info = self.analyze_external_class_ast(full_class_path)
-                    if class_info:
-                        for param_name, param_info in class_info.parameters.items():
-                            inherited_parameters[param_name] = param_info  # noqa: PERF403
+                # Check if this external class is a Parameterized class
+                class_info = self.analyze_external_class_ast(full_class_path)
+                if class_info:
+                    for param_name, param_info in class_info.parameters.items():
+                        inherited_parameters[param_name] = param_info  # noqa: PERF403
 
         return inherited_parameters
