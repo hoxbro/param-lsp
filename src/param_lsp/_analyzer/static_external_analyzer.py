@@ -139,15 +139,20 @@ class StaticExternalAnalyzer:
                     # Verify this is actually a Parameterized class
                     if self._inherits_from_parameterized(class_definition, class_imports):
                         # Convert AST node to ParameterizedInfo
-                        return self._convert_ast_to_class_info(
+                        result = self._convert_ast_to_class_info(
                             class_definition, class_imports, full_class_path, source_path
                         )
+                        # Clean up AST caches after successful conversion
+                        self._cleanup_ast_caches()
+                        return result
 
             except Exception as e:
                 logger.debug(f"Error analyzing {source_path}: {e}")
                 continue
 
         logger.debug(f"Class {full_class_path} not found in source files")
+        # Clean up AST caches when class not found
+        self._cleanup_ast_caches()
         return None
 
     def _discover_library_sources(self, library_name: str) -> list[Path]:
@@ -702,6 +707,30 @@ class StaticExternalAnalyzer:
                 self.analyzed_files[file_path] = {}
             finally:
                 self.currently_analyzing.discard(file_path)
+
+    def _cleanup_ast_caches(self) -> None:
+        """Clean up AST caches to reduce memory usage and garbage collection delay.
+
+        This method clears the internal caches that hold AST nodes and source code
+        after analysis is complete, which helps reduce memory usage and speeds up
+        process cleanup by reducing the amount of data that needs to be garbage collected.
+        """
+        logger.debug(
+            f"Cleaning up AST caches: {len(self.class_ast_cache)} AST nodes, "
+            f"{len(self.file_source_cache)} source files, "
+            f"{len(self.analyzed_files)} analyzed files"
+        )
+
+        # Clear the AST cache that holds parsed AST nodes
+        self.class_ast_cache.clear()
+
+        # Clear the source file cache
+        self.file_source_cache.clear()
+
+        # Clear analyzed files cache
+        self.analyzed_files.clear()
+
+        logger.debug("AST cache cleanup completed")
 
     def _convert_ast_to_class_info(
         self,
