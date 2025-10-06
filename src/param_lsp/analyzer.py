@@ -270,8 +270,15 @@ class ParamAnalyzer:
         return parameters
 
     def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
-        """Analyze external classes using the modular external inspector."""
-        return self.external_inspector.analyze_external_class(full_class_path)
+        """Analyze external classes using the modular external inspector with caching."""
+        # Check cache first
+        if full_class_path in self.external_param_classes:
+            return self.external_param_classes[full_class_path]
+
+        # Analyze and cache the result
+        class_info = self.external_inspector.analyze_external_class(full_class_path)
+        self.external_param_classes[full_class_path] = class_info
+        return class_info
 
     def _get_parameter_source_location(
         self, param_obj: Any, cls: type, param_name: str
@@ -351,9 +358,8 @@ class ParamAnalyzer:
         for node in nodes_to_check:
             if node.type in ("power", "atom_expr") and parso_utils.is_function_call(node):
                 full_class_path = self.import_resolver.resolve_full_class_path(node)
-                if full_class_path and full_class_path not in self.external_param_classes:
-                    class_info = self._analyze_external_class_ast(full_class_path)
-                    self.external_param_classes[full_class_path] = class_info
+                if full_class_path:
+                    self._analyze_external_class_ast(full_class_path)
 
     def resolve_class_name_from_context(
         self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str
@@ -387,9 +393,7 @@ class ParamAnalyzer:
                         if alias in self.imports:
                             full_module = self.imports[alias]
                             full_class_path = f"{full_module}.{class_part}"
-                            class_info = self.external_param_classes.get(full_class_path)
-                            if class_info is None:
-                                class_info = self._analyze_external_class_ast(full_class_path)
+                            class_info = self._analyze_external_class_ast(full_class_path)
                             if class_info:
                                 # Return the original dotted name for external class handling
                                 return assigned_class

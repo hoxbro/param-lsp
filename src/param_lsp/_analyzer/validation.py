@@ -706,8 +706,6 @@ class ParameterValidator:
                 # Check if this is an external Parameterized class
                 class_info = self._analyze_external_class_ast(full_class_path)
                 if class_info:
-                    # Store external class info for future validation
-                    self.external_param_classes[full_class_path] = class_info
                     # Return the full path as the class identifier for external classes
                     return full_class_path
 
