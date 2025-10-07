@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 import param
@@ -11,6 +11,9 @@ from pygls.server import LanguageServer
 
 from param_lsp.analyzer import ParamAnalyzer
 from param_lsp.constants import PARAM_TYPE_MAP
+
+if TYPE_CHECKING:
+    import asyncio
 
 
 class LSPServerBase(LanguageServer):
@@ -26,6 +29,7 @@ class LSPServerBase(LanguageServer):
         self.analyzer = ParamAnalyzer()
         self.document_cache: dict[str, dict[str, Any]] = {}
         self.classes = self._get_classes()
+        self._cache_population_task: asyncio.Task[None] | None = None
 
     def _uri_to_path(self, uri: str) -> str:
         """Convert URI to file path."""

@@ -199,7 +199,9 @@ class ParamAnalyzer:
                 break
 
         # Pre-pass: discover all external Parameterized classes using cached nodes
-        self._discover_external_param_classes(tree, all_nodes)
+        # This is now optional to avoid blocking the main analysis
+        # External classes will be discovered on-demand when needed
+        # self._discover_external_param_classes(tree, all_nodes)
 
         # Perform parameter validation after parsing using modular validator with cached nodes
         self.type_errors = self.validator.check_parameter_types(
@@ -269,8 +271,18 @@ class ParamAnalyzer:
 
         return parameters
 
-    def _analyze_external_class_ast(self, full_class_path: str | None) -> ParameterizedInfo | None:
-        """Analyze external classes using the modular external inspector with caching."""
+    def _analyze_external_class_ast(
+        self, full_class_path: str | None, populate_cache: bool = False
+    ) -> ParameterizedInfo | None:
+        """Analyze external classes using the modular external inspector with caching.
+
+        Args:
+            full_class_path: Full path to the external class (e.g., "panel.widgets.IntSlider")
+            populate_cache: Whether to populate the entire library cache (expensive, disabled by default)
+
+        Returns:
+            ParameterizedInfo if found, None otherwise
+        """
         if full_class_path is None:
             return None
 
@@ -278,8 +290,10 @@ class ParamAnalyzer:
         if full_class_path in self.external_param_classes:
             return self.external_param_classes[full_class_path]
 
-        # Analyze and cache the result
-        class_info = self.external_inspector.analyze_external_class(full_class_path)
+        # Analyze and cache the result (with populate_cache=False by default to avoid blocking)
+        class_info = self.external_inspector.analyze_external_class(
+            full_class_path, populate_cache=populate_cache
+        )
         self.external_param_classes[full_class_path] = class_info
         return class_info
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from lsprotocol.types import (
@@ -26,6 +27,7 @@ from param_lsp import __version__
 from ._server.completion import CompletionMixin
 from ._server.hover import HoverMixin
 from ._server.validation import ValidationMixin
+from .constants import ALLOWED_EXTERNAL_LIBRARIES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +38,25 @@ class ParamLanguageServer(ValidationMixin, HoverMixin, CompletionMixin):
 
 
 server = ParamLanguageServer("param-lsp", __version__)
+
+
+async def _populate_external_caches_async():
+    """Populate external library caches in the background without blocking."""
+    logger.info("Starting background cache population for external libraries")
+    try:
+        for library in ALLOWED_EXTERNAL_LIBRARIES:
+            try:
+                # Run in executor to avoid blocking the event loop
+                count = await asyncio.get_event_loop().run_in_executor(
+                    None, server.analyzer.external_inspector.populate_library_cache, library
+                )
+                if count > 0:
+                    logger.info(f"Background cache population: {library} ({count} classes)")
+            except Exception as e:
+                logger.debug(f"Failed to populate cache for {library}: {e}")
+        logger.info("Background cache population completed")
+    except Exception as e:
+        logger.error(f"Error during background cache population: {e}")
 
 
 @server.feature("initialize")
@@ -53,6 +74,11 @@ def initialize(params: InitializeParams) -> InitializeResult:
         server.workspace_root = params.root_path
 
     logger.info(f"Workspace root: {server.workspace_root}")
+
+    # Schedule background cache population (non-blocking)
+    # Store the task reference on the server to prevent garbage collection
+    server._cache_population_task = asyncio.create_task(_populate_external_caches_async())
+    # Don't await the task - let it run in the background
 
     return InitializeResult(
         capabilities=ServerCapabilities(
