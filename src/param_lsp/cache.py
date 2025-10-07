@@ -251,8 +251,10 @@ class ExternalLibraryCache:
                 if cache_path.exists():
                     cache_path.unlink()
         else:
-            # Clear all cache files
-            for cache_file in self.cache_dir.glob("*.json"):
+            # Clear all cache files for the current cache version only
+            cache_version_str = "_".join(map(str, CACHE_VERSION))
+            pattern = f"*-{cache_version_str}.json"
+            for cache_file in self.cache_dir.glob(pattern):
                 cache_file.unlink()
 
 
