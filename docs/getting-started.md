@@ -28,7 +28,7 @@ class MyWidget(param.Parameterized):
     title = param.String(default="My Widget", doc="Title displayed on the widget")
     enabled = param.Boolean(default=True, doc="Whether the widget is enabled")
 
-    `@param.depends("width", "height")`
+    @param.depends("width", "height")
     def area(self):
         """Calculate the area of the widget."""
         return self.width * self.height

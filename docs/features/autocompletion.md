@@ -54,7 +54,7 @@ Smart completion for dependency decorators:
     class DataProcessor(param.Parameterized):
         input_file = param.String(default="data.csv")
 
-        `@param.depends('inp`  # <- Completes to 'input_file'
+        @param.depends('inp  # <- Completes to 'input_file'
         def process_data(self):
             return pd.read_csv(self.input_file)
     ```
