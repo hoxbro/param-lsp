@@ -236,6 +236,9 @@ class ExternalClassInspector:
     def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
 
+        This method now ONLY uses the cache that was populated in the background
+        at server startup. It will not trigger blocking cache population on-demand.
+
         Args:
             full_class_path: Full path like "panel.widgets.IntSlider"
 
@@ -258,33 +261,27 @@ class ExternalClassInspector:
             self.parsed_classes[full_class_path] = None
             return None
 
-        # Try to populate cache if not already done
-        self.populate_library_cache(root_module)
+        # DO NOT call populate_library_cache here - rely on background population
+        # The cache is populated async at server startup
 
         try:
-            # First, try to get from cache (which may contain pre-populated data)
+            # Try to get from cache (populated by background task at startup)
             class_info = external_library_cache.get(root_module, full_class_path)
             if class_info:
                 logger.debug(f"Found cached metadata for {full_class_path}")
                 self.parsed_classes[full_class_path] = class_info
                 return class_info
 
-            # Fallback to dynamic AST analysis
-            logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
-            class_info = self._analyze_class_from_source(full_class_path)
-            self.parsed_classes[full_class_path] = class_info
-
-            # Store successful analysis in global cache for persistence
-            if class_info:
-                try:
-                    external_library_cache.set(root_module, full_class_path, class_info)
-                    logger.debug(f"Stored {full_class_path} in cache")
-                except Exception as e:
-                    logger.debug(f"Failed to store {full_class_path} in cache: {e}")
-
-            return class_info
+            # Cache miss - class not found in background-populated cache
+            # This is expected if the cache is still being populated or if the class doesn't exist
+            logger.debug(
+                f"No cached metadata found for {full_class_path} "
+                "(cache may still be populating in background)"
+            )
+            self.parsed_classes[full_class_path] = None
+            return None
         except Exception as e:
-            logger.debug(f"Failed to analyze {full_class_path}: {e}")
+            logger.debug(f"Failed to get {full_class_path} from cache: {e}")
             self.parsed_classes[full_class_path] = None
             return None
 
