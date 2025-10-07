@@ -8,6 +8,7 @@ from source files directly.
 
 from __future__ import annotations
 
+import importlib.metadata
 import logging
 import site
 import sys
@@ -53,11 +54,42 @@ class StaticExternalAnalyzer:
         # Track which libraries have been pre-populated in this session
         self.populated_libraries: set[str] = set()
 
+    def _get_library_dependencies(self, library_name: str) -> list[str]:
+        """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
+
+        Args:
+            library_name: Name of the library to check
+
+        Returns:
+            List of dependency library names that are allowed external libraries
+        """
+        dependencies = []
+        try:
+            metadata = importlib.metadata.metadata(library_name)
+            requires = metadata.get_all("Requires-Dist") or []
+
+            for req in requires:
+                # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                dep_name = req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+
+                # Only include if it's in our allowed list
+                if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
+                    dependencies.append(dep_name)
+                    logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+
+        except Exception as e:
+            logger.debug(f"Could not get dependencies for {library_name}: {e}")
+
+        return dependencies
+
     def populate_library_cache(self, library_name: str) -> int:
         """Pre-populate cache with all Parameterized classes from a library.
 
         Uses iterative inheritance resolution to find all classes that transitively
         inherit from param.Parameterized, including through intermediate base classes.
+
+        Also populates dependencies first to ensure transitive inheritance through
+        dependency classes is captured correctly.
 
         Args:
             library_name: Name of the library (e.g., "panel", "holoviews")
@@ -81,6 +113,14 @@ class StaticExternalAnalyzer:
         if external_library_cache.has_library_cache(library_name):
             logger.debug(f"Cache already exists for {library_name}")
             return 0
+
+        # Populate dependencies first to ensure we can resolve inheritance
+        # from classes in dependent libraries
+        dependencies = self._get_library_dependencies(library_name)
+        for dep in dependencies:
+            if dep not in self.populated_libraries:
+                logger.info(f"Pre-populating dependency {dep} for {library_name}")
+                self.populate_library_cache(dep)
 
         logger.info(f"Pre-populating cache for {library_name} using iterative resolution")
 
