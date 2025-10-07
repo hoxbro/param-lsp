@@ -56,6 +56,9 @@ class StaticExternalAnalyzer:
     def populate_library_cache(self, library_name: str) -> int:
         """Pre-populate cache with all Parameterized classes from a library.
 
+        Uses iterative inheritance resolution to find all classes that transitively
+        inherit from param.Parameterized, including through intermediate base classes.
+
         Args:
             library_name: Name of the library (e.g., "panel", "holoviews")
 
@@ -79,8 +82,7 @@ class StaticExternalAnalyzer:
             logger.debug(f"Cache already exists for {library_name}")
             return 0
 
-        logger.info(f"Pre-populating cache for {library_name}")
-        count = 0
+        logger.info(f"Pre-populating cache for {library_name} using iterative resolution")
 
         # Discover all source files for the library
         source_paths = self._discover_library_sources(library_name)
@@ -88,10 +90,15 @@ class StaticExternalAnalyzer:
             logger.debug(f"No source files found for {library_name}")
             return 0
 
-        # Analyze all files and find all Parameterized classes
+        # Phase 1: Build inheritance map
+        logger.debug("Phase 1: Building inheritance map")
+        inheritance_map: dict[str, list[str]] = {}  # full_class_path -> [base_class_paths]
+        class_ast_nodes: dict[
+            str, tuple[NodeOrLeaf, dict[str, str], Path]
+        ] = {}  # full_class_path -> (ast_node, imports, source_file)
+
         for source_path in source_paths:
             try:
-                # Parse the file
                 source_code = source_path.read_text(encoding="utf-8")
                 tree = parso.parse(source_code)
 
@@ -101,6 +108,9 @@ class StaticExternalAnalyzer:
                 for node in parso_utils.walk_tree(tree):
                     import_handler.handle_import(node)
 
+                # Cache source lines for later parameter extraction
+                self.file_source_cache[source_path] = source_code.split("\n")
+
                 # Find all class definitions
                 for node in parso_utils.walk_tree(tree):
                     if node.type == "classdef":
@@ -108,32 +118,75 @@ class StaticExternalAnalyzer:
                         if not class_name:
                             continue
 
-                        # Check if it inherits from Parameterized
-                        if self._inherits_from_parameterized(node, file_imports):
-                            # Construct full class path
-                            full_class_path = self._get_full_class_path(
-                                source_path, class_name, library_name
-                            )
-                            if not full_class_path:
-                                continue
+                        # Construct full class path
+                        full_class_path = self._get_full_class_path(
+                            source_path, class_name, library_name
+                        )
+                        if not full_class_path:
+                            continue
 
-                            # Convert to ParameterizedInfo and cache
-                            try:
-                                class_info = self._convert_ast_to_class_info(
-                                    node, file_imports, full_class_path, source_path
-                                )
-                                if class_info:
-                                    external_library_cache.set(
-                                        library_name, full_class_path, class_info
-                                    )
-                                    count += 1
-                                    logger.debug(f"Cached {full_class_path}")
-                            except Exception as e:
-                                logger.debug(f"Failed to cache {full_class_path}: {e}")
+                        # Get base classes as full paths
+                        bases = self._resolve_base_class_paths(node, file_imports, library_name)
+
+                        # Store in inheritance map
+                        inheritance_map[full_class_path] = bases
+                        class_ast_nodes[full_class_path] = (node, file_imports, source_path)
 
             except Exception as e:
                 logger.debug(f"Error processing {source_path}: {e}")
                 continue
+
+        logger.debug(f"Found {len(inheritance_map)} classes in inheritance map")
+
+        # Phase 2: Iterative Parameterized detection
+        logger.debug("Phase 2: Iterative Parameterized detection")
+        parameterized_classes: set[str] = set()
+
+        # Round 1: Find direct Parameterized subclasses
+        for class_path, bases in inheritance_map.items():
+            if any(self._is_parameterized_base(base) for base in bases):
+                parameterized_classes.add(class_path)
+
+        logger.debug(
+            f"Round 1: Found {len(parameterized_classes)} direct Parameterized subclasses"
+        )
+
+        # Round 2+: Propagate iteratively
+        round_num = 2
+        changed = True
+        while changed:
+            changed = False
+            for class_path, bases in inheritance_map.items():
+                if class_path not in parameterized_classes:
+                    # Check if any base class is already marked as Parameterized
+                    for base in bases:
+                        if self._base_matches_parameterized_class(base, parameterized_classes):
+                            parameterized_classes.add(class_path)
+                            changed = True
+                            break
+
+            if changed:
+                logger.debug(
+                    f"Round {round_num}: Total {len(parameterized_classes)} Parameterized classes"
+                )
+                round_num += 1
+
+        logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
+
+        # Phase 3: Extract parameters for Parameterized classes
+        logger.debug("Phase 3: Extracting parameters")
+        count = 0
+        for class_path in parameterized_classes:
+            try:
+                class_node, file_imports, source_path = class_ast_nodes[class_path]
+                class_info = self._convert_ast_to_class_info(
+                    class_node, file_imports, class_path, source_path
+                )
+                if class_info:
+                    external_library_cache.set(library_name, class_path, class_info)
+                    count += 1
+            except Exception as e:
+                logger.debug(f"Failed to cache {class_path}: {e}")
 
         logger.info(f"Pre-populated {count} classes for {library_name}")
         # Clean up AST caches after population
@@ -1219,3 +1272,77 @@ class StaticExternalAnalyzer:
             elif child.type == "operator" and parso_utils.get_value(child) == "=":
                 break
         return None
+
+    def _resolve_base_class_paths(
+        self, class_node: NodeOrLeaf, file_imports: dict[str, str], library_name: str
+    ) -> list[str]:
+        """Resolve base class names to full paths using imports.
+
+        Args:
+            class_node: Class definition AST node
+            file_imports: Import mappings for this file
+            library_name: Name of the library (e.g., "panel")
+
+        Returns:
+            List of full base class paths
+        """
+        base_classes = self._get_base_classes(class_node)
+        full_bases = []
+
+        for base in base_classes:
+            if "." in base:
+                # Already qualified: "panel.layout.ListPanel"
+                full_bases.append(base)
+            elif base in file_imports:
+                # Resolve via imports: ListPanel -> panel.layout.base.ListPanel
+                full_bases.append(file_imports[base])
+            else:
+                # Assume same module - this is a simplification
+                # In reality, we'd need to check if it's defined in the same file
+                # For now, we'll just use the base name as-is and let the iterative
+                # resolution handle it if it's in the same file
+                full_bases.append(base)
+
+        return full_bases
+
+    def _is_parameterized_base(self, base_path: str) -> bool:
+        """Check if a base class path is param.Parameterized.
+
+        Args:
+            base_path: Base class path to check
+
+        Returns:
+            True if base class is param.Parameterized
+        """
+        return base_path in (
+            "param.Parameterized",
+            "Parameterized",  # if imported as "from param import Parameterized"
+        )
+
+    def _base_matches_parameterized_class(
+        self, base_name: str, parameterized_classes: set[str]
+    ) -> bool:
+        """Check if a base class name matches any known Parameterized class.
+
+        Handles matching both simple names (e.g., 'ListPanel') and full paths
+        (e.g., 'panel.layout.base.ListPanel').
+
+        Args:
+            base_name: Base class name to check (may be simple or fully qualified)
+            parameterized_classes: Set of full paths to known Parameterized classes
+
+        Returns:
+            True if base_name matches a known Parameterized class
+        """
+        # Direct match: base_name is a full path
+        if base_name in parameterized_classes:
+            return True
+
+        # Partial match: base_name is a simple name that matches the last component
+        # of a full path (e.g., 'ListPanel' matches 'panel.layout.base.ListPanel')
+        if "." not in base_name:
+            for full_path in parameterized_classes:
+                if full_path.endswith(f".{base_name}"):
+                    return True
+
+        return False
