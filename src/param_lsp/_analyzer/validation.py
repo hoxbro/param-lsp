@@ -920,31 +920,11 @@ class ParameterValidator:
             message = f"{deprecation_info['message']} (since {deprecation_info['version']})"
             self._create_type_error(node, message, "deprecated-parameter", "warning")
 
-    def _analyze_external_class_ast(
-        self, full_class_path: str | None, populate_cache: bool = False
-    ):
-        """Analyze external class using AST through external class inspector.
-
-        Args:
-            full_class_path: Full path to the external class
-            populate_cache: Whether to populate the entire library cache (disabled by default to avoid blocking)
-
-        Returns:
-            ParameterizedInfo if found, None otherwise
-        """
+    def _analyze_external_class_ast(self, full_class_path: str | None):
+        """Analyze external class using AST through external class inspector."""
         if full_class_path is None:
             return None
-
-        # Check cache first
-        if full_class_path in self.external_param_classes:
-            return self.external_param_classes[full_class_path]
-
-        # Analyze and cache the result
-        class_info = self.external_inspector.analyze_external_class(
-            full_class_path, populate_cache=populate_cache
-        )
-        self.external_param_classes[full_class_path] = class_info
-        return class_info
+        return self.external_inspector.analyze_external_class(full_class_path)
 
     def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | None:
         """Get the item_type constraint for a List parameter."""

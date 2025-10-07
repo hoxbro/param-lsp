@@ -233,14 +233,11 @@ class ExternalClassInspector:
         self._cleanup_ast_caches()
         return count
 
-    def analyze_external_class(
-        self, full_class_path: str, populate_cache: bool = True
-    ) -> ParameterizedInfo | None:
+    def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
 
         Args:
             full_class_path: Full path like "panel.widgets.IntSlider"
-            populate_cache: Whether to populate the library cache (can be disabled for non-blocking behavior)
 
         Returns:
             ParameterizedInfo if successful, None otherwise
@@ -261,9 +258,8 @@ class ExternalClassInspector:
             self.parsed_classes[full_class_path] = None
             return None
 
-        # Try to populate cache if not already done (but only if requested to avoid blocking)
-        if populate_cache:
-            self.populate_library_cache(root_module)
+        # Try to populate cache if not already done
+        self.populate_library_cache(root_module)
 
         try:
             # First, try to get from cache (which may contain pre-populated data)
