@@ -28,25 +28,28 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Get cache directory
-        id: cache-dir
+      - name: Get cache directory and version
+        id: cache-info
         shell: bash
-        run: echo "dir=$(uv run param-lsp --cache-dir)" >> $GITHUB_OUTPUT
+        run: |
+          output=$(uv run param-lsp --cache-dir)
+          echo "dir=${output%%::*}" >> $GITHUB_OUTPUT
+          echo "version=${output##*::}" >> $GITHUB_OUTPUT
       - name: Restore param-lsp cache
         id: cache-restore
         uses: actions/cache/restore@v4
         with:
-          path: ${{ steps.cache-dir.outputs.dir }}
-          key: ${{ runner.os }}-param-lsp-cache-${{ hashFiles('**/pyproject.toml') }}
+          path: ${{ steps.cache-info.outputs.dir }}
+          key: ${{ runner.os }}-param-lsp-${{ steps.cache-info.outputs.version }}-${{ hashFiles('**/pyproject.toml') }}
           restore-keys: |
-            ${{ runner.os }}-param-lsp-cache-
+            ${{ runner.os }}-param-lsp-${{ steps.cache-info.outputs.version }}-
       - name: Testing
         run: uv run -m pytest tests/
       - name: Save param-lsp cache
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: ${{ steps.cache-dir.outputs.dir }}
+          path: ${{ steps.cache-info.outputs.dir }}
           key: ${{ steps.cache-restore.outputs.cache-primary-key }}
 
   result_test_suite:
