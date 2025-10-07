@@ -394,12 +394,14 @@ w.value = "invalid"  # should error
             external_library_cache.get = original_get
 
     def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test, isolated_cache):
-        """Test that the analyzer uses external classes from background-populated cache.
+        """Test that the analyzer populates the cache after external class analysis.
 
-        With the new architecture, external classes are ONLY loaded from the cache
-        that was populated in the background at server startup. On-demand analysis
-        no longer triggers cache population to avoid blocking behavior.
+        This test mocks the expensive external class analysis and focuses on testing
+        that the cache storage mechanism works correctly. The actual analysis is tested
+        in test_static_external_analyzer.py.
         """
+        from unittest.mock import patch
+
         # Create mock class info
         mock_class_info = ParameterizedInfo(
             name="IntSlider",
@@ -417,17 +419,22 @@ w.value = "invalid"  # should error
         # Verify cache is initially empty
         assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
 
-        # Pre-populate the cache as if it was done at server startup
-        isolated_cache.set("panel", "panel.widgets.IntSlider", mock_class_info)
-
-        # Now analyze_file should use the cached data
-        code_py = """\
+        # Mock the expensive operations to focus on cache storage
+        with (
+            patch.object(
+                analyzer.external_inspector,
+                "_analyze_class_from_source",
+                return_value=mock_class_info,
+            ),
+            patch.object(analyzer.external_inspector, "populate_library_cache", return_value=0),
+        ):
+            code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 """
-        analyzer.analyze_file(code_py)
+            analyzer.analyze_file(code_py)
 
-        # Verify cache still has the expected data
+        # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
         assert cached_data is not None
         assert isinstance(cached_data, ParameterizedInfo)
