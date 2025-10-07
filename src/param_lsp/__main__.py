@@ -38,8 +38,20 @@ def main():
         "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
     )
     parser.add_argument("--stdio", action="store_true", help="Use stdio (default)")
+    parser.add_argument(
+        "--cache-dir",
+        action="store_true",
+        help="Print the cache directory path and exit",
+    )
 
     args = parser.parse_args()
+
+    # Handle --cache-dir flag
+    if args.cache_dir:
+        from .cache import external_library_cache
+
+        print(external_library_cache.cache_dir)
+        return
 
     # Check for mutually exclusive options
     if args.tcp and args.stdio:
