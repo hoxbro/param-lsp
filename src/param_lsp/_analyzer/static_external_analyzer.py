@@ -1266,8 +1266,13 @@ class ExternalClassInspector:
                         )
                         if param_info:
                             class_info.add_parameter(param_info)
-            elif hasattr(child, "type"):
-                # Recursively search in nested structures
+            elif hasattr(child, "type") and child.type not in (
+                "funcdef",
+                "async_funcdef",
+                "classdef",
+            ):
+                # Recursively search in nested structures, but skip function/method definitions
+                # and nested class definitions to avoid treating method-local variables as parameters
                 self._walk_class_body(child, parameter_detector, class_info, source_lines, imports)
 
     def _extract_parameter_info(
