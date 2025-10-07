@@ -295,14 +295,13 @@ hv.Curve("""
         assert len(completions) > 0, "Should have completions for hv.Curve parameters"
 
         completion_labels = [item.label for item in completions]
-        # HoloViews Curve should have at least the 'group' parameter (defined directly)
-        # Note: Inherited parameters are not yet included in the cache
-        assert any("group" in label for label in completion_labels), (
-            "Should suggest group parameter for hv.Curve"
+        # HoloViews Curve should have parameters like 'name', 'label', 'group', etc.
+        assert any("label" in label for label in completion_labels), (
+            "Should suggest label parameter for hv.Curve"
         )
-        # Should have at least 1 parameter
-        assert len(completions) >= 1, (
-            f"Should suggest at least 1 parameter, got {len(completions)}"
+        # Should have 6 main parameters (name is filtered out)
+        assert len(completions) >= 6, (
+            f"Should suggest at least 6 parameters, got {len(completions)}"
         )
         # Should NOT suggest name parameter (it's filtered out for constructors)
         assert not any("name" in label for label in completion_labels), (
