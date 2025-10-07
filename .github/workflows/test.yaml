@@ -28,6 +28,17 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Get cache directory
+        id: cache-dir
+        shell: bash
+        run: echo "dir=$(uv run param-lsp --cache-dir)" >> $GITHUB_OUTPUT
+      - name: Cache param-lsp directory
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-param-lsp-cache-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-param-lsp-cache-
       - name: Testing
         run: uv run -m pytest tests/
 
