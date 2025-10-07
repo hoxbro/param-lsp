@@ -43,6 +43,11 @@ def main():
         action="store_true",
         help="Print the cache directory path and exit",
     )
+    parser.add_argument(
+        "--generate-cache",
+        action="store_true",
+        help="Generate cache for supported libraries and exit",
+    )
 
     args = parser.parse_args()
 
@@ -52,6 +57,22 @@ def main():
 
         cache_version_str = ".".join(map(str, CACHE_VERSION))
         print(f"{external_library_cache.cache_dir}::{cache_version_str}")
+        return
+
+    # Handle --generate-cache flag
+    if args.generate_cache:
+        from ._analyzer.static_external_analyzer import ExternalClassInspector
+        from .constants import ALLOWED_EXTERNAL_LIBRARIES
+
+        inspector = ExternalClassInspector()
+        total_cached = 0
+        for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
+            logger.info(f"Generating cache for {library}...")
+            count = inspector.populate_library_cache(library)
+            if count > 0:
+                logger.info(f"Cached {count} classes from {library}")
+            total_cached += count
+        logger.info(f"Cache generation complete. Total classes cached: {total_cached}")
         return
 
     # Check for mutually exclusive options
