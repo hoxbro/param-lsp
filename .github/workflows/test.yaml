@@ -43,6 +43,9 @@ jobs:
           key: ${{ runner.os }}-param-lsp-${{ steps.cache-info.outputs.version }}-${{ hashFiles('**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-param-lsp-${{ steps.cache-info.outputs.version }}-
+      - name: Generate cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: uv run param-lsp --generate-cache
       - name: Testing
         run: uv run -m pytest tests/
       - name: Save param-lsp cache
