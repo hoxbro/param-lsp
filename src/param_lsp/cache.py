@@ -61,6 +61,33 @@ class ExternalLibraryCache:
         """Get the version of an installed library."""
         return _get_version(library_name)
 
+    def has_library_cache(self, library_name: str) -> bool:
+        """Check if cache exists and has content for a library."""
+        if not self._caching_enabled:
+            return False
+
+        version = self._get_library_version(library_name)
+        if not version:
+            return False
+
+        cache_path = self._get_cache_path(library_name, version)
+        if not cache_path.exists():
+            return False
+
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            # Validate cache format and version compatibility
+            if not self._is_cache_valid(cache_data, library_name, version):
+                return False
+
+            # Check if cache has any classes
+            classes_data = cache_data.get("classes", {})
+            return len(classes_data) > 0
+        except (json.JSONDecodeError, OSError):
+            return False
+
     def get(self, library_name: str, class_path: str) -> ParameterizedInfo | None:
         """Get cached introspection data for a library class."""
         if not self._caching_enabled:

@@ -50,6 +50,95 @@ class StaticExternalAnalyzer:
         self.analysis_queue: list[tuple[Path, str]] = []  # (file_path, reason)
         self.currently_analyzing: set[Path] = set()  # Prevent circular analysis
         self.current_file_context: Path | None = None  # Track current file for import resolution
+        # Track which libraries have been pre-populated in this session
+        self.populated_libraries: set[str] = set()
+
+    def populate_library_cache(self, library_name: str) -> int:
+        """Pre-populate cache with all Parameterized classes from a library.
+
+        Args:
+            library_name: Name of the library (e.g., "panel", "holoviews")
+
+        Returns:
+            Number of classes cached
+        """
+        if library_name not in ALLOWED_EXTERNAL_LIBRARIES:
+            logger.debug(f"Library {library_name} not in allowed list")
+            return 0
+
+        # Check if we've already populated this library in this session
+        if library_name in self.populated_libraries:
+            logger.debug(f"Already populated {library_name} in this session")
+            return 0
+
+        # Mark as populated to avoid re-running
+        self.populated_libraries.add(library_name)
+
+        # Check if cache already has content for this library
+        if external_library_cache.has_library_cache(library_name):
+            logger.debug(f"Cache already exists for {library_name}")
+            return 0
+
+        logger.info(f"Pre-populating cache for {library_name}")
+        count = 0
+
+        # Discover all source files for the library
+        source_paths = self._discover_library_sources(library_name)
+        if not source_paths:
+            logger.debug(f"No source files found for {library_name}")
+            return 0
+
+        # Analyze all files and find all Parameterized classes
+        for source_path in source_paths:
+            try:
+                # Parse the file
+                source_code = source_path.read_text(encoding="utf-8")
+                tree = parso.parse(source_code)
+
+                # Extract imports for this file
+                file_imports: dict[str, str] = {}
+                import_handler = ImportHandler(file_imports)
+                for node in parso_utils.walk_tree(tree):
+                    import_handler.handle_import(node)
+
+                # Find all class definitions
+                for node in parso_utils.walk_tree(tree):
+                    if node.type == "classdef":
+                        class_name = parso_utils.get_class_name(node)
+                        if not class_name:
+                            continue
+
+                        # Check if it inherits from Parameterized
+                        if self._inherits_from_parameterized(node, file_imports):
+                            # Construct full class path
+                            full_class_path = self._get_full_class_path(
+                                source_path, class_name, library_name
+                            )
+                            if not full_class_path:
+                                continue
+
+                            # Convert to ParameterizedInfo and cache
+                            try:
+                                class_info = self._convert_ast_to_class_info(
+                                    node, file_imports, full_class_path, source_path
+                                )
+                                if class_info:
+                                    external_library_cache.set(
+                                        library_name, full_class_path, class_info
+                                    )
+                                    count += 1
+                                    logger.debug(f"Cached {full_class_path}")
+                            except Exception as e:
+                                logger.debug(f"Failed to cache {full_class_path}: {e}")
+
+            except Exception as e:
+                logger.debug(f"Error processing {source_path}: {e}")
+                continue
+
+        logger.info(f"Pre-populated {count} classes for {library_name}")
+        # Clean up AST caches after population
+        self._cleanup_ast_caches()
+        return count
 
     def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
@@ -75,6 +164,9 @@ class StaticExternalAnalyzer:
             logger.debug(f"Library {root_module} not in allowed list")
             self.parsed_classes[full_class_path] = None
             return None
+
+        # Try to populate cache if not already done
+        self.populate_library_cache(root_module)
 
         try:
             # First, try to get from cache (which may contain pre-populated data)
@@ -154,6 +246,56 @@ class StaticExternalAnalyzer:
         # Clean up AST caches when class not found
         self._cleanup_ast_caches()
         return None
+
+    def _get_full_class_path(
+        self, source_path: Path, class_name: str, library_name: str
+    ) -> str | None:
+        """Construct full class path from source file path and class name.
+
+        Args:
+            source_path: Path to the source file
+            class_name: Name of the class
+            library_name: Root library name (e.g., "panel")
+
+        Returns:
+            Full class path like "panel.widgets.IntSlider" or None if unable to construct
+        """
+        try:
+            # Find the library root directory
+            for site_dir in [*site.getsitepackages(), site.getusersitepackages()]:
+                if site_dir and Path(site_dir).exists():
+                    library_path = Path(site_dir) / library_name
+                    if library_path.exists() and source_path.is_relative_to(library_path):
+                        # Get relative path from library root
+                        relative_path = source_path.relative_to(library_path)
+                        # Convert path to module notation
+                        parts = list(relative_path.parts[:-1])  # Exclude filename
+                        if relative_path.stem != "__init__":
+                            parts.append(relative_path.stem)
+                        # Construct full path: library.module.submodule.ClassName
+                        module_path = ".".join([library_name, *parts])
+                        return f"{module_path}.{class_name}"
+
+            # Also check sys.path
+            for sys_path in sys.path:
+                if sys_path:
+                    sys_path_obj = Path(sys_path)
+                    if sys_path_obj.exists():
+                        library_path = sys_path_obj / library_name
+                        if library_path.exists() and source_path.is_relative_to(library_path):
+                            relative_path = source_path.relative_to(library_path)
+                            parts = list(relative_path.parts[:-1])
+                            if relative_path.stem != "__init__":
+                                parts.append(relative_path.stem)
+                            module_path = ".".join([library_name, *parts])
+                            return f"{module_path}.{class_name}"
+
+            return None
+        except Exception as e:
+            logger.debug(
+                f"Failed to construct full class path for {class_name} in {source_path}: {e}"
+            )
+            return None
 
     def _discover_library_sources(self, library_name: str) -> list[Path]:
         """Discover source files for a given library.
