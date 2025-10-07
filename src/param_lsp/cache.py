@@ -19,7 +19,7 @@ from .models import ParameterInfo, ParameterizedInfo
 logger = logging.getLogger(__name__)
 
 # Current cache version
-CACHE_VERSION = (1, 0, 0)
+CACHE_VERSION = (1, 1, 0)
 _re_no = re.compile(r"\d+")
 
 
@@ -60,6 +60,33 @@ class ExternalLibraryCache:
     def _get_library_version(self, library_name: str) -> str | None:
         """Get the version of an installed library."""
         return _get_version(library_name)
+
+    def has_library_cache(self, library_name: str) -> bool:
+        """Check if cache exists and has content for a library."""
+        if not self._caching_enabled:
+            return False
+
+        version = self._get_library_version(library_name)
+        if not version:
+            return False
+
+        cache_path = self._get_cache_path(library_name, version)
+        if not cache_path.exists():
+            return False
+
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            # Validate cache format and version compatibility
+            if not self._is_cache_valid(cache_data, library_name, version):
+                return False
+
+            # Check if cache has any classes
+            classes_data = cache_data.get("classes", {})
+            return len(classes_data) > 0
+        except (json.JSONDecodeError, OSError):
+            return False
 
     def get(self, library_name: str, class_path: str) -> ParameterizedInfo | None:
         """Get cached introspection data for a library class."""
@@ -224,8 +251,10 @@ class ExternalLibraryCache:
                 if cache_path.exists():
                     cache_path.unlink()
         else:
-            # Clear all cache files
-            for cache_file in self.cache_dir.glob("*.json"):
+            # Clear all cache files for the current cache version only
+            cache_version_str = "_".join(map(str, CACHE_VERSION))
+            pattern = f"*-{cache_version_str}.json"
+            for cache_file in self.cache_dir.glob(pattern):
                 cache_file.unlink()
 
 

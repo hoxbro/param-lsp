@@ -31,7 +31,7 @@ from .parso_utils import (
 )
 
 if TYPE_CHECKING:
-    from param_lsp._analyzer.external_class_inspector import ExternalClassInspector
+    from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
     from param_lsp._types import (
         ExternalParamClassDict,
         ImportDict,
@@ -702,12 +702,11 @@ class ParameterValidator:
         if call_node.type in ("power", "atom_expr"):
             # First try to resolve the full class path for external classes
             full_class_path = self._resolve_full_class_path(call_node)
-            if full_class_path:
-                # Check if this is an external Parameterized class
-                class_info = self._analyze_external_class_ast(full_class_path)
-                if class_info:
-                    # Return the full path as the class identifier for external classes
-                    return full_class_path
+            # Check if this is an external Parameterized class
+            class_info = self._analyze_external_class_ast(full_class_path)
+            if class_info:
+                # Return the full path as the class identifier for external classes
+                return full_class_path
 
             # If not an external class, look for local class names
             # We need to find the class name that's actually being called
@@ -921,9 +920,11 @@ class ParameterValidator:
             message = f"{deprecation_info['message']} (since {deprecation_info['version']})"
             self._create_type_error(node, message, "deprecated-parameter", "warning")
 
-    def _analyze_external_class_ast(self, full_class_path: str):
+    def _analyze_external_class_ast(self, full_class_path: str | None):
         """Analyze external class using AST through external class inspector."""
-        return self.external_inspector.analyze_external_class_ast(full_class_path)
+        if full_class_path is None:
+            return None
+        return self.external_inspector.analyze_external_class(full_class_path)
 
     def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | None:
         """Get the item_type constraint for a List parameter."""

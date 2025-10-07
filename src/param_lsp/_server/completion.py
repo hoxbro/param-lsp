@@ -167,9 +167,7 @@ class CompletionMixin(LSPServerBase):
                 full_class_path = class_name
 
             # Check if this resolved class is in external_param_classes
-            class_info = analyzer.external_param_classes.get(full_class_path)
-            if class_info is None and full_class_path:
-                class_info = analyzer._analyze_external_class_ast(full_class_path)
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
 
             if class_info:
                 return True
@@ -237,9 +235,7 @@ class CompletionMixin(LSPServerBase):
 
         # Check if this is an external param class
         full_class_path = self._resolve_external_class_path(class_name, analyzer)
-        class_info = analyzer.external_param_classes.get(full_class_path)
-        if class_info is None and full_class_path:
-            class_info = analyzer._analyze_external_class_ast(full_class_path)
+        class_info = analyzer._analyze_external_class_ast(full_class_path)
 
         return class_info is not None
 
@@ -488,9 +484,7 @@ class CompletionMixin(LSPServerBase):
 
         # Handle external param classes
         full_class_path = self._resolve_external_class_path(class_name, analyzer)
-        class_info = analyzer.external_param_classes.get(full_class_path)
-        if class_info is None and full_class_path:
-            class_info = analyzer._analyze_external_class_ast(full_class_path)
+        class_info = analyzer._analyze_external_class_ast(full_class_path)
         return class_info
 
     def _find_used_parameters_simple(
@@ -871,9 +865,7 @@ class CompletionMixin(LSPServerBase):
                 full_class_path = check_class_name
 
             # Check if this resolved class is in external_param_classes
-            class_info = analyzer.external_param_classes.get(full_class_path)
-            if class_info is None and full_class_path:
-                class_info = analyzer._analyze_external_class_ast(full_class_path)
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
 
         # If we don't have class_info, no completions
         if not class_info:
@@ -997,9 +989,7 @@ class CompletionMixin(LSPServerBase):
                 # Simple class name
                 full_class_path = check_class_name
 
-            class_info = analyzer.external_param_classes.get(full_class_path)
-            if class_info is None and full_class_path:
-                class_info = analyzer._analyze_external_class_ast(full_class_path)
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
 
         # Check if param_name is a valid parameter
         if not class_info or param_name not in class_info.parameters:
@@ -1128,9 +1118,7 @@ class CompletionMixin(LSPServerBase):
                 # Simple class name
                 full_class_path = check_class_name
 
-            class_info = analyzer.external_param_classes.get(full_class_path)
-            if class_info is None and full_class_path:
-                class_info = analyzer._analyze_external_class_ast(full_class_path)
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
 
         # Check if param_name is a valid parameter
         if not class_info or param_name not in class_info.parameters:
@@ -1241,9 +1229,7 @@ class CompletionMixin(LSPServerBase):
                 full_class_path = check_class_name
 
             # Check if this resolved class is in external_param_classes
-            class_info = analyzer.external_param_classes.get(full_class_path)
-            if class_info is None and full_class_path:
-                class_info = analyzer._analyze_external_class_ast(full_class_path)
+            class_info = analyzer._analyze_external_class_ast(full_class_path)
 
         # If we don't have class_info, no completions
         if not class_info:

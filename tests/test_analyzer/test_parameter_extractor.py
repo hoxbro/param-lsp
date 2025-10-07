@@ -144,15 +144,47 @@ class TestIsParameterCall:
 
     def test_is_param_integer_call(self):
         node = parse_expression("param.Integer(default=5)")
-        # This is a simplified test - in practice this function needs the full context
-        # For now, just test that it doesn't crash
         result = is_parameter_call(node)
-        assert isinstance(result, bool)
+        assert result is True
 
     def test_is_regular_function_call(self):
         node = parse_expression("print('hello')")
         result = is_parameter_call(node)
         assert result is False
+
+    def test_is_param_string_call(self):
+        """Test that param.String() is detected as a parameter call."""
+        node = parse_expression("param.String(default='test')")
+        result = is_parameter_call(node)
+        assert result is True
+
+    def test_is_direct_parameter_type_call(self):
+        """Test that direct parameter type calls (e.g., String()) are detected."""
+        node = parse_expression("String(default='test')")
+        result = is_parameter_call(node)
+        assert result is True
+
+    def test_is_not_pandas_dataframe_call(self):
+        """Test that pd.DataFrame() is NOT detected as a parameter call.
+
+        Even though DataFrame is in PARAM_TYPES, pd.DataFrame() should not
+        be detected because it's from pandas, not param.
+        """
+        node = parse_expression("pd.DataFrame()")
+        result = is_parameter_call(node)
+        assert result is False
+
+    def test_is_not_other_module_call(self):
+        """Test that calls from other modules are rejected."""
+        node = parse_expression("np.String()")
+        result = is_parameter_call(node)
+        assert result is False
+
+    def test_is_param_dataframe_call(self):
+        """Test that param.DataFrame() IS detected as a parameter call."""
+        node = parse_expression("param.DataFrame()")
+        result = is_parameter_call(node)
+        assert result is True
 
 
 class TestIsParameterAssignment:

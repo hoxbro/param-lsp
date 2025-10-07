@@ -75,8 +75,9 @@ def is_parameter_call(node: NodeOrLeaf) -> bool:
         False otherwise
 
     Note:
-        This function only checks for known parameter types in PARAM_TYPES.
-        For imported parameter types, additional context from the analyzer is needed.
+        This function checks that the call is specifically to param.ParameterType or just
+        ParameterType (direct import). It rejects calls like pd.DataFrame() even though
+        DataFrame is in PARAM_TYPES, because it's not from the param module.
 
     Example:
         >>> import parso
@@ -84,28 +85,43 @@ def is_parameter_call(node: NodeOrLeaf) -> bool:
         >>> call_node = tree.children[0].children[0]
         >>> is_parameter_call(call_node)
         True
+        >>> tree2 = parso.parse("pd.DataFrame()")
+        >>> call_node2 = tree2.children[0].children[0]
+        >>> is_parameter_call(call_node2)
+        False
     """
-    # Extract the function name and check if it's a param type
-    func_name = None
+    # Extract the full call chain to check if it's param.ParameterType
+    parts = []
 
-    # Look through children to find the actual function being called
+    # Walk through the node to extract all name parts
     for child in get_children(node):
         if child.type == "name":
-            # This could be a direct function call (e.g., "String") or module name
-            func_name = get_value(child)
+            parts.append(get_value(child))
         elif child.type == "trailer":
-            # Handle dotted calls like param.Integer
-            for trailer_child in get_children(child):
-                if trailer_child.type == "name":
-                    func_name = get_value(trailer_child)
-                    break
-            # If we found a function name in a trailer, that's the final function name
-            if func_name:
-                break
+            parts.extend(
+                get_value(trailer_child)
+                for trailer_child in get_children(child)
+                if trailer_child.type == "name"
+            )
 
-    # Would need imports context to check imported param types
-    # This will be handled by the main analyzer
-    return func_name is not None and func_name in PARAM_TYPES
+    if not parts:
+        return False
+
+    # Check if this is a parameter type call
+    # Accept: param.String, String (if just the type name)
+    # Reject: pd.DataFrame, other.String
+
+    if len(parts) == 1:
+        # Direct call like "String()" - accept if it's a param type
+        return parts[0] in PARAM_TYPES
+    elif len(parts) == 2:
+        # Dotted call like "param.String()" or "pd.DataFrame()"
+        # Only accept if the module part is "param"
+        module, func_name = parts
+        return module == "param" and func_name in PARAM_TYPES
+    else:
+        # More complex chains - not a simple parameter type
+        return False
 
 
 def extract_parameters(

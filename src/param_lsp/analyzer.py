@@ -36,10 +36,10 @@ import parso
 
 from ._analyzer import parso_utils
 from ._analyzer.ast_navigator import ImportHandler, ParameterDetector, SourceAnalyzer
-from ._analyzer.external_class_inspector import ExternalClassInspector
 from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
+from ._analyzer.static_external_analyzer import ExternalClassInspector
 from ._analyzer.validation import ParameterValidator
 from ._types import AnalysisResult
 from .models import ParameterInfo, ParameterizedInfo
@@ -78,12 +78,12 @@ class ParamAnalyzer:
         self.module_cache: dict[str, AnalysisResult] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
-        # Use modular external class inspector
+        # Use static external analyzer for external class analysis
         self.external_inspector = ExternalClassInspector()
-        self.external_param_classes = self.external_inspector.external_param_classes
 
-        # Populate external library cache on initialization using modular component
-        self.external_inspector.populate_external_library_cache()
+        # Maintain compatibility with external_param_classes interface
+        # The static analyzer doesn't need pre-caching, so this can be empty
+        self.external_param_classes: dict[str, ParameterizedInfo | None] = {}
 
         # Use modular AST navigation components (must be created before validator)
         self.parameter_detector = ParameterDetector(self.imports)
@@ -269,9 +269,19 @@ class ParamAnalyzer:
 
         return parameters
 
-    def _analyze_external_class_ast(self, full_class_path: str) -> ParameterizedInfo | None:
-        """Analyze external classes using the modular external inspector."""
-        return self.external_inspector.analyze_external_class_ast(full_class_path)
+    def _analyze_external_class_ast(self, full_class_path: str | None) -> ParameterizedInfo | None:
+        """Analyze external classes using the modular external inspector with caching."""
+        if full_class_path is None:
+            return None
+
+        # Check cache first
+        if full_class_path in self.external_param_classes:
+            return self.external_param_classes[full_class_path]
+
+        # Analyze and cache the result
+        class_info = self.external_inspector.analyze_external_class(full_class_path)
+        self.external_param_classes[full_class_path] = class_info
+        return class_info
 
     def _get_parameter_source_location(
         self, param_obj: Any, cls: type, param_name: str
@@ -351,8 +361,7 @@ class ParamAnalyzer:
         for node in nodes_to_check:
             if node.type in ("power", "atom_expr") and parso_utils.is_function_call(node):
                 full_class_path = self.import_resolver.resolve_full_class_path(node)
-                if full_class_path:
-                    self._analyze_external_class_ast(full_class_path)
+                self._analyze_external_class_ast(full_class_path)
 
     def resolve_class_name_from_context(
         self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str
@@ -386,9 +395,7 @@ class ParamAnalyzer:
                         if alias in self.imports:
                             full_module = self.imports[alias]
                             full_class_path = f"{full_module}.{class_part}"
-                            class_info = self.external_param_classes.get(full_class_path)
-                            if class_info is None:
-                                class_info = self._analyze_external_class_ast(full_class_path)
+                            class_info = self._analyze_external_class_ast(full_class_path)
                             if class_info:
                                 # Return the original dotted name for external class handling
                                 return assigned_class

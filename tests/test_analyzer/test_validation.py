@@ -70,9 +70,9 @@ class TestParameterValidator:
 
     @pytest.fixture
     def mock_external_inspector(self):
-        """Mock external class inspector for testing."""
+        """Mock external inspector for testing."""
         mock = Mock()
-        mock.analyze_external_class_ast.return_value = None
+        mock.analyze_external_class.return_value = None
         return mock
 
     @pytest.fixture

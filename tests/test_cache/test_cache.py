@@ -394,16 +394,45 @@ w.value = "invalid"  # should error
             external_library_cache.get = original_get
 
     def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test, isolated_cache):
-        """Test that the analyzer populates the cache after introspection."""
+        """Test that the analyzer populates the cache after external class analysis.
+
+        This test mocks the expensive external class analysis and focuses on testing
+        that the cache storage mechanism works correctly. The actual analysis is tested
+        in test_static_external_analyzer.py.
+        """
+        from unittest.mock import patch
+
+        # Create mock class info
+        mock_class_info = ParameterizedInfo(
+            name="IntSlider",
+            parameters={
+                "value": ParameterInfo(
+                    name="value",
+                    cls="Integer",
+                    default="0",
+                    bounds=(0, 100),
+                    doc="The current value",
+                )
+            },
+        )
 
         # Verify cache is initially empty
         assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
 
-        code_py = """\
+        # Mock the expensive operations to focus on cache storage
+        with (
+            patch.object(
+                analyzer.external_inspector,
+                "_analyze_class_from_source",
+                return_value=mock_class_info,
+            ),
+            patch.object(analyzer.external_inspector, "populate_library_cache", return_value=0),
+        ):
+            code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 """
-        analyzer.analyze_file(code_py)
+            analyzer.analyze_file(code_py)
 
         # Verify cache was populated with the expected data
         cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")

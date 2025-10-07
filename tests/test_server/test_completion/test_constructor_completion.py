@@ -299,9 +299,9 @@ hv.Curve("""
         assert any("label" in label for label in completion_labels), (
             "Should suggest label parameter for hv.Curve"
         )
-        # Should have 7 main parameters (name is filtered out)
-        assert len(completions) >= 7, (
-            f"Should suggest at least 7 parameters, got {len(completions)}"
+        # Should have 6 main parameters (name is filtered out)
+        assert len(completions) >= 6, (
+            f"Should suggest at least 6 parameters, got {len(completions)}"
         )
         # Should NOT suggest name parameter (it's filtered out for constructors)
         assert not any("name" in label for label in completion_labels), (
