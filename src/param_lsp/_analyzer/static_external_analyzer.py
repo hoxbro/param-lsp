@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_STDLIB_MODULES = tuple(f"{c}." for c in ("__future__", *sys.stdlib_module_names))
+
 
 class ExternalClassInspector:
     """Static analyzer for external Parameterized classes.
@@ -1081,7 +1083,7 @@ class ExternalClassInspector:
             True if the imported class inherits from Parameterized
         """
         # First check if it's clearly not a Parameterized class
-        if import_path.startswith(("typing.", "collections.", "__future__.", "abc.", "enum.")):
+        if import_path.startswith(_STDLIB_MODULES):
             return False
 
         # Get the current file context (we need this for import resolution)
