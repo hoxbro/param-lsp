@@ -48,9 +48,10 @@ def main():
 
     # Handle --cache-dir flag
     if args.cache_dir:
-        from .cache import external_library_cache
+        from .cache import CACHE_VERSION, external_library_cache
 
-        print(external_library_cache.cache_dir)
+        cache_version_str = ".".join(map(str, CACHE_VERSION))
+        print(f"{external_library_cache.cache_dir}::{cache_version_str}")
         return
 
     # Check for mutually exclusive options
