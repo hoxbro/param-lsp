@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from typing import TYPE_CHECKING
 
 import param
@@ -1409,7 +1410,8 @@ class CompletionMixin(LSPServerBase):
 
         # Add description if available
         if param_info.doc:
-            doc_parts.append(f"Description: {param_info.doc}")
+            clean_doc = textwrap.dedent(param_info.doc).strip()
+            doc_parts.append(f"Description: {clean_doc}")
 
         # Add allow_None info if not default
         if param_info.allow_None is not None and param_info.allow_None:
