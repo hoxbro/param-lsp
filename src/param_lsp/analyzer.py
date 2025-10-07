@@ -39,7 +39,7 @@ from ._analyzer.ast_navigator import ImportHandler, ParameterDetector, SourceAna
 from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
-from ._analyzer.static_external_analyzer import StaticExternalAnalyzer
+from ._analyzer.static_external_analyzer import ExternalClassInspector
 from ._analyzer.validation import ParameterValidator
 from ._types import AnalysisResult
 from .models import ParameterInfo, ParameterizedInfo
@@ -79,7 +79,7 @@ class ParamAnalyzer:
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
         # Use static external analyzer for external class analysis
-        self.external_inspector = StaticExternalAnalyzer()
+        self.external_inspector = ExternalClassInspector()
 
         # Maintain compatibility with external_param_classes interface
         # The static analyzer doesn't need pre-caching, so this can be empty

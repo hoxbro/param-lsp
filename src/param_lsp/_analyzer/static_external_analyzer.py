@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class StaticExternalAnalyzer:
+class ExternalClassInspector:
     """Static analyzer for external Parameterized classes.
 
     Analyzes external libraries using pure AST parsing without runtime imports.

@@ -6,19 +6,17 @@ to runtime introspection for external Parameterized classes.
 
 from __future__ import annotations
 
-# No TYPE_CHECKING imports needed
 import pytest
 
-# Using StaticExternalAnalyzer only - runtime introspection is in separate test
-from param_lsp._analyzer.static_external_analyzer import StaticExternalAnalyzer
+from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
 
 
-class TestStaticExternalAnalyzer:
+class TestExternalClassInspector:
     """Test the static external analyzer against runtime introspection."""
 
     def setup_method(self):
         """Set up test instances."""
-        self.static_analyzer = StaticExternalAnalyzer()
+        self.static_analyzer = ExternalClassInspector()
 
     @pytest.mark.parametrize(
         "class_path",
@@ -254,7 +252,7 @@ class Widget3(param.Parameterized):
     def test_error_handling(self):
         """Test graceful handling of parsing errors."""
         # Create analyzer and test with invalid file path
-        analyzer = StaticExternalAnalyzer()
+        analyzer = ExternalClassInspector()
 
         # Should not crash on invalid paths
         result = analyzer.analyze_external_class("invalid.module.Class")

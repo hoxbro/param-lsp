@@ -31,7 +31,7 @@ from .parso_utils import (
 )
 
 if TYPE_CHECKING:
-    from param_lsp._analyzer.static_external_analyzer import StaticExternalAnalyzer
+    from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
     from param_lsp._types import (
         ExternalParamClassDict,
         ImportDict,
@@ -67,7 +67,7 @@ class ParameterValidator:
         external_param_classes: ExternalParamClassDict,
         imports: ImportDict,
         is_parameter_assignment_func,
-        external_inspector: StaticExternalAnalyzer,
+        external_inspector: ExternalClassInspector,
         workspace_root: str | None = None,
     ):
         self.param_classes = param_classes
