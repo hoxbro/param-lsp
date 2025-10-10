@@ -17,3 +17,4 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+.virtual_documents/
