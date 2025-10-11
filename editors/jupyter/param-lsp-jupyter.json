@@ -1,0 +1,13 @@
+{
+  "LanguageServerManager": {
+    "language_servers": {
+      "param-lsp": {
+        "version": 2,
+        "argv": ["param-lsp", "--stdio", "--log-level", "WARNING"],
+        "languages": ["python"],
+        "mime_types": ["text/python", "text/x-python"],
+        "display_name": "param-lsp"
+      }
+    }
+  }
+}

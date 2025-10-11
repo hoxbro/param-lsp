@@ -5,7 +5,6 @@ import logging
 
 from .__version import __version__
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _DESCRIPTION = """\
@@ -53,8 +52,19 @@ def main():
         action="store_true",
         help="Clear existing cache and regenerate for supported libraries",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: %(default)s)",
+    )
 
     args = parser.parse_args()
+
+    # Configure logging level
+    log_level = getattr(logging, args.log_level)
+    logging.basicConfig(level=log_level)
 
     # Handle --cache-dir flag
     if args.cache_dir:
