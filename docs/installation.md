@@ -44,6 +44,27 @@ vim.lsp.config("param-lsp", {
 vim.lsp.enable("param-lsp")
 ```
 
+### JupyterLab
+
+To use param-lsp in JupyterLab, you need to install jupyterlab-lsp in the same environment where JupyterLab is installed.
+
+=== "pip"
+
+    ```bash
+    pip install jupyterlab-lsp param-lsp
+    ```
+
+=== "uv"
+
+    ```bash
+    uv pip install jupyterlab-lsp param-lsp
+    ```
+
+After installation, restart JupyterLab to activate the language server. Once configured, param-lsp will provide autocompletion, validation, and hover information directly in JupyterLab notebooks for Python cells using Param.
+
+!!! note
+Make sure both jupyterlab-lsp and param-lsp are installed in the same Python environment that runs your JupyterLab instance.
+
 ## Verification
 
 Once installed and configured, verify param-lsp is working:
