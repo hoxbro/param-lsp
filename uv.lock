@@ -1754,12 +1754,17 @@ dependencies = [
     { name = "pygls" },
 ]
 
+[package.optional-dependencies]
+jupyter = [
+    { name = "jupyterlab-lsp" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "debugpy" },
     { name = "holoviews", marker = "python_full_version != '3.14.*'" },
-    { name = "jupyterlab-lsp" },
     { name = "panel", marker = "python_full_version != '3.14.*'" },
+    { name = "param-lsp", extra = ["jupyter"] },
     { name = "pytest" },
     { name = "setuptools-scm" },
 ]
@@ -1771,19 +1776,21 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jupyterlab-lsp", marker = "extra == 'jupyter'" },
     { name = "lsprotocol" },
     { name = "param" },
     { name = "parso", specifier = ">=0.8.5" },
     { name = "platformdirs" },
     { name = "pygls" },
 ]
+provides-extras = ["jupyter"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "debugpy" },
     { name = "holoviews", marker = "python_full_version != '3.14.*'" },
-    { name = "jupyterlab-lsp" },
     { name = "panel", marker = "python_full_version != '3.14.*'" },
+    { name = "param-lsp", extras = ["jupyter"] },
     { name = "pytest" },
     { name = "setuptools-scm" },
 ]
