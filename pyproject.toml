@@ -30,6 +30,9 @@ Source = "https://github.com/hoxbro/param-lsp"
 [project.scripts]
 param-lsp = "param_lsp.__main__:main"
 
+[project.optional-dependencies]
+jupyter = ["jupyterlab-lsp"]
+
 [dependency-groups]
 dev = [
     "debugpy",
