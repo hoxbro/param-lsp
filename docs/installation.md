@@ -1,24 +1,22 @@
 # Installation
 
-This guide covers installing param-lsp and configuring it for your development environment.
+This guide covers installing param-lsp for your development environment.
 
 ## Installing param-lsp
 
-param-lsp can be installed via pip:
+param-lsp can be installed via:
 
-```bash
-pip install param-lsp
-```
+=== "pip"
 
-Or using uv for faster installation:
+    ```bash
+    pip install param-lsp
+    ```
 
-```bash
-uv add param-lsp
-```
+=== "uv"
 
-## Editor Configuration
-
-See the [Editor Configuration](editors.md) guide for setting up param-lsp with your preferred editor (VS Code, Neovim, JupyterLab).
+    ```bash
+    uv pip install param-lsp
+    ```
 
 ## Verification
 
