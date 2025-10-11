@@ -11,6 +11,7 @@ nav:
   - Home: index.md
   - Getting Started:
       - Installation: installation.md
+      - Editor Configuration: editors.md
       - Getting Started: getting-started.md
   - Features:
       - Overview: features/index.md
