@@ -22,7 +22,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
-        exclude: vscode-extension/package-lock.json
+        exclude: editors/vscode/package-lock.json
         args: ["--ignore-words-list=widht"]
         additional_dependencies:
           - tomli
