@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "param-lsp"
-# readme = "README.md"
+readme = "README.md"
 license = "MIT"
 description = "Param Language Server Protocol"
 requires-python = ">=3.10"
@@ -49,7 +49,7 @@ raw-options = { version_scheme = "no-guess-dev" }
 version-file = "src/param_lsp/_version.py"
 
 [tool.hatch.build.targets.wheel.shared-data]
-"jupyter/param-lsp-jupyter.json" = "etc/jupyter/jupyter_server_config.d/param-lsp-jupyter.json"
+"editors/jupyter/param-lsp-jupyter.json" = "etc/jupyter/jupyter_server_config.d/param-lsp-jupyter.json"
 
 [tool.pytest.ini_options]
 addopts = ["--strict-config", "--strict-markers", "--color=yes"]
