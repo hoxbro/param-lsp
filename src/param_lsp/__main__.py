@@ -73,54 +73,22 @@ def main():
 
     # Configure Python environment for external library analysis
     # Priority: CLI argument > environment variables
-    import os
-
     python_env = None
-    python_path_arg = args.python_path
 
-    # Check for environment variables if no CLI argument
-    if not python_path_arg:
-        # Check common environment variables that indicate we're in a different env
-        venv_path = os.environ.get("VIRTUAL_ENV")
-        conda_env = os.environ.get("CONDA_DEFAULT_ENV")
-        conda_prefix = os.environ.get("CONDA_PREFIX")
-
-        if venv_path:
-            # We're in a venv, use it
-            from ._analyzer.python_environment import PythonEnvironment
-
-            try:
-                python_env = PythonEnvironment.from_venv(venv_path)
-                logger.info(f"Detected venv from VIRTUAL_ENV: {venv_path}")
-            except ValueError as e:
-                logger.warning(f"Failed to use VIRTUAL_ENV: {e}")
-        elif conda_env and conda_prefix:
-            # We're in a conda environment, use it
-            from ._analyzer.python_environment import PythonEnvironment
-
-            try:
-                python_env = PythonEnvironment.from_path(
-                    os.path.join(conda_prefix, "bin", "python")
-                )
-                logger.info(f"Detected conda environment: {conda_env}")
-            except ValueError:
-                # Try Windows path
-                try:
-                    python_env = PythonEnvironment.from_path(
-                        os.path.join(conda_prefix, "python.exe")
-                    )
-                    logger.info(f"Detected conda environment: {conda_env}")
-                except ValueError as e:
-                    logger.warning(f"Failed to use conda environment: {e}")
-    elif python_path_arg:
+    if args.python_path:
         # Use explicitly specified Python path
         from ._analyzer.python_environment import PythonEnvironment
 
         try:
-            python_env = PythonEnvironment.from_path(python_path_arg)
-            logger.info(f"Using Python environment: {python_path_arg}")
+            python_env = PythonEnvironment.from_path(args.python_path)
+            logger.info(f"Using Python environment: {args.python_path}")
         except ValueError as e:
             parser.error(f"Invalid Python environment configuration: {e}")
+    else:
+        # Try to detect environment from environment variables
+        from ._analyzer.python_environment import PythonEnvironment
+
+        python_env = PythonEnvironment.from_environment_variables()
 
     # Handle --cache-dir flag
     if args.cache_dir:

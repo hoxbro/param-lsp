@@ -203,3 +203,83 @@ def test_repr(tmp_path):
 
     env = PythonEnvironment(python_executable=python_path)
     assert repr(env) == f"PythonEnvironment(python_executable={python_path})"
+
+
+def test_from_environment_variables_venv(tmp_path, monkeypatch):
+    """Test detecting environment from VIRTUAL_ENV variable."""
+    venv_path = tmp_path / "my_venv"
+    python_path = venv_path / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.touch()
+
+    monkeypatch.setenv("VIRTUAL_ENV", str(venv_path))
+
+    env = PythonEnvironment.from_environment_variables()
+    assert env is not None
+    assert env.python_executable == python_path
+
+
+def test_from_environment_variables_conda(tmp_path, monkeypatch):
+    """Test detecting environment from CONDA variables."""
+    conda_prefix = tmp_path / "conda_env"
+    python_path = conda_prefix / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.touch()
+
+    # Clear VIRTUAL_ENV to prevent it from taking priority
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.setenv("CONDA_DEFAULT_ENV", "my_conda_env")
+    monkeypatch.setenv("CONDA_PREFIX", str(conda_prefix))
+
+    env = PythonEnvironment.from_environment_variables()
+    assert env is not None
+    assert env.python_executable == python_path
+
+
+def test_from_environment_variables_conda_windows(tmp_path, monkeypatch):
+    """Test detecting Windows conda environment."""
+    conda_prefix = tmp_path / "conda_env"
+    python_path = conda_prefix / "python.exe"
+    python_path.parent.mkdir(parents=True)
+    python_path.touch()
+
+    # Clear VIRTUAL_ENV to prevent it from taking priority
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.setenv("CONDA_DEFAULT_ENV", "my_conda_env")
+    monkeypatch.setenv("CONDA_PREFIX", str(conda_prefix))
+
+    env = PythonEnvironment.from_environment_variables()
+    assert env is not None
+    assert env.python_executable == python_path
+
+
+def test_from_environment_variables_none(monkeypatch):
+    """Test when no environment variables are set."""
+    # Clear all relevant environment variables
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.delenv("CONDA_DEFAULT_ENV", raising=False)
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+
+    env = PythonEnvironment.from_environment_variables()
+    assert env is None
+
+
+def test_from_environment_variables_priority_venv(tmp_path, monkeypatch):
+    """Test that VIRTUAL_ENV takes priority over CONDA variables."""
+    venv_path = tmp_path / "my_venv"
+    venv_python = venv_path / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.touch()
+
+    conda_prefix = tmp_path / "conda_env"
+    conda_python = conda_prefix / "bin" / "python"
+    conda_python.parent.mkdir(parents=True)
+    conda_python.touch()
+
+    monkeypatch.setenv("VIRTUAL_ENV", str(venv_path))
+    monkeypatch.setenv("CONDA_DEFAULT_ENV", "my_conda_env")
+    monkeypatch.setenv("CONDA_PREFIX", str(conda_prefix))
+
+    env = PythonEnvironment.from_environment_variables()
+    assert env is not None
+    assert env.python_executable == venv_python  # venv should win

@@ -118,6 +118,72 @@ class PythonEnvironment:
         )
 
     @classmethod
+    def _find_python_in_prefix(cls, prefix: Path) -> Path | None:
+        """
+        Find Python executable in a given prefix directory.
+
+        Args:
+            prefix: Root directory to search for Python executable
+
+        Returns:
+            Path to Python executable if found, None otherwise
+        """
+        python_paths = [
+            prefix / "bin" / "python",  # Unix/Linux/macOS
+            prefix / "python.exe",  # Windows (root)
+            prefix / "Scripts" / "python.exe",  # Windows (Scripts)
+            prefix / "bin" / "python3",  # Unix/Linux/macOS alternative
+        ]
+
+        for python_path in python_paths:
+            if python_path.exists():
+                return python_path
+
+        return None
+
+    @classmethod
+    def from_environment_variables(cls) -> PythonEnvironment | None:
+        """
+        Detect and create a PythonEnvironment from standard environment variables.
+
+        Checks for VIRTUAL_ENV and CONDA_DEFAULT_ENV/CONDA_PREFIX to automatically
+        detect the current Python environment.
+
+        Returns:
+            PythonEnvironment instance if an environment is detected, None otherwise
+
+        Priority:
+            1. VIRTUAL_ENV (venv/virtualenv)
+            2. CONDA_DEFAULT_ENV + CONDA_PREFIX (conda)
+        """
+        import os
+
+        # Check for venv/virtualenv
+        venv_path = os.environ.get("VIRTUAL_ENV")
+        if venv_path:
+            try:
+                logger.info(f"Detected venv from VIRTUAL_ENV: {venv_path}")
+                return cls.from_venv(venv_path)
+            except ValueError as e:
+                logger.warning(f"Failed to use VIRTUAL_ENV: {e}")
+
+        # Check for conda environment
+        conda_env = os.environ.get("CONDA_DEFAULT_ENV")
+        conda_prefix = os.environ.get("CONDA_PREFIX")
+        if conda_env and conda_prefix:
+            python_path = cls._find_python_in_prefix(Path(conda_prefix))
+            if python_path:
+                try:
+                    logger.info(f"Detected conda environment: {conda_env}")
+                    return cls.from_path(python_path)
+                except ValueError as e:
+                    logger.warning(f"Failed to use conda environment: {e}")
+            else:
+                logger.warning(f"Failed to locate Python in conda environment: {conda_env}")
+
+        return None
+
+    @classmethod
     def from_path(cls, python_path: str | Path) -> PythonEnvironment:
         """
         Create a PythonEnvironment from a Python executable path.
@@ -153,16 +219,9 @@ class PythonEnvironment:
             msg = f"Virtual environment not found: {venv_path}"
             raise ValueError(msg)
 
-        # Try common Python executable locations
-        python_paths = [
-            venv_path / "bin" / "python",  # Unix/Linux/macOS
-            venv_path / "Scripts" / "python.exe",  # Windows
-            venv_path / "bin" / "python3",  # Unix/Linux/macOS alternative
-        ]
-
-        for python_path in python_paths:
-            if python_path.exists():
-                return cls(python_executable=python_path)
+        python_path = cls._find_python_in_prefix(venv_path)
+        if python_path:
+            return cls(python_executable=python_path)
 
         msg = f"No Python executable found in venv: {venv_path}"
         raise ValueError(msg)
@@ -206,16 +265,9 @@ class PythonEnvironment:
                 raise ValueError(msg)
 
             # Find Python executable in conda env
-            python_paths = [
-                env_path / "bin" / "python",  # Unix/Linux/macOS
-                env_path / "python.exe",  # Windows (conda env root)
-                env_path / "Scripts" / "python.exe",  # Windows (Scripts directory)
-                env_path / "bin" / "python3",  # Unix/Linux/macOS alternative
-            ]
-
-            for python_path in python_paths:
-                if python_path.exists():
-                    return cls(python_executable=python_path)
+            python_path = cls._find_python_in_prefix(env_path)
+            if python_path:
+                return cls(python_executable=python_path)
 
             msg = f"No Python executable found in conda env: {env_name}"
             raise ValueError(msg)
