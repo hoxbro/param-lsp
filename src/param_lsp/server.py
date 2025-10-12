@@ -35,7 +35,21 @@ class ParamLanguageServer(ValidationMixin, HoverMixin, CompletionMixin):
     """Language Server for HoloViz Param."""
 
 
-server = ParamLanguageServer("param-lsp", __version__)
+def create_server(python_env=None):
+    """Create a Param Language Server instance.
+
+    Args:
+        python_env: PythonEnvironment instance for analyzing external libraries.
+                   If None, uses the current Python environment.
+
+    Returns:
+        ParamLanguageServer instance
+    """
+    return ParamLanguageServer("param-lsp", __version__, python_env=python_env)
+
+
+# Default server instance for backward compatibility
+server = create_server()
 
 
 @server.feature("initialize")

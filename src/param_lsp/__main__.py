@@ -59,12 +59,31 @@ def main():
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level (default: %(default)s)",
     )
+    parser.add_argument(
+        "--python-path",
+        type=str,
+        help="Path to Python executable for analyzing external libraries (e.g., /path/to/venv/bin/python)",
+    )
 
     args = parser.parse_args()
 
     # Configure logging level
     log_level = getattr(logging, args.log_level)
     logging.basicConfig(level=log_level)
+
+    # Configure Python environment for external library analysis
+    # Priority: CLI argument > environment variable
+    python_env = None
+    python_path_arg = args.python_path or None
+
+    if python_path_arg:
+        from ._analyzer.python_environment import PythonEnvironment
+
+        try:
+            python_env = PythonEnvironment.from_path(python_path_arg)
+            logger.info(f"Using Python environment: {python_path_arg}")
+        except ValueError as e:
+            parser.error(f"Invalid Python environment configuration: {e}")
 
     # Handle --cache-dir flag
     if args.cache_dir:
@@ -84,7 +103,7 @@ def main():
         external_library_cache.clear()
         logger.info("Cache cleared")
 
-        inspector = ExternalClassInspector()
+        inspector = ExternalClassInspector(python_env=python_env)
         total_cached = 0
         for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
             logger.info(f"Generating cache for {library}...")
@@ -100,7 +119,7 @@ def main():
         from ._analyzer.static_external_analyzer import ExternalClassInspector
         from .constants import ALLOWED_EXTERNAL_LIBRARIES
 
-        inspector = ExternalClassInspector()
+        inspector = ExternalClassInspector(python_env=python_env)
         total_cached = 0
         for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
             logger.info(f"Generating cache for {library}...")
@@ -116,7 +135,9 @@ def main():
         parser.error("--tcp and --stdio are mutually exclusive")
 
     # Import server only when actually needed to avoid loading during --help/--version
-    from .server import server
+    from .server import create_server
+
+    server = create_server(python_env=python_env)
 
     if args.tcp:
         logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")

@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
-import site
 import sys
-from pathlib import Path
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
 import parso
@@ -28,6 +27,8 @@ from .parameter_extractor import extract_parameter_info_from_assignment
 if TYPE_CHECKING:
     from parso.tree import NodeOrLeaf
 
+    from .python_environment import PythonEnvironment
+
 logger = logging.getLogger(__name__)
 
 _STDLIB_MODULES = tuple(f"{c}." for c in ("__future__", *sys.stdlib_module_names))
@@ -38,9 +39,18 @@ class ExternalClassInspector:
 
     Analyzes external libraries using pure AST parsing without runtime imports.
     Discovers source files and extracts parameter information statically.
+
+    Can analyze libraries from different Python environments by providing a
+    PythonEnvironment instance.
     """
 
-    def __init__(self):
+    def __init__(self, python_env: PythonEnvironment | None = None):
+        """
+        Initialize the external class inspector.
+
+        Args:
+            python_env: Python environment to analyze. If None, uses current environment.
+        """
         self.library_source_paths: dict[str, list[Path]] = {}
         self.parsed_classes: dict[str, ParameterizedInfo | None] = {}
         self.analyzed_files: dict[Path, dict[str, Any]] = {}
@@ -55,6 +65,13 @@ class ExternalClassInspector:
         self.current_file_context: Path | None = None  # Track current file for import resolution
         # Track which libraries have been pre-populated in this session
         self.populated_libraries: set[str] = set()
+
+        # Python environment for analysis
+        if python_env is None:
+            from .python_environment import PythonEnvironment
+
+            python_env = PythonEnvironment.from_current()
+        self.python_env = python_env
 
     def _get_library_dependencies(self, library_name: str) -> list[str]:
         """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
@@ -356,34 +373,23 @@ class ExternalClassInspector:
             Full class path like "panel.widgets.IntSlider" or None if unable to construct
         """
         try:
-            # Find the library root directory
-            for site_dir in [*site.getsitepackages(), site.getusersitepackages()]:
-                if site_dir and Path(site_dir).exists():
-                    library_path = Path(site_dir) / library_name
-                    if library_path.exists() and source_path.is_relative_to(library_path):
-                        # Get relative path from library root
-                        relative_path = source_path.relative_to(library_path)
-                        # Convert path to module notation
-                        parts = list(relative_path.parts[:-1])  # Exclude filename
-                        if relative_path.stem != "__init__":
-                            parts.append(relative_path.stem)
-                        # Construct full path: library.module.submodule.ClassName
-                        module_path = ".".join([library_name, *parts])
-                        return f"{module_path}.{class_name}"
+            # Find the library root directory in Python environment's site-packages
+            search_dirs = list(self.python_env.site_packages)
+            if self.python_env.user_site:
+                search_dirs.append(self.python_env.user_site)
 
-            # Also check sys.path
-            for sys_path in sys.path:
-                if sys_path:
-                    sys_path_obj = Path(sys_path)
-                    if sys_path_obj.exists():
-                        library_path = sys_path_obj / library_name
-                        if library_path.exists() and source_path.is_relative_to(library_path):
-                            relative_path = source_path.relative_to(library_path)
-                            parts = list(relative_path.parts[:-1])
-                            if relative_path.stem != "__init__":
-                                parts.append(relative_path.stem)
-                            module_path = ".".join([library_name, *parts])
-                            return f"{module_path}.{class_name}"
+            for site_dir in search_dirs:
+                library_path = site_dir / library_name
+                if library_path.exists() and source_path.is_relative_to(library_path):
+                    # Get relative path from library root
+                    relative_path = source_path.relative_to(library_path)
+                    # Convert path to module notation
+                    parts = list(relative_path.parts[:-1])  # Exclude filename
+                    if relative_path.stem != "__init__":
+                        parts.append(relative_path.stem)
+                    # Construct full path: library.module.submodule.ClassName
+                    module_path = ".".join([library_name, *parts])
+                    return f"{module_path}.{class_name}"
 
             return None
         except Exception as e:
@@ -406,27 +412,25 @@ class ExternalClassInspector:
 
         source_paths = []
 
-        # Search in site-packages directories
-        for site_dir in [*site.getsitepackages(), site.getusersitepackages()]:
-            if site_dir and Path(site_dir).exists():
-                library_path = Path(site_dir) / library_name
-                if library_path.exists():
-                    source_paths.extend(self._collect_python_files(library_path))
+        # Search in Python environment's site-packages directories
+        for site_dir in self.python_env.site_packages:
+            library_path = site_dir / library_name
+            if library_path.exists():
+                source_paths.extend(self._collect_python_files(library_path))
 
-        # Search in sys.path
-        for sys_path in sys.path:
-            if sys_path:
-                sys_path_obj = Path(sys_path)
-                if sys_path_obj.exists():
-                    library_path = sys_path_obj / library_name
-                    if library_path.exists():
-                        source_paths.extend(self._collect_python_files(library_path))
+        # Search in user site-packages if available
+        if self.python_env.user_site:
+            library_path = self.python_env.user_site / library_name
+            if library_path.exists():
+                source_paths.extend(self._collect_python_files(library_path))
 
         # Remove duplicates and cache
         unique_paths = list(set(source_paths))
         self.library_source_paths[library_name] = unique_paths
 
-        logger.debug(f"Found {len(unique_paths)} source files for {library_name}")
+        logger.debug(
+            f"Found {len(unique_paths)} source files for {library_name} in {self.python_env}"
+        )
         return unique_paths
 
     def _collect_python_files(self, directory: Path) -> list[Path]:

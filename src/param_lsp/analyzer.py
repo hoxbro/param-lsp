@@ -66,7 +66,15 @@ logger = logging.getLogger(__name__)
 class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
-    def __init__(self, workspace_root: str | None = None):
+    def __init__(self, workspace_root: str | None = None, python_env: Any = None):
+        """
+        Initialize the Param analyzer.
+
+        Args:
+            workspace_root: Root directory of the workspace
+            python_env: PythonEnvironment instance for analyzing external libraries.
+                       If None, uses the current Python environment.
+        """
         self.param_classes: ParamClassDict = {}
         self.imports: ImportDict = {}
         # Store file content for source line lookup
@@ -79,7 +87,7 @@ class ParamAnalyzer:
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
         # Use static external analyzer for external class analysis
-        self.external_inspector = ExternalClassInspector()
+        self.external_inspector = ExternalClassInspector(python_env=python_env)
 
         # Maintain compatibility with external_param_classes interface
         # The static analyzer doesn't need pre-caching, so this can be empty
