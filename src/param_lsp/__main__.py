@@ -72,23 +72,23 @@ def main():
     logging.basicConfig(level=log_level)
 
     # Configure Python environment for external library analysis
-    # Priority: CLI argument > environment variables
-    python_env = None
+    # Priority: CLI argument > environment variables > current environment
+    from ._analyzer.python_environment import PythonEnvironment
 
     if args.python_path:
         # Use explicitly specified Python path
-        from ._analyzer.python_environment import PythonEnvironment
-
         try:
             python_env = PythonEnvironment.from_path(args.python_path)
             logger.info(f"Using Python environment: {args.python_path}")
         except ValueError as e:
             parser.error(f"Invalid Python environment configuration: {e}")
     else:
-        # Try to detect environment from environment variables
-        from ._analyzer.python_environment import PythonEnvironment
-
+        # Try to detect environment from environment variables, fall back to current
         python_env = PythonEnvironment.from_environment_variables()
+        if python_env is None:
+            # No environment variables set, use current Python environment
+            python_env = PythonEnvironment.from_current()
+            logger.info("Using current Python environment")
 
     # Handle --cache-dir flag
     if args.cache_dir:
