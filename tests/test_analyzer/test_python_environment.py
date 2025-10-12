@@ -40,6 +40,8 @@ def test_from_path_invalid():
 @patch("subprocess.run")
 def test_query_site_packages(mock_run, tmp_path):
     """Test querying site-packages from a Python environment."""
+    import json
+
     python_path = tmp_path / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
@@ -47,9 +49,9 @@ def test_query_site_packages(mock_run, tmp_path):
     site_pkg_1 = tmp_path / "lib" / "python3.10" / "site-packages"
     site_pkg_1.mkdir(parents=True)
 
-    # Mock subprocess.run to return site-packages paths
+    # Mock subprocess.run to return site-packages paths - use json.dumps to properly escape
     mock_result = MagicMock()
-    mock_result.stdout = f'["{site_pkg_1}"]'
+    mock_result.stdout = json.dumps([str(site_pkg_1)])
     mock_run.return_value = mock_result
 
     env = PythonEnvironment(python_executable=python_path)
@@ -127,14 +129,16 @@ def test_from_venv_no_python(tmp_path):
 @patch("subprocess.run")
 def test_from_conda(mock_run, tmp_path):
     """Test creating PythonEnvironment from a conda environment."""
+    import json
+
     conda_env_path = tmp_path / "envs" / "my_conda_env"
     python_path = conda_env_path / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
 
-    # Mock conda info command
+    # Mock conda info command - use json.dumps to properly escape paths
     mock_result = MagicMock()
-    mock_result.stdout = f'{{"envs": ["{conda_env_path}"]}}'
+    mock_result.stdout = json.dumps({"envs": [str(conda_env_path)]})
     mock_run.return_value = mock_result
 
     env = PythonEnvironment.from_conda("my_conda_env")
@@ -144,14 +148,16 @@ def test_from_conda(mock_run, tmp_path):
 @patch("subprocess.run")
 def test_from_conda_windows(mock_run, tmp_path):
     """Test creating PythonEnvironment from a Windows conda environment."""
+    import json
+
     conda_env_path = tmp_path / "envs" / "my_conda_env"
     python_path = conda_env_path / "python.exe"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
 
-    # Mock conda info command
+    # Mock conda info command - use json.dumps to properly escape paths
     mock_result = MagicMock()
-    mock_result.stdout = f'{{"envs": ["{conda_env_path}"]}}'
+    mock_result.stdout = json.dumps({"envs": [str(conda_env_path)]})
     mock_run.return_value = mock_result
 
     env = PythonEnvironment.from_conda("my_conda_env")
@@ -161,14 +167,16 @@ def test_from_conda_windows(mock_run, tmp_path):
 @patch("subprocess.run")
 def test_from_conda_windows_scripts(mock_run, tmp_path):
     """Test creating PythonEnvironment from a Windows conda env with Scripts dir."""
+    import json
+
     conda_env_path = tmp_path / "envs" / "my_conda_env"
     python_path = conda_env_path / "Scripts" / "python.exe"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
 
-    # Mock conda info command
+    # Mock conda info command - use json.dumps to properly escape paths
     mock_result = MagicMock()
-    mock_result.stdout = f'{{"envs": ["{conda_env_path}"]}}'
+    mock_result.stdout = json.dumps({"envs": [str(conda_env_path)]})
     mock_run.return_value = mock_result
 
     env = PythonEnvironment.from_conda("my_conda_env")
