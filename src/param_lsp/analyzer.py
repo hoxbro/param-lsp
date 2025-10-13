@@ -86,6 +86,9 @@ class ParamAnalyzer:
         self.module_cache: dict[str, AnalysisResult] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
+        # Store python_env for passing to child analyzers
+        self.python_env = python_env
+
         # Use static external analyzer for external class analysis
         self.external_inspector = ExternalClassInspector(python_env=python_env)
 
@@ -135,7 +138,11 @@ class ParamAnalyzer:
     ) -> AnalysisResult:
         """Analyze a file for the import resolver (avoiding circular dependencies)."""
         # Create a new analyzer instance for the imported module to avoid conflicts
-        module_analyzer = ParamAnalyzer(str(self.workspace_root) if self.workspace_root else None)
+        # Pass through the python_env to ensure external library analysis uses the correct environment
+        module_analyzer = ParamAnalyzer(
+            str(self.workspace_root) if self.workspace_root else None,
+            python_env=self.python_env,
+        )
         return module_analyzer.analyze_file(content, file_path)
 
     def analyze_file(self, content: str, file_path: str | None = None) -> AnalysisResult:
