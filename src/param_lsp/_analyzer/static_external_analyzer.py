@@ -310,6 +310,23 @@ class ExternalClassInspector:
                 self.parsed_classes[full_class_path] = class_info
                 return class_info
 
+            # Try alternative path variations for re-exported classes
+            # e.g., panel.widgets.TextInput -> panel.widgets.input.TextInput
+            alternative_paths = self._get_alternative_class_paths(full_class_path)
+            for alt_path in alternative_paths:
+                class_info = external_library_cache.get(root_module, alt_path)
+                if class_info:
+                    logger.debug(
+                        f"Found cached metadata for {full_class_path} via alias {alt_path}"
+                    )
+                    # Cache under the requested path too for faster future lookups
+                    self.parsed_classes[full_class_path] = class_info
+                    try:
+                        external_library_cache.set(root_module, full_class_path, class_info)
+                    except Exception as e:
+                        logger.debug(f"Failed to cache alias {full_class_path}: {e}")
+                    return class_info
+
             # Fallback to dynamic AST analysis
             logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
             class_info = self._analyze_class_from_source(full_class_path)
@@ -328,6 +345,63 @@ class ExternalClassInspector:
             logger.debug(f"Failed to analyze {full_class_path}: {e}")
             self.parsed_classes[full_class_path] = None
             return None
+
+    def _get_alternative_class_paths(self, full_class_path: str) -> list[str]:
+        """Generate alternative class path variations for re-exported classes.
+
+        For example, panel.widgets.TextInput could be panel.widgets.input.TextInput
+        This handles common re-export patterns where __init__.py re-exports classes.
+
+        Args:
+            full_class_path: Original class path like "panel.widgets.TextInput"
+
+        Returns:
+            List of alternative paths to try
+        """
+        alternatives = []
+        parts = full_class_path.split(".")
+
+        if len(parts) < 3:
+            return alternatives
+
+        # Try inserting common module names between the second-to-last and last part
+        # e.g., panel.widgets.TextInput -> panel.widgets.input.TextInput
+        root_module = parts[0]
+        submodule = parts[1] if len(parts) > 1 else None
+        class_name = parts[-1]
+
+        # Common patterns for module names based on class name
+        # Convert CamelCase to snake_case for module name guessing
+        import re
+
+        snake_case = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
+
+        if submodule:
+            # Try: library.submodule.modulename.ClassName
+            alternatives.append(f"{root_module}.{submodule}.{snake_case}.{class_name}")
+
+            # Also try common module names
+            common_modules = [
+                "input",
+                "base",
+                "widget",
+                "widgets",
+                "slider",
+                "sliders",
+                "button",
+                "buttons",
+                "select",
+                "indicators",
+                "layout",
+                "layouts",
+            ]
+
+            for module_name in common_modules:
+                alt_path = f"{root_module}.{submodule}.{module_name}.{class_name}"
+                if alt_path not in alternatives:
+                    alternatives.append(alt_path)
+
+        return alternatives
 
     def _analyze_class_from_source(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze a class by finding and parsing its source file.
