@@ -480,20 +480,26 @@ class ExternalClassInspector:
                     external_library_cache.set(library_name, class_path, class_info)
                     count += 1
 
-                    # Also cache under any re-export aliases
+                    # Register any re-export aliases for this class
                     for short_path, full_path in reexport_map.items():
                         if full_path == class_path:
                             try:
-                                external_library_cache.set(library_name, short_path, class_info)
+                                external_library_cache.set_alias(
+                                    library_name, short_path, full_path
+                                )
                                 logger.debug(
-                                    f"Cached re-export alias: {short_path} -> {full_path}"
+                                    f"Registered re-export alias: {short_path} -> {full_path}"
                                 )
                             except Exception as e:
-                                logger.debug(f"Failed to cache re-export alias {short_path}: {e}")
+                                logger.debug(
+                                    f"Failed to register re-export alias {short_path}: {e}"
+                                )
             except Exception as e:
                 logger.debug(f"Failed to cache {class_path}: {e}")
 
         logger.info(f"Pre-populated {count} classes for {library_name}")
+        # Flush all pending cache changes to disk
+        external_library_cache.flush(library_name)
         # Clean up AST caches after population
         self._cleanup_ast_caches()
         return count
@@ -543,6 +549,7 @@ class ExternalClassInspector:
             if class_info:
                 try:
                     external_library_cache.set(root_module, full_class_path, class_info)
+                    external_library_cache.flush(root_module)
                     logger.debug(f"Stored {full_class_path} in cache")
                 except Exception as e:
                     logger.debug(f"Failed to store {full_class_path} in cache: {e}")
