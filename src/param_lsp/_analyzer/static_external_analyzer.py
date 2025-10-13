@@ -205,7 +205,9 @@ class ExternalClassInspector:
                             continue
 
                         # Get base classes as full paths
-                        bases = self._resolve_base_class_paths(node, file_imports, library_name)
+                        bases = self._resolve_base_class_paths(
+                            node, file_imports, library_name, source_path
+                        )
 
                         # Store in inheritance map
                         inheritance_map[full_class_path] = bases
@@ -1359,7 +1361,11 @@ class ExternalClassInspector:
         return None
 
     def _resolve_base_class_paths(
-        self, class_node: NodeOrLeaf, file_imports: dict[str, str], library_name: str
+        self,
+        class_node: NodeOrLeaf,
+        file_imports: dict[str, str],
+        library_name: str,
+        source_path: Path | None = None,
     ) -> list[str]:
         """Resolve base class names to full paths using imports.
 
@@ -1367,6 +1373,7 @@ class ExternalClassInspector:
             class_node: Class definition AST node
             file_imports: Import mappings for this file
             library_name: Name of the library (e.g., "panel")
+            source_path: Path to the source file (optional, for resolving same-file classes)
 
         Returns:
             List of full base class paths
@@ -1381,11 +1388,17 @@ class ExternalClassInspector:
             elif base in file_imports:
                 # Resolve via imports: ListPanel -> panel.layout.base.ListPanel
                 full_bases.append(file_imports[base])
+            # Base class might be defined in the same file
+            # Try to construct full path using source file path
+            elif source_path:
+                full_class_path = self._get_full_class_path(source_path, base, library_name)
+                if full_class_path:
+                    full_bases.append(full_class_path)
+                else:
+                    # Fall back to simple name
+                    full_bases.append(base)
             else:
-                # Assume same module - this is a simplification
-                # In reality, we'd need to check if it's defined in the same file
-                # For now, we'll just use the base name as-is and let the iterative
-                # resolution handle it if it's in the same file
+                # No source path provided, use simple name
                 full_bases.append(base)
 
         return full_bases
