@@ -203,13 +203,13 @@ class ExternalClassInspector:
         imported_names = []
 
         children = list(parso_utils.get_children(import_node))
+
+        # First pass: collect module path after 'from'
         i = 0
         while i < len(children):
             child = children[i]
-
-            # Look for 'from' keyword followed by module path
             if child.type == "keyword" and parso_utils.get_value(child) == "from":
-                # Next nodes should be the module path
+                # Collect module path until we hit 'import' keyword
                 i += 1
                 module_parts = []
                 while i < len(children):
@@ -225,9 +225,15 @@ class ExternalClassInspector:
                             module_parts.append(value)
                     i += 1
                 source_module = "".join(module_parts)
+                break  # Found the module, exit first pass
+            i += 1
 
-            # Look for 'import' keyword followed by names
+        # Second pass: collect imported names after 'import'
+        i = 0
+        while i < len(children):
+            child = children[i]
             if child.type == "keyword" and parso_utils.get_value(child) == "import":
+                # Collect all imported names
                 i += 1
                 while i < len(children):
                     next_child = children[i]
@@ -245,8 +251,7 @@ class ExternalClassInspector:
                                         imported_names.append(parso_utils.get_value(name_child))
                                         break
                     i += 1
-                break
-
+                break  # Found the imports, exit second pass
             i += 1
 
         if not source_module or not imported_names:
