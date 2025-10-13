@@ -389,7 +389,10 @@ class ExternalClassInspector:
                 file_imports: dict[str, str] = {}
                 import_handler = ImportHandler(file_imports)
                 for node in parso_utils.walk_tree(tree):
-                    import_handler.handle_import(node)
+                    if node.type == "import_name":
+                        import_handler.handle_import(node)
+                    elif node.type == "import_from":
+                        import_handler.handle_import_from(node)
 
                 # Cache source lines for later parameter extraction
                 self.file_source_cache[source_path] = source_code.split("\n")
