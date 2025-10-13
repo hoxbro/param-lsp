@@ -721,41 +721,6 @@ class ExternalClassInspector:
 
         return python_files
 
-    def _find_class_in_file(
-        self, source_path: Path, full_class_path: str, class_name: str
-    ) -> ParameterizedInfo | None:
-        """Find and analyze a specific class in a source file.
-
-        Args:
-            source_path: Path to Python source file
-            full_class_path: Full class path for verification
-            class_name: Name of the class to find
-
-        Returns:
-            ParameterizedInfo if class found and is Parameterized
-        """
-        # Check cache first
-        if source_path in self.analyzed_files:
-            file_classes = self.analyzed_files[source_path]
-            if class_name in file_classes:
-                return file_classes[class_name]
-
-        try:
-            # Read and parse the source file
-            source_code = source_path.read_text(encoding="utf-8")
-            tree = parso.parse(source_code)
-
-            # Analyze the file
-            file_analysis = self._analyze_file_ast(tree, source_code)
-            self.analyzed_files[source_path] = file_analysis
-
-            # Return the specific class if found
-            return file_analysis.get(class_name)
-
-        except Exception as e:
-            logger.debug(f"Error parsing {source_path}: {e}")
-            return None
-
     def _analyze_file_ast(
         self, tree: NodeOrLeaf, source_code: str
     ) -> dict[str, ParameterizedInfo | None]:
@@ -994,24 +959,6 @@ class ExternalClassInspector:
         finally:
             self._inheritance_check_visited.discard(base_class)
 
-    def _resolve_inheritance_chain(self, class_name: str, imports: dict[str, str]) -> bool:
-        """Resolve inheritance chain to check if it leads to param.Parameterized.
-
-        Args:
-            class_name: Name of the class to check
-            imports: Import mappings from current file
-
-        Returns:
-            True if inheritance chain leads to param.Parameterized
-        """
-        # Direct check for param.Parameterized
-        if class_name in ("param.Parameterized", "Parameterized"):
-            return True
-
-        # Check if class_name is imported and resolve it
-        resolved_name = imports.get(class_name, class_name)
-        return resolved_name == "param.Parameterized"
-
     def _find_class_definition(self, class_name: str) -> tuple[NodeOrLeaf, dict[str, str]] | None:
         """Find the AST node for a class definition.
 
@@ -1145,26 +1092,6 @@ class ExternalClassInspector:
             current_dir = current_dir.parent
 
         return None
-
-    def _parse_import_statement(
-        self, import_path: str, imported_name: str
-    ) -> tuple[str, str] | None:
-        """Parse an import statement to extract module path and class name.
-
-        Args:
-            import_path: Import path from imports dict
-            imported_name: The imported name
-
-        Returns:
-            Tuple of (module_path, class_name) or None
-        """
-        if "." in import_path:
-            # Handle cases like "base.Widget" -> ("base", "Widget")
-            parts = import_path.split(".")
-            return ".".join(parts[:-1]), parts[-1]
-        else:
-            # Direct import like "Widget" -> no module path, return None
-            return None
 
     def _queue_file_for_analysis(self, file_path: Path, reason: str) -> None:
         """Add a file to the analysis queue if not already analyzed.
