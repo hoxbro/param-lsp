@@ -687,8 +687,13 @@ class ExternalClassInspector:
                 logger.info(f"Found {len(files)} Python files in user site {library_path}")
                 source_paths.extend(files)
 
-        # Remove duplicates and cache
-        unique_paths = list(set(source_paths))
+        # Remove duplicates while preserving order, and cache
+        seen = set()
+        unique_paths = []
+        for path in source_paths:
+            if path not in seen:
+                seen.add(path)
+                unique_paths.append(path)
         self.library_source_paths[library_name] = unique_paths
 
         logger.info(
