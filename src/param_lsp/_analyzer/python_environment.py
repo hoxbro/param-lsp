@@ -167,6 +167,17 @@ class PythonEnvironment:
 
         # Check for venv/virtualenv
         venv_path = os.environ.get("VIRTUAL_ENV")
+        conda_env = os.environ.get("CONDA_DEFAULT_ENV")
+        conda_prefix = os.environ.get("CONDA_PREFIX")
+
+        # Warn if both are set (potential misconfiguration)
+        if venv_path and conda_env and conda_prefix:
+            logger.warning(
+                f"Both VIRTUAL_ENV ({venv_path}) and CONDA environment "
+                f"({conda_env}) detected. Using VIRTUAL_ENV. "
+                "This may indicate a misconfiguration."
+            )
+
         if venv_path:
             try:
                 logger.info(f"Detected venv from VIRTUAL_ENV: {venv_path}")
@@ -175,8 +186,6 @@ class PythonEnvironment:
                 logger.warning(f"Failed to use VIRTUAL_ENV: {e}")
 
         # Check for conda environment
-        conda_env = os.environ.get("CONDA_DEFAULT_ENV")
-        conda_prefix = os.environ.get("CONDA_PREFIX")
         if conda_env and conda_prefix:
             python_path = cls._find_python_in_prefix(Path(conda_prefix))
             if python_path:

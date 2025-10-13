@@ -272,8 +272,10 @@ def test_from_environment_variables_none(monkeypatch):
     assert env is None
 
 
-def test_from_environment_variables_priority_venv(tmp_path, monkeypatch):
-    """Test that VIRTUAL_ENV takes priority over CONDA variables."""
+def test_from_environment_variables_priority_venv(tmp_path, monkeypatch, caplog):
+    """Test that VIRTUAL_ENV takes priority over CONDA variables and warns."""
+    import logging
+
     venv_path = tmp_path / "my_venv"
     venv_python = venv_path / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
@@ -288,6 +290,11 @@ def test_from_environment_variables_priority_venv(tmp_path, monkeypatch):
     monkeypatch.setenv("CONDA_DEFAULT_ENV", "my_conda_env")
     monkeypatch.setenv("CONDA_PREFIX", str(conda_prefix))
 
-    env = PythonEnvironment.from_environment_variables()
-    assert env is not None
-    assert env.python == venv_python  # venv should win
+    with caplog.at_level(logging.WARNING):
+        env = PythonEnvironment.from_environment_variables()
+        assert env is not None
+        assert env.python == venv_python  # venv should win
+
+        # Check that warning was logged
+        assert any("Both VIRTUAL_ENV" in record.message for record in caplog.records)
+        assert any("misconfiguration" in record.message for record in caplog.records)
