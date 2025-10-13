@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from lsprotocol.types import CompletionParams, Position, TextDocumentIdentifier
+from lsprotocol.types import Position
 
-from param_lsp.server import ParamLanguageServer, completion, server
+from param_lsp.server import ParamLanguageServer
 
 
 class TestMultilineConstructorCompletion:
@@ -62,6 +62,8 @@ instance = MyClass(
 
     def test_multiline_constructor_completion_via_server(self):
         """Test multiline constructor completion through the full server completion flow."""
+        test_server = ParamLanguageServer("test-server", "1.0.0")
+
         uri = "file:///test_multiline.py"
         code_py = """\
 import param
@@ -76,23 +78,32 @@ my_widget = Widget(
 """
 
         # Simulate document analysis
-        server._analyze_document(uri, code_py)
+        test_server._analyze_document(uri, code_py)
 
         # Test completion on the empty line inside the constructor
         position = Position(line=7, character=0)
 
-        # Create completion params
-        params = CompletionParams(text_document=TextDocumentIdentifier(uri=uri), position=position)
+        lines = code_py.split("\n")
 
-        # Call the completion function
-        completion_list = completion(params)
-
-        # Should get completions for name and enabled (but not 'name' since it's skipped)
-        assert len(completion_list.items) == 1, (
-            f"Expected 1 completion (enabled only), got {len(completion_list.items)}"
+        # Test multiline constructor context detection
+        is_multiline, class_name = test_server._is_in_constructor_context_multiline(
+            uri, lines, position
         )
 
-        completion_labels = [item.label for item in completion_list.items]
+        assert is_multiline, "Should detect multiline constructor context"
+        assert class_name == "Widget", f"Should identify Widget, got {class_name}"
+
+        # Get completions via the multiline method
+        completions = test_server._get_constructor_parameter_completions_multiline(
+            uri, lines, position, class_name
+        )
+
+        # Should get completions for name and enabled (but not 'name' since it's skipped)
+        assert len(completions) == 1, (
+            f"Expected 1 completion (enabled only), got {len(completions)}"
+        )
+
+        completion_labels = [item.label for item in completions]
         assert "enabled=True" in completion_labels, "Should suggest 'enabled=True'"
 
     def test_multiline_constructor_with_existing_params(self):
