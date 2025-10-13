@@ -432,24 +432,36 @@ class ExternalClassInspector:
 
         source_paths = []
 
+        logger.info(
+            f"Searching for {library_name} in environment: {self.python_env.python_executable}"
+        )
+        logger.info(f"Site-packages: {self.python_env.site_packages}")
+        logger.info(f"User site: {self.python_env.user_site}")
+
         # Search in Python environment's site-packages directories
         for site_dir in self.python_env.site_packages:
             library_path = site_dir / library_name
+            logger.info(f"Checking: {library_path} (exists={library_path.exists()})")
             if library_path.exists():
-                source_paths.extend(self._collect_python_files(library_path))
+                files = self._collect_python_files(library_path)
+                logger.info(f"Found {len(files)} Python files in {library_path}")
+                source_paths.extend(files)
 
         # Search in user site-packages if available
         if self.python_env.user_site:
             library_path = self.python_env.user_site / library_name
+            logger.info(f"Checking user site: {library_path} (exists={library_path.exists()})")
             if library_path.exists():
-                source_paths.extend(self._collect_python_files(library_path))
+                files = self._collect_python_files(library_path)
+                logger.info(f"Found {len(files)} Python files in user site {library_path}")
+                source_paths.extend(files)
 
         # Remove duplicates and cache
         unique_paths = list(set(source_paths))
         self.library_source_paths[library_name] = unique_paths
 
-        logger.debug(
-            f"Found {len(unique_paths)} source files for {library_name} in {self.python_env}"
+        logger.info(
+            f"Total: Found {len(unique_paths)} source files for {library_name} in {self.python_env}"
         )
         return unique_paths
 
@@ -1110,6 +1122,12 @@ class ExternalClassInspector:
         if import_path.startswith(_STDLIB_MODULES):
             return False
 
+        # Check if the import is from an external library that's not in our allowed list
+        # This prevents errors when trying to resolve bokeh, tornado, etc. base classes
+        root_module = import_path.split(".")[0]
+        if root_module not in ALLOWED_EXTERNAL_LIBRARIES and root_module != class_name:
+            return False
+
         # Get the current file context (we need this for import resolution)
         current_file = self._get_current_file_from_context()
         if not current_file:
@@ -1136,9 +1154,7 @@ class ExternalClassInspector:
             result = self._inherits_from_parameterized(class_definition, class_imports)
             return result
 
-        # If we can't resolve the inheritance chain, return False
-        # This is more honest than guessing based on module names
-        logger.error(f"Could not resolve inheritance for {import_path} - static analysis failed")
+        # Could not resolve - this is expected for complex inheritance chains
         return False
 
     def _get_current_file_from_context(self) -> Path | None:
