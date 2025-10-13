@@ -15,7 +15,7 @@ def test_from_current():
     """Test creating PythonEnvironment from current interpreter."""
     env = PythonEnvironment.from_current()
 
-    assert env.python_executable == Path(sys.executable)
+    assert env.python == Path(sys.executable)
     assert len(env.site_packages) > 0
     assert all(isinstance(p, Path) for p in env.site_packages)
 
@@ -27,14 +27,14 @@ def test_from_path_valid(tmp_path):
     python_path.parent.mkdir(parents=True)
     python_path.touch()
 
-    env = PythonEnvironment(python_executable=python_path)
-    assert env.python_executable == python_path
+    env = PythonEnvironment(python=python_path)
+    assert env.python == python_path
 
 
 def test_from_path_invalid():
     """Test creating PythonEnvironment from an invalid path."""
     with pytest.raises(ValueError, match="Python executable not found"):
-        PythonEnvironment(python_executable="/nonexistent/python")
+        PythonEnvironment(python="/nonexistent/python")
 
 
 @patch("subprocess.run")
@@ -54,7 +54,7 @@ def test_query_site_packages(mock_run, tmp_path):
     mock_result.stdout = json.dumps([str(site_pkg_1)])
     mock_run.return_value = mock_result
 
-    env = PythonEnvironment(python_executable=python_path)
+    env = PythonEnvironment(python=python_path)
     site_packages = env.site_packages
 
     assert len(site_packages) == 1
@@ -81,7 +81,7 @@ def test_query_user_site(mock_run, tmp_path):
 
     mock_run.side_effect = [mock_site_result, mock_user_result]
 
-    env = PythonEnvironment(python_executable=python_path)
+    env = PythonEnvironment(python=python_path)
     # Trigger queries
     _ = env.site_packages
     user_site_result = env.user_site
@@ -97,7 +97,7 @@ def test_from_venv_unix(tmp_path):
     python_path.touch()
 
     env = PythonEnvironment.from_venv(venv_path)
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 def test_from_venv_windows(tmp_path):
@@ -108,7 +108,7 @@ def test_from_venv_windows(tmp_path):
     python_path.touch()
 
     env = PythonEnvironment.from_venv(venv_path)
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 def test_from_venv_invalid():
@@ -142,7 +142,7 @@ def test_from_conda(mock_run, tmp_path):
     mock_run.return_value = mock_result
 
     env = PythonEnvironment.from_conda("my_conda_env")
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 @patch("subprocess.run")
@@ -161,7 +161,7 @@ def test_from_conda_windows(mock_run, tmp_path):
     mock_run.return_value = mock_result
 
     env = PythonEnvironment.from_conda("my_conda_env")
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 @patch("subprocess.run")
@@ -180,7 +180,7 @@ def test_from_conda_windows_scripts(mock_run, tmp_path):
     mock_run.return_value = mock_result
 
     env = PythonEnvironment.from_conda("my_conda_env")
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 @patch("subprocess.run")
@@ -209,8 +209,8 @@ def test_repr(tmp_path):
     python_path.parent.mkdir(parents=True)
     python_path.touch()
 
-    env = PythonEnvironment(python_executable=python_path)
-    assert repr(env) == f"PythonEnvironment(python_executable={python_path})"
+    env = PythonEnvironment(python=python_path)
+    assert repr(env) == f"PythonEnvironment(python={python_path})"
 
 
 def test_from_environment_variables_venv(tmp_path, monkeypatch):
@@ -224,7 +224,7 @@ def test_from_environment_variables_venv(tmp_path, monkeypatch):
 
     env = PythonEnvironment.from_environment_variables()
     assert env is not None
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 def test_from_environment_variables_conda(tmp_path, monkeypatch):
@@ -241,7 +241,7 @@ def test_from_environment_variables_conda(tmp_path, monkeypatch):
 
     env = PythonEnvironment.from_environment_variables()
     assert env is not None
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 def test_from_environment_variables_conda_windows(tmp_path, monkeypatch):
@@ -258,7 +258,7 @@ def test_from_environment_variables_conda_windows(tmp_path, monkeypatch):
 
     env = PythonEnvironment.from_environment_variables()
     assert env is not None
-    assert env.python_executable == python_path
+    assert env.python == python_path
 
 
 def test_from_environment_variables_none(monkeypatch):
@@ -290,4 +290,4 @@ def test_from_environment_variables_priority_venv(tmp_path, monkeypatch):
 
     env = PythonEnvironment.from_environment_variables()
     assert env is not None
-    assert env.python_executable == venv_python  # venv should win
+    assert env.python == venv_python  # venv should win

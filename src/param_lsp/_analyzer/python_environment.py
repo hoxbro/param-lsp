@@ -21,7 +21,7 @@ class PythonEnvironment:
 
     def __init__(
         self,
-        python_executable: str | Path,
+        python: str | Path,
         site_packages: list[Path] | None = None,
         user_site: Path | None = None,
     ):
@@ -29,17 +29,17 @@ class PythonEnvironment:
         Initialize a Python environment.
 
         Args:
-            python_executable: Path to the Python executable
+            python: Path to the Python executable
             site_packages: List of site-packages directories (will be queried if None)
             user_site: User site-packages directory (will be queried if None)
         """
-        self.python_executable = Path(python_executable)
+        self.python = Path(python)
         self._site_packages = site_packages
         self._user_site = user_site
 
         # Validate the Python executable exists
-        if not self.python_executable.exists():
-            msg = f"Python executable not found: {self.python_executable}"
+        if not self.python.exists():
+            msg = f"Python executable not found: {self.python}"
             raise ValueError(msg)
 
     @property
@@ -62,7 +62,7 @@ class PythonEnvironment:
             # Query sys.path which includes both site-packages and paths from .pth files (editable installs)
             result = subprocess.run(  # noqa: S603
                 [
-                    str(self.python_executable),
+                    str(self.python),
                     "-c",
                     "import sys; import json; "
                     "from pathlib import Path; "
@@ -82,7 +82,7 @@ class PythonEnvironment:
             subprocess.TimeoutExpired,
             json.JSONDecodeError,
         ) as e:
-            logger.warning(f"Failed to query site-packages from {self.python_executable}: {e}")
+            logger.warning(f"Failed to query site-packages from {self.python}: {e}")
             return []
 
     def _query_user_site(self) -> Path | None:
@@ -90,7 +90,7 @@ class PythonEnvironment:
         try:
             result = subprocess.run(  # noqa: S603
                 [
-                    str(self.python_executable),
+                    str(self.python),
                     "-c",
                     "import site; print(site.getusersitepackages())",
                 ],
@@ -102,7 +102,7 @@ class PythonEnvironment:
             user_site = Path(result.stdout.strip())
             return user_site if user_site.exists() else None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            logger.warning(f"Failed to query user site from {self.python_executable}: {e}")
+            logger.warning(f"Failed to query user site from {self.python}: {e}")
             return None
 
     @classmethod
@@ -119,7 +119,7 @@ class PythonEnvironment:
         )
 
         return cls(
-            python_executable=sys.executable,
+            python=sys.executable,
             site_packages=site_packages,
             user_site=user_site,
         )
@@ -205,7 +205,7 @@ class PythonEnvironment:
         Raises:
             ValueError: If the Python executable is invalid
         """
-        return cls(python_executable=python_path)
+        return cls(python=python_path)
 
     @classmethod
     def from_venv(cls, venv_path: str | Path) -> PythonEnvironment:
@@ -228,7 +228,7 @@ class PythonEnvironment:
 
         python_path = cls._find_python_in_prefix(venv_path)
         if python_path:
-            return cls(python_executable=python_path)
+            return cls(python=python_path)
 
         msg = f"No Python executable found in venv: {venv_path}"
         raise ValueError(msg)
@@ -274,7 +274,7 @@ class PythonEnvironment:
             # Find Python executable in conda env
             python_path = cls._find_python_in_prefix(env_path)
             if python_path:
-                return cls(python_executable=python_path)
+                return cls(python=python_path)
 
             msg = f"No Python executable found in conda env: {env_name}"
             raise ValueError(msg)
@@ -291,4 +291,4 @@ class PythonEnvironment:
             raise ValueError(msg) from e
 
     def __repr__(self) -> str:
-        return f"PythonEnvironment(python_executable={self.python_executable})"
+        return f"PythonEnvironment(python={self.python})"

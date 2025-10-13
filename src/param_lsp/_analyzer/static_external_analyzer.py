@@ -89,7 +89,7 @@ class ExternalClassInspector:
 
             result = subprocess.run(  # noqa: S603
                 [
-                    str(self.python_env.python_executable),
+                    str(self.python_env.python),
                     "-c",
                     f"import importlib.metadata, json; "
                     f"m = importlib.metadata.metadata('{library_name}'); "
@@ -432,9 +432,7 @@ class ExternalClassInspector:
 
         source_paths = []
 
-        logger.info(
-            f"Searching for {library_name} in environment: {self.python_env.python_executable}"
-        )
+        logger.info(f"Searching for {library_name} in environment: {self.python_env.python}")
         logger.info(f"Site-packages: {self.python_env.site_packages}")
         logger.info(f"User site: {self.python_env.user_site}")
 
