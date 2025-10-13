@@ -35,11 +35,7 @@ class ParamLanguageServer(ValidationMixin, HoverMixin, CompletionMixin):
     """Language Server for HoloViz Param."""
 
 
-server = ParamLanguageServer("param-lsp", __version__)
-
-
-@server.feature("initialize")
-def initialize(params: InitializeParams) -> InitializeResult:
+def _initialize(server, params: InitializeParams) -> InitializeResult:
     """Initialize the language server."""
     logger.info("Initializing Param LSP server")
 
@@ -66,8 +62,7 @@ def initialize(params: InitializeParams) -> InitializeResult:
     )
 
 
-@server.feature("textDocument/didOpen")
-def did_open(params: DidOpenTextDocumentParams):
+def _did_open(server, params: DidOpenTextDocumentParams):
     """Handle document open event."""
     uri = params.text_document.uri
     content = params.text_document.text
@@ -75,8 +70,7 @@ def did_open(params: DidOpenTextDocumentParams):
     logger.info(f"Opened document: {uri}")
 
 
-@server.feature("textDocument/didChange")
-def did_change(params: DidChangeTextDocumentParams):
+def _did_change(server, params: DidChangeTextDocumentParams):
     """Handle document change event."""
     uri = params.text_document.uri
 
@@ -132,8 +126,7 @@ def did_change(params: DidChangeTextDocumentParams):
         server._analyze_document(uri, content)
 
 
-@server.feature("textDocument/completion")
-def completion(params: CompletionParams) -> CompletionList:
+def _completion(server, params: CompletionParams) -> CompletionList:
     """Provide completion suggestions."""
     uri = params.text_document.uri
     position = params.position
@@ -216,8 +209,7 @@ def completion(params: CompletionParams) -> CompletionList:
     return CompletionList(is_incomplete=False, items=completions)
 
 
-@server.feature("textDocument/hover")
-def hover(params: HoverParams) -> Hover | None:
+def _hover(server, params: HoverParams) -> Hover | None:
     """Provide hover information."""
     uri = params.text_document.uri
     position = params.position
@@ -265,3 +257,25 @@ def hover(params: HoverParams) -> Hover | None:
         )
 
     return None
+
+
+def create_server(python_env=None):
+    """Create a Param Language Server instance.
+
+    Args:
+        python_env: PythonEnvironment instance for analyzing external libraries.
+                   If None, uses the current Python environment.
+
+    Returns:
+        ParamLanguageServer instance
+    """
+    server = ParamLanguageServer("param-lsp", __version__, python_env=python_env)
+
+    # Attach feature handlers
+    server.feature("initialize")(lambda params: _initialize(server, params))
+    server.feature("textDocument/didOpen")(lambda params: _did_open(server, params))
+    server.feature("textDocument/didChange")(lambda params: _did_change(server, params))
+    server.feature("textDocument/completion")(lambda params: _completion(server, params))
+    server.feature("textDocument/hover")(lambda params: _hover(server, params))
+
+    return server

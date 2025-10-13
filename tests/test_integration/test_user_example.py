@@ -40,7 +40,7 @@ class S(P): ...
 S().x = "a"  # This should now trigger a type error!
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(example_file) as f:
             content = f.read()
@@ -88,7 +88,7 @@ class S(P):
 S().b = "a"
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()
@@ -149,7 +149,7 @@ obj.middle_int = "abc"  # Error: Integer parameter
 obj.final_bool = "xyz"  # Error: Boolean parameter
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(final_file) as f:
             content = f.read()
@@ -220,7 +220,7 @@ D().b_param = "wrong"   # Error: inherited Integer
 D().d_param = "wrong"   # Error: Number
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(test_file) as f:
             content = f.read()

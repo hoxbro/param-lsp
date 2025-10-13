@@ -8,11 +8,9 @@ from source files directly.
 
 from __future__ import annotations
 
-import importlib.metadata
 import logging
-import site
 import sys
-from pathlib import Path
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
 import parso
@@ -28,6 +26,8 @@ from .parameter_extractor import extract_parameter_info_from_assignment
 if TYPE_CHECKING:
     from parso.tree import NodeOrLeaf
 
+    from .python_environment import PythonEnvironment
+
 logger = logging.getLogger(__name__)
 
 _STDLIB_MODULES = tuple(f"{c}." for c in ("__future__", *sys.stdlib_module_names))
@@ -38,9 +38,18 @@ class ExternalClassInspector:
 
     Analyzes external libraries using pure AST parsing without runtime imports.
     Discovers source files and extracts parameter information statically.
+
+    Can analyze libraries from different Python environments by providing a
+    PythonEnvironment instance.
     """
 
-    def __init__(self):
+    def __init__(self, python_env: PythonEnvironment | None = None):
+        """
+        Initialize the external class inspector.
+
+        Args:
+            python_env: Python environment to analyze. If None, uses current environment.
+        """
         self.library_source_paths: dict[str, list[Path]] = {}
         self.parsed_classes: dict[str, ParameterizedInfo | None] = {}
         self.analyzed_files: dict[Path, dict[str, Any]] = {}
@@ -56,6 +65,13 @@ class ExternalClassInspector:
         # Track which libraries have been pre-populated in this session
         self.populated_libraries: set[str] = set()
 
+        # Python environment for analysis
+        if python_env is None:
+            from .python_environment import PythonEnvironment
+
+            python_env = PythonEnvironment.from_current()
+        self.python_env = python_env
+
     def _get_library_dependencies(self, library_name: str) -> list[str]:
         """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
 
@@ -67,22 +83,243 @@ class ExternalClassInspector:
         """
         dependencies = []
         try:
-            metadata = importlib.metadata.metadata(library_name)
-            requires = metadata.get_all("Requires-Dist") or []
+            # Query metadata from the custom python environment, not the current one
+            import json
+            import subprocess
 
-            for req in requires:
-                # Parse requirement string (e.g., "panel>=1.0" -> "panel")
-                dep_name = req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+            result = subprocess.run(  # noqa: S603
+                [
+                    str(self.python_env.python),
+                    "-c",
+                    f"import importlib.metadata, json; "
+                    f"m = importlib.metadata.metadata('{library_name}'); "
+                    f"print(json.dumps(list(m.get_all('Requires-Dist') or [])))",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
-                # Only include if it's in our allowed list
-                if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
-                    dependencies.append(dep_name)
-                    logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+            if result.returncode == 0:
+                requires = json.loads(result.stdout.strip())
+                for req in requires:
+                    # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                    dep_name = (
+                        req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+                    )
+
+                    # Only include if it's in our allowed list
+                    if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
+                        dependencies.append(dep_name)
+                        logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+            else:
+                logger.debug(f"Failed to query metadata for {library_name}: {result.stderr}")
 
         except Exception as e:
             logger.debug(f"Could not get dependencies for {library_name}: {e}")
 
         return dependencies
+
+    def _build_reexport_map(self, library_name: str, source_paths: list[Path]) -> dict[str, str]:
+        """Build a map of re-exported class paths from __init__.py files.
+
+        Parses __init__.py files to understand re-exports like:
+            from .input import TextInput
+        And builds aliases:
+            panel.widgets.TextInput -> panel.widgets.input.TextInput
+
+        Args:
+            library_name: Name of the library (e.g., "panel")
+            source_paths: List of all source file paths in the library
+
+        Returns:
+            Dictionary mapping short paths (re-exported) to full paths (actual definition)
+        """
+        reexport_map: dict[str, str] = {}  # short_path -> full_path
+
+        # Find all __init__.py files
+        init_files = [p for p in source_paths if p.name == "__init__.py"]
+
+        logger.debug(f"Building re-export map from {len(init_files)} __init__.py files")
+
+        for init_file in init_files:
+            try:
+                source_code = init_file.read_text(encoding="utf-8")
+                tree = parso.parse(source_code)
+
+                # Extract the module path for this __init__.py
+                # e.g., /path/to/panel/widgets/__init__.py -> panel.widgets
+                search_dirs = list(self.python_env.site_packages)
+                if self.python_env.user_site:
+                    search_dirs.append(self.python_env.user_site)
+
+                module_path = None
+                for site_dir in search_dirs:
+                    library_path = site_dir / library_name
+                    if library_path.exists() and init_file.is_relative_to(library_path):
+                        relative_path = init_file.relative_to(library_path)
+                        parts = list(relative_path.parts[:-1])  # Exclude __init__.py
+                        module_path = ".".join([library_name, *parts]) if parts else library_name
+                        break
+
+                if not module_path:
+                    logger.debug(f"Could not determine module path for {init_file}")
+                    continue
+
+                # Parse import statements
+                for node in parso_utils.walk_tree(tree):
+                    if node.type == "import_from":
+                        # Extract "from .module import Name1, Name2"
+                        self._process_import_from_for_reexport(
+                            node, module_path, library_name, reexport_map
+                        )
+
+            except Exception as e:
+                logger.debug(f"Error processing {init_file} for re-exports: {e}")
+                continue
+
+        logger.debug(f"Built re-export map with {len(reexport_map)} entries")
+        return reexport_map
+
+    def _process_import_from_for_reexport(
+        self,
+        import_node: NodeOrLeaf,
+        current_module: str,
+        library_name: str,
+        reexport_map: dict[str, str],
+    ) -> None:
+        """Process a 'from ... import ...' statement to extract re-exports.
+
+        Args:
+            import_node: AST node of import_from statement
+            current_module: Current module path (e.g., "panel.widgets")
+            library_name: Root library name (e.g., "panel")
+            reexport_map: Map to populate with re-export entries
+        """
+        # Extract source module and imported names
+        # e.g., "from .input import TextInput, Checkbox"
+        source_module = None
+        imported_names = []
+
+        children = list(parso_utils.get_children(import_node))
+
+        # First pass: collect module path after 'from'
+        i = 0
+        while i < len(children):
+            child = children[i]
+            if child.type == "keyword" and parso_utils.get_value(child) == "from":
+                # Collect module path until we hit 'import' keyword
+                i += 1
+                module_parts = []
+                while i < len(children):
+                    next_child = children[i]
+                    if (
+                        next_child.type == "keyword"
+                        and parso_utils.get_value(next_child) == "import"
+                    ):
+                        break
+                    if next_child.type in ("name", "operator"):
+                        value = parso_utils.get_value(next_child)
+                        if value and value not in (",", " "):
+                            module_parts.append(value)
+                    i += 1
+                source_module = "".join(module_parts)
+                break  # Found the module, exit first pass
+            i += 1
+
+        # Second pass: collect imported names after 'import'
+        i = 0
+        while i < len(children):
+            child = children[i]
+            if child.type == "keyword" and parso_utils.get_value(child) == "import":
+                # Collect all imported names
+                i += 1
+                while i < len(children):
+                    next_child = children[i]
+                    if next_child.type == "name":
+                        imported_names.append(parso_utils.get_value(next_child))
+                    elif next_child.type == "import_as_names":
+                        # Handle multiple imports: "import Name1, Name2"
+                        for subchild in parso_utils.get_children(next_child):
+                            if subchild.type == "name":
+                                imported_names.append(parso_utils.get_value(subchild))
+                            elif subchild.type == "import_as_name":
+                                # Handle "import Name as Alias" - take the original name
+                                for name_child in parso_utils.get_children(subchild):
+                                    if name_child.type == "name":
+                                        imported_names.append(parso_utils.get_value(name_child))
+                                        break
+                    i += 1
+                break  # Found the imports, exit second pass
+            i += 1
+
+        if not source_module or not imported_names:
+            return
+
+        # Resolve relative imports like ".input" to "panel.widgets.input"
+        full_source_module = self._resolve_relative_module_path(
+            source_module, current_module, library_name
+        )
+        if not full_source_module:
+            return
+
+        # Build re-export entries for each imported name
+        for name in imported_names:
+            # Short path: panel.widgets.TextInput
+            short_path = f"{current_module}.{name}"
+            # Full path: panel.widgets.input.TextInput
+            full_path = f"{full_source_module}.{name}"
+
+            reexport_map[short_path] = full_path
+            logger.debug(f"Re-export: {short_path} -> {full_path}")
+
+    def _resolve_relative_module_path(
+        self, relative_module: str, current_module: str, library_name: str
+    ) -> str | None:
+        """Resolve a relative module path to an absolute module path.
+
+        Args:
+            relative_module: Relative module like ".input" or "..base"
+            current_module: Current module path like "panel.widgets"
+            library_name: Root library name like "panel"
+
+        Returns:
+            Absolute module path like "panel.widgets.input" or None if cannot resolve
+        """
+        if not relative_module.startswith("."):
+            # Already absolute
+            return relative_module
+
+        # Count leading dots
+        level = 0
+        for char in relative_module:
+            if char == ".":
+                level += 1
+            else:
+                break
+
+        # Get the remaining module path after dots
+        remaining = relative_module[level:]
+
+        # Split current module into parts
+        current_parts = current_module.split(".")
+
+        # Go up 'level-1' directories (level=1 means same directory)
+        if level > len(current_parts):
+            logger.debug(
+                f"Too many dots in relative import: {relative_module} from {current_module}"
+            )
+            return None
+
+        # Navigate up the hierarchy
+        base_parts = (
+            current_parts[: len(current_parts) - (level - 1)] if level > 1 else current_parts
+        )
+
+        # Add the remaining module path
+        result = ".".join([*base_parts, remaining]) if remaining else ".".join(base_parts)
+        return result
 
     def populate_library_cache(self, library_name: str) -> int:
         """Pre-populate cache with all Parameterized classes from a library.
@@ -132,6 +369,10 @@ class ExternalClassInspector:
             logger.debug(f"No source files found for {library_name}")
             return 0
 
+        # Phase 0: Build re-export map
+        logger.debug("Phase 0: Building re-export map")
+        reexport_map = self._build_reexport_map(library_name, source_paths)
+
         # Phase 1: Build inheritance map
         logger.debug("Phase 1: Building inheritance map")
         inheritance_map: dict[str, list[str]] = {}  # full_class_path -> [base_class_paths]
@@ -148,7 +389,10 @@ class ExternalClassInspector:
                 file_imports: dict[str, str] = {}
                 import_handler = ImportHandler(file_imports)
                 for node in parso_utils.walk_tree(tree):
-                    import_handler.handle_import(node)
+                    if node.type == "import_name":
+                        import_handler.handle_import(node)
+                    elif node.type == "import_from":
+                        import_handler.handle_import_from(node)
 
                 # Cache source lines for later parameter extraction
                 self.file_source_cache[source_path] = source_code.split("\n")
@@ -224,15 +468,38 @@ class ExternalClassInspector:
             try:
                 class_node, file_imports, source_path = class_ast_nodes[class_path]
                 class_info = self._convert_ast_to_class_info(
-                    class_node, file_imports, class_path, source_path
+                    class_node,
+                    file_imports,
+                    class_path,
+                    source_path,
+                    inheritance_map,
+                    class_ast_nodes,
                 )
                 if class_info:
+                    # Cache under the full path
                     external_library_cache.set(library_name, class_path, class_info)
                     count += 1
+
+                    # Register any re-export aliases for this class
+                    for short_path, full_path in reexport_map.items():
+                        if full_path == class_path:
+                            try:
+                                external_library_cache.set_alias(
+                                    library_name, short_path, full_path
+                                )
+                                logger.debug(
+                                    f"Registered re-export alias: {short_path} -> {full_path}"
+                                )
+                            except Exception as e:
+                                logger.debug(
+                                    f"Failed to register re-export alias {short_path}: {e}"
+                                )
             except Exception as e:
                 logger.debug(f"Failed to cache {class_path}: {e}")
 
         logger.info(f"Pre-populated {count} classes for {library_name}")
+        # Flush all pending cache changes to disk
+        external_library_cache.flush(library_name)
         # Clean up AST caches after population
         self._cleanup_ast_caches()
         return count
@@ -266,14 +533,14 @@ class ExternalClassInspector:
         self.populate_library_cache(root_module)
 
         try:
-            # First, try to get from cache (which may contain pre-populated data)
+            # Try to get from cache (which may contain pre-populated data including re-export aliases)
             class_info = external_library_cache.get(root_module, full_class_path)
             if class_info:
                 logger.debug(f"Found cached metadata for {full_class_path}")
                 self.parsed_classes[full_class_path] = class_info
                 return class_info
 
-            # Fallback to dynamic AST analysis
+            # Fallback to dynamic AST analysis if not in cache
             logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
             class_info = self._analyze_class_from_source(full_class_path)
             self.parsed_classes[full_class_path] = class_info
@@ -282,6 +549,7 @@ class ExternalClassInspector:
             if class_info:
                 try:
                     external_library_cache.set(root_module, full_class_path, class_info)
+                    external_library_cache.flush(root_module)
                     logger.debug(f"Stored {full_class_path} in cache")
                 except Exception as e:
                     logger.debug(f"Failed to store {full_class_path} in cache: {e}")
@@ -358,34 +626,23 @@ class ExternalClassInspector:
             Full class path like "panel.widgets.IntSlider" or None if unable to construct
         """
         try:
-            # Find the library root directory
-            for site_dir in [*site.getsitepackages(), site.getusersitepackages()]:
-                if site_dir and Path(site_dir).exists():
-                    library_path = Path(site_dir) / library_name
-                    if library_path.exists() and source_path.is_relative_to(library_path):
-                        # Get relative path from library root
-                        relative_path = source_path.relative_to(library_path)
-                        # Convert path to module notation
-                        parts = list(relative_path.parts[:-1])  # Exclude filename
-                        if relative_path.stem != "__init__":
-                            parts.append(relative_path.stem)
-                        # Construct full path: library.module.submodule.ClassName
-                        module_path = ".".join([library_name, *parts])
-                        return f"{module_path}.{class_name}"
+            # Find the library root directory in Python environment's site-packages
+            search_dirs = list(self.python_env.site_packages)
+            if self.python_env.user_site:
+                search_dirs.append(self.python_env.user_site)
 
-            # Also check sys.path
-            for sys_path in sys.path:
-                if sys_path:
-                    sys_path_obj = Path(sys_path)
-                    if sys_path_obj.exists():
-                        library_path = sys_path_obj / library_name
-                        if library_path.exists() and source_path.is_relative_to(library_path):
-                            relative_path = source_path.relative_to(library_path)
-                            parts = list(relative_path.parts[:-1])
-                            if relative_path.stem != "__init__":
-                                parts.append(relative_path.stem)
-                            module_path = ".".join([library_name, *parts])
-                            return f"{module_path}.{class_name}"
+            for site_dir in search_dirs:
+                library_path = site_dir / library_name
+                if library_path.exists() and source_path.is_relative_to(library_path):
+                    # Get relative path from library root
+                    relative_path = source_path.relative_to(library_path)
+                    # Convert path to module notation
+                    parts = list(relative_path.parts[:-1])  # Exclude filename
+                    if relative_path.stem != "__init__":
+                        parts.append(relative_path.stem)
+                    # Construct full path: library.module.submodule.ClassName
+                    module_path = ".".join([library_name, *parts])
+                    return f"{module_path}.{class_name}"
 
             return None
         except Exception as e:
@@ -408,27 +665,40 @@ class ExternalClassInspector:
 
         source_paths = []
 
-        # Search in site-packages directories
-        for site_dir in [*site.getsitepackages(), site.getusersitepackages()]:
-            if site_dir and Path(site_dir).exists():
-                library_path = Path(site_dir) / library_name
-                if library_path.exists():
-                    source_paths.extend(self._collect_python_files(library_path))
+        logger.info(f"Searching for {library_name} in environment: {self.python_env.python}")
+        logger.info(f"Site-packages: {self.python_env.site_packages}")
+        logger.info(f"User site: {self.python_env.user_site}")
 
-        # Search in sys.path
-        for sys_path in sys.path:
-            if sys_path:
-                sys_path_obj = Path(sys_path)
-                if sys_path_obj.exists():
-                    library_path = sys_path_obj / library_name
-                    if library_path.exists():
-                        source_paths.extend(self._collect_python_files(library_path))
+        # Search in Python environment's site-packages directories
+        for site_dir in self.python_env.site_packages:
+            library_path = site_dir / library_name
+            logger.info(f"Checking: {library_path} (exists={library_path.exists()})")
+            if library_path.exists():
+                files = self._collect_python_files(library_path)
+                logger.info(f"Found {len(files)} Python files in {library_path}")
+                source_paths.extend(files)
 
-        # Remove duplicates and cache
-        unique_paths = list(set(source_paths))
+        # Search in user site-packages if available
+        if self.python_env.user_site:
+            library_path = self.python_env.user_site / library_name
+            logger.info(f"Checking user site: {library_path} (exists={library_path.exists()})")
+            if library_path.exists():
+                files = self._collect_python_files(library_path)
+                logger.info(f"Found {len(files)} Python files in user site {library_path}")
+                source_paths.extend(files)
+
+        # Remove duplicates while preserving order, and cache
+        seen = set()
+        unique_paths = []
+        for path in source_paths:
+            if path not in seen:
+                seen.add(path)
+                unique_paths.append(path)
         self.library_source_paths[library_name] = unique_paths
 
-        logger.debug(f"Found {len(unique_paths)} source files for {library_name}")
+        logger.info(
+            f"Total: Found {len(unique_paths)} source files for {library_name} in {self.python_env}"
+        )
         return unique_paths
 
     def _collect_python_files(self, directory: Path) -> list[Path]:
@@ -450,41 +720,6 @@ class ExternalClassInspector:
             logger.debug(f"Error accessing {directory}: {e}")
 
         return python_files
-
-    def _find_class_in_file(
-        self, source_path: Path, full_class_path: str, class_name: str
-    ) -> ParameterizedInfo | None:
-        """Find and analyze a specific class in a source file.
-
-        Args:
-            source_path: Path to Python source file
-            full_class_path: Full class path for verification
-            class_name: Name of the class to find
-
-        Returns:
-            ParameterizedInfo if class found and is Parameterized
-        """
-        # Check cache first
-        if source_path in self.analyzed_files:
-            file_classes = self.analyzed_files[source_path]
-            if class_name in file_classes:
-                return file_classes[class_name]
-
-        try:
-            # Read and parse the source file
-            source_code = source_path.read_text(encoding="utf-8")
-            tree = parso.parse(source_code)
-
-            # Analyze the file
-            file_analysis = self._analyze_file_ast(tree, source_code)
-            self.analyzed_files[source_path] = file_analysis
-
-            # Return the specific class if found
-            return file_analysis.get(class_name)
-
-        except Exception as e:
-            logger.debug(f"Error parsing {source_path}: {e}")
-            return None
 
     def _analyze_file_ast(
         self, tree: NodeOrLeaf, source_code: str
@@ -724,24 +959,6 @@ class ExternalClassInspector:
         finally:
             self._inheritance_check_visited.discard(base_class)
 
-    def _resolve_inheritance_chain(self, class_name: str, imports: dict[str, str]) -> bool:
-        """Resolve inheritance chain to check if it leads to param.Parameterized.
-
-        Args:
-            class_name: Name of the class to check
-            imports: Import mappings from current file
-
-        Returns:
-            True if inheritance chain leads to param.Parameterized
-        """
-        # Direct check for param.Parameterized
-        if class_name in ("param.Parameterized", "Parameterized"):
-            return True
-
-        # Check if class_name is imported and resolve it
-        resolved_name = imports.get(class_name, class_name)
-        return resolved_name == "param.Parameterized"
-
     def _find_class_definition(self, class_name: str) -> tuple[NodeOrLeaf, dict[str, str]] | None:
         """Find the AST node for a class definition.
 
@@ -876,26 +1093,6 @@ class ExternalClassInspector:
 
         return None
 
-    def _parse_import_statement(
-        self, import_path: str, imported_name: str
-    ) -> tuple[str, str] | None:
-        """Parse an import statement to extract module path and class name.
-
-        Args:
-            import_path: Import path from imports dict
-            imported_name: The imported name
-
-        Returns:
-            Tuple of (module_path, class_name) or None
-        """
-        if "." in import_path:
-            # Handle cases like "base.Widget" -> ("base", "Widget")
-            parts = import_path.split(".")
-            return ".".join(parts[:-1]), parts[-1]
-        else:
-            # Direct import like "Widget" -> no module path, return None
-            return None
-
     def _queue_file_for_analysis(self, file_path: Path, reason: str) -> None:
         """Add a file to the analysis queue if not already analyzed.
 
@@ -977,6 +1174,8 @@ class ExternalClassInspector:
         imports: dict[str, str],
         full_class_path: str,
         file_path: Path,
+        inheritance_map: dict[str, list[str]] | None = None,
+        class_ast_nodes: dict[str, tuple[NodeOrLeaf, dict[str, str], Path]] | None = None,
     ) -> ParameterizedInfo:
         """Convert an AST class node to ParameterizedInfo.
 
@@ -984,6 +1183,9 @@ class ExternalClassInspector:
             class_node: AST node of the class
             imports: Import mappings
             full_class_path: Full path like "panel.widgets.IntSlider"
+            file_path: Path to the source file
+            inheritance_map: Optional map of full_class_path -> [base_class_paths]
+            class_ast_nodes: Optional map of full_class_path -> (ast_node, imports, file_path)
 
         Returns:
             ParameterizedInfo with extracted parameters
@@ -1018,10 +1220,20 @@ class ExternalClassInspector:
             class_node, parameter_detector, class_info, source_lines, imports
         )
 
-        # Also extract parameters from parent classes within the same file
-        self._extract_inherited_parameters(
-            class_node, parameter_detector, class_info, source_lines, imports
-        )
+        # Extract parameters from parent classes using inheritance_map
+        if inheritance_map and class_ast_nodes:
+            self._extract_inherited_parameters_from_map(
+                full_class_path,
+                parameter_detector,
+                class_info,
+                inheritance_map,
+                class_ast_nodes,
+            )
+        else:
+            # Fallback to old method for same-file inheritance
+            self._extract_inherited_parameters(
+                class_node, parameter_detector, class_info, source_lines, imports
+            )
 
         return class_info
 
@@ -1071,6 +1283,92 @@ class ExternalClassInspector:
                     parent_node, parameter_detector, class_info, source_lines, parent_imports
                 )
 
+    def _extract_inherited_parameters_from_map(
+        self,
+        full_class_path: str,
+        parameter_detector: ParameterDetector,
+        class_info: ParameterizedInfo,
+        inheritance_map: dict[str, list[str]],
+        class_ast_nodes: dict[str, tuple[NodeOrLeaf, dict[str, str], Path]],
+    ) -> None:
+        """Extract parameters from parent classes using the inheritance map.
+
+        This method uses the pre-built inheritance map to recursively gather
+        parameters from all parent classes, resolving cross-file inheritance.
+
+        Args:
+            full_class_path: Full path of the current class
+            parameter_detector: Detector for parameter assignments
+            class_info: Class info to populate with inherited parameters
+            inheritance_map: Map of full_class_path -> [base_class_paths]
+            class_ast_nodes: Map of full_class_path -> (ast_node, imports, file_path)
+        """
+        # Avoid infinite recursion with a visited set
+        if not hasattr(self, "_inheritance_extraction_visited"):
+            self._inheritance_extraction_visited = set()
+
+        if full_class_path in self._inheritance_extraction_visited:
+            return
+
+        self._inheritance_extraction_visited.add(full_class_path)
+
+        try:
+            # Get base classes for this class
+            base_classes = inheritance_map.get(full_class_path, [])
+
+            for base_class_path in base_classes:
+                # Skip param.Parameterized itself
+                if self._is_parameterized_base(base_class_path):
+                    continue
+
+                # Try to find the base class in our AST nodes
+                if base_class_path in class_ast_nodes:
+                    parent_node, parent_imports, parent_file_path = class_ast_nodes[
+                        base_class_path
+                    ]
+
+                    # Get source lines for the parent class
+                    parent_source_lines = self.file_source_cache.get(parent_file_path)
+                    if parent_source_lines is None:
+                        try:
+                            source_code = parent_file_path.read_text(encoding="utf-8")
+                            parent_source_lines = source_code.split("\n")
+                            self.file_source_cache[parent_file_path] = parent_source_lines
+                        except Exception as e:
+                            logger.debug(f"Failed to read source file {parent_file_path}: {e}")
+                            continue
+
+                    # Extract parameters from parent class
+                    parent_class_info = ParameterizedInfo(name=base_class_path.split(".")[-1])
+                    self._extract_class_parameters(
+                        parent_node,
+                        parameter_detector,
+                        parent_class_info,
+                        parent_source_lines,
+                        parent_imports,
+                    )
+
+                    # Add parent parameters to child (child parameters take precedence)
+                    for param_name, param_info in parent_class_info.parameters.items():
+                        if param_name not in class_info.parameters:
+                            class_info.parameters[param_name] = param_info
+
+                    # Recursively extract from parent's parents
+                    self._extract_inherited_parameters_from_map(
+                        base_class_path,
+                        parameter_detector,
+                        class_info,
+                        inheritance_map,
+                        class_ast_nodes,
+                    )
+                else:
+                    # Base class not found in our AST nodes
+                    # This might be from an external library or stdlib
+                    logger.debug(f"Base class {base_class_path} not found in AST nodes")
+
+        finally:
+            self._inheritance_extraction_visited.discard(full_class_path)
+
     def _resolve_imported_class_inheritance(
         self, class_name: str, import_path: str, context_imports: dict[str, str]
     ) -> bool:
@@ -1086,6 +1384,12 @@ class ExternalClassInspector:
         """
         # First check if it's clearly not a Parameterized class
         if import_path.startswith(_STDLIB_MODULES):
+            return False
+
+        # Check if the import is from an external library that's not in our allowed list
+        # This prevents errors when trying to resolve bokeh, tornado, etc. base classes
+        root_module = import_path.split(".")[0]
+        if root_module not in ALLOWED_EXTERNAL_LIBRARIES and root_module != class_name:
             return False
 
         # Get the current file context (we need this for import resolution)
@@ -1114,9 +1418,7 @@ class ExternalClassInspector:
             result = self._inherits_from_parameterized(class_definition, class_imports)
             return result
 
-        # If we can't resolve the inheritance chain, return False
-        # This is more honest than guessing based on module names
-        logger.error(f"Could not resolve inheritance for {import_path} - static analysis failed")
+        # Could not resolve - this is expected for complex inheritance chains
         return False
 
     def _get_current_file_from_context(self) -> Path | None:

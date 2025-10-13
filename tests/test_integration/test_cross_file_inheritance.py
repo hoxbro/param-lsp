@@ -37,7 +37,7 @@ S().name = 123         # Should error - inherited String
 
         # Analyze with workspace context
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()
@@ -95,7 +95,7 @@ obj.intermediate_num = 15   # Error - bounds violation
 obj.final_bool = "invalid"  # Error - Boolean
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(final_file) as f:
             content = f.read()
@@ -144,7 +144,7 @@ class Child(Parent):
 Child().value = 123  # Should error - expecting string now
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()
@@ -184,7 +184,7 @@ Child().x = 15  # Should violate inherited bounds
 Child().y = 10  # Should violate local bounds
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()
@@ -223,7 +223,7 @@ class Child(Parent):
     y = param.String("test", doc="Child parameter documentation")
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()
@@ -251,7 +251,7 @@ class S(P):
 S().b = "test"  # No error should be detected since P is unknown
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()
@@ -284,7 +284,7 @@ class S(RegularClass):
 S().b = "test"  # No error since S doesn't inherit from param.Parameterized
 """)
 
-        analyzer = ParamAnalyzer(str(tmp_path))
+        analyzer = ParamAnalyzer(workspace_root=str(tmp_path))
 
         with open(child_file) as f:
             content = f.read()

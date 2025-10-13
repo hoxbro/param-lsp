@@ -66,7 +66,15 @@ logger = logging.getLogger(__name__)
 class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
-    def __init__(self, workspace_root: str | None = None):
+    def __init__(self, python_env: Any = None, workspace_root: str | None = None):
+        """
+        Initialize the Param analyzer.
+
+        Args:
+            python_env: PythonEnvironment instance for analyzing external libraries.
+                       If None, uses the current Python environment.
+            workspace_root: Root directory of the workspace
+        """
         self.param_classes: ParamClassDict = {}
         self.imports: ImportDict = {}
         # Store file content for source line lookup
@@ -78,8 +86,11 @@ class ParamAnalyzer:
         self.module_cache: dict[str, AnalysisResult] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
+        # Store python_env for passing to child analyzers
+        self.python_env = python_env
+
         # Use static external analyzer for external class analysis
-        self.external_inspector = ExternalClassInspector()
+        self.external_inspector = ExternalClassInspector(python_env=python_env)
 
         # Maintain compatibility with external_param_classes interface
         # The static analyzer doesn't need pre-caching, so this can be empty
@@ -127,7 +138,11 @@ class ParamAnalyzer:
     ) -> AnalysisResult:
         """Analyze a file for the import resolver (avoiding circular dependencies)."""
         # Create a new analyzer instance for the imported module to avoid conflicts
-        module_analyzer = ParamAnalyzer(str(self.workspace_root) if self.workspace_root else None)
+        # Pass through the python_env to ensure external library analysis uses the correct environment
+        module_analyzer = ParamAnalyzer(
+            python_env=self.python_env,
+            workspace_root=str(self.workspace_root) if self.workspace_root else None,
+        )
         return module_analyzer.analyze_file(content, file_path)
 
     def analyze_file(self, content: str, file_path: str | None = None) -> AnalysisResult:

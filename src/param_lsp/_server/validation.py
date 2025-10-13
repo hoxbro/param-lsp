@@ -31,7 +31,10 @@ class ValidationMixin(LSPServerBase):
             and hasattr(self, "analyzer")
             and not self.analyzer.workspace_root
         ):
-            self.analyzer = ParamAnalyzer(self.workspace_root)
+            # Recreate analyzer with workspace root, preserving python_env
+            self.analyzer = ParamAnalyzer(
+                python_env=self.python_env, workspace_root=self.workspace_root
+            )
 
         analysis = self.analyzer.analyze_file(content, file_path)
         self.document_cache[uri] = {
