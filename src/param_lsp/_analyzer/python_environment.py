@@ -57,13 +57,18 @@ class PythonEnvironment:
         return self._user_site
 
     def _query_site_packages(self) -> list[Path]:
-        """Query the Python environment for site-packages directories."""
+        """Query the Python environment for site-packages and editable install paths."""
         try:
+            # Query sys.path which includes both site-packages and paths from .pth files (editable installs)
             result = subprocess.run(  # noqa: S603
                 [
                     str(self.python_executable),
                     "-c",
-                    "import site; import json; print(json.dumps(site.getsitepackages()))",
+                    "import sys; import json; "
+                    "from pathlib import Path; "
+                    # Filter sys.path to include only absolute directory paths (exclude current dir, .zip files, etc.)
+                    "paths = [p for p in map(Path, sys.path) if p and p.is_absolute() and p.is_dir()]; "
+                    "print(json.dumps([str(p) for p in paths]))",
                 ],
                 capture_output=True,
                 text=True,
@@ -71,7 +76,7 @@ class PythonEnvironment:
                 timeout=10,
             )
             paths = json.loads(result.stdout.strip())
-            return [Path(p) for p in paths if Path(p).exists()]
+            return [Path(p) for p in paths]
         except (
             subprocess.CalledProcessError,
             subprocess.TimeoutExpired,
@@ -105,7 +110,9 @@ class PythonEnvironment:
         """Create a PythonEnvironment from the current Python interpreter."""
         import site
 
-        site_packages = [Path(p) for p in site.getsitepackages() if Path(p).exists()]
+        # Use sys.path to include both site-packages and editable installs
+        # Filter to absolute paths only (exclude current directory, relative paths, etc.)
+        site_packages = [p for p in map(Path, sys.path) if p and p.is_absolute() and p.is_dir()]
         user_site_path = site.getusersitepackages()
         user_site = (
             Path(user_site_path) if user_site_path and Path(user_site_path).exists() else None
