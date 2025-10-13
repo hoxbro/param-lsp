@@ -8,7 +8,6 @@ from source files directly.
 
 from __future__ import annotations
 
-import importlib.metadata
 import logging
 import sys
 from pathlib import Path  # noqa: TC003
@@ -84,17 +83,38 @@ class ExternalClassInspector:
         """
         dependencies = []
         try:
-            metadata = importlib.metadata.metadata(library_name)
-            requires = metadata.get_all("Requires-Dist") or []
+            # Query metadata from the custom python environment, not the current one
+            import json
+            import subprocess
 
-            for req in requires:
-                # Parse requirement string (e.g., "panel>=1.0" -> "panel")
-                dep_name = req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+            result = subprocess.run(  # noqa: S603
+                [
+                    str(self.python_env.python_executable),
+                    "-c",
+                    f"import importlib.metadata, json; "
+                    f"m = importlib.metadata.metadata('{library_name}'); "
+                    f"print(json.dumps(list(m.get_all('Requires-Dist') or [])))",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
-                # Only include if it's in our allowed list
-                if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
-                    dependencies.append(dep_name)
-                    logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+            if result.returncode == 0:
+                requires = json.loads(result.stdout.strip())
+                for req in requires:
+                    # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                    dep_name = (
+                        req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+                    )
+
+                    # Only include if it's in our allowed list
+                    if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
+                        dependencies.append(dep_name)
+                        logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+            else:
+                logger.debug(f"Failed to query metadata for {library_name}: {result.stderr}")
 
         except Exception as e:
             logger.debug(f"Could not get dependencies for {library_name}: {e}")
