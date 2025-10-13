@@ -60,14 +60,22 @@ class PythonEnvironment:
         """Query the Python environment for site-packages and editable install paths."""
         try:
             # Query sys.path which includes both site-packages and paths from .pth files (editable installs)
+            # We filter to only include site-packages directories and editable install paths,
+            # excluding the base Python installation directories
             result = subprocess.run(  # noqa: S603
                 [
                     str(self.python),
                     "-c",
-                    "import sys; import json; "
+                    "import sys; import json; import os; "
                     "from pathlib import Path; "
-                    # Filter sys.path to include only absolute directory paths (exclude current dir, .zip files, etc.)
-                    "paths = [p for p in map(Path, sys.path) if p and p.is_absolute() and p.is_dir()]; "
+                    "cwd = Path.cwd(); "
+                    # Filter sys.path to include only site-packages and editable install paths
+                    # Exclude: current dir, .zip files, base Python lib dirs (lib/python3.x without site-packages)
+                    "paths = [p for p in map(Path, sys.path) if p and p.is_absolute() and p.is_dir() "
+                    "and p != cwd "  # Exclude current working directory
+                    "and ('site-packages' in p.parts or 'dist-packages' in p.parts or "
+                    # Include paths added by .pth files for editable installs (src dirs in projects)
+                    "any((p / name).is_file() for name in ['.pth', 'setup.py', 'pyproject.toml']))]; "
                     "print(json.dumps([str(p) for p in paths]))",
                 ],
                 capture_output=True,
@@ -110,9 +118,26 @@ class PythonEnvironment:
         """Create a PythonEnvironment from the current Python interpreter."""
         import site
 
+        # Get the current working directory to exclude it from sys.path scan
+        cwd = Path.cwd()
+
         # Use sys.path to include both site-packages and editable installs
-        # Filter to absolute paths only (exclude current directory, relative paths, etc.)
-        site_packages = [p for p in map(Path, sys.path) if p and p.is_absolute() and p.is_dir()]
+        # Filter to only include site-packages and editable install paths,
+        # excluding the base Python installation directories and current working directory
+        site_packages = [
+            p
+            for p in map(Path, sys.path)
+            if p
+            and p.is_absolute()
+            and p.is_dir()
+            and p != cwd  # Exclude current working directory
+            and (
+                "site-packages" in p.parts
+                or "dist-packages" in p.parts
+                # Include paths added by .pth files for editable installs
+                or any((p / name).is_file() for name in [".pth", "setup.py", "pyproject.toml"])
+            )
+        ]
         user_site_path = site.getusersitepackages()
         user_site = (
             Path(user_site_path) if user_site_path and Path(user_site_path).exists() else None
