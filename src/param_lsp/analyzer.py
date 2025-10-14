@@ -27,7 +27,6 @@ like Panel, HoloViews, Bokeh, and others.
 from __future__ import annotations
 
 import inspect
-import logging
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -59,8 +58,9 @@ NumericValue = int | float | None  # Numeric values from nodes
 BoolValue = bool | None  # Boolean values from nodes
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from ._logging import get_logger
+
+logger = get_logger(__name__, "analyzer")
 
 
 class ParamAnalyzer:

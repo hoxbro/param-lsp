@@ -4,8 +4,9 @@ import argparse
 import logging
 
 from .__version import __version__
+from ._logging import get_logger, setup_colored_logging
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, "main")
 
 _DESCRIPTION = """\
 param-lsp: Language Server Protocol implementation for HoloViz Param
@@ -67,9 +68,9 @@ def main():
 
     args = parser.parse_args()
 
-    # Configure logging level
+    # Configure colored logging
     log_level = getattr(logging, args.log_level)
-    logging.basicConfig(level=log_level)
+    setup_colored_logging(level=log_level)
 
     # Configure Python environment for external library analysis
     # Priority: CLI argument > environment variables > current environment
