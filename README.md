@@ -17,16 +17,7 @@ _Demo video coming soon_
 
 ## Installation
 
-Install param-lsp using one of the following methods:
-
 ```bash
-# Using pipx (recommended for command-line tools)
-pipx install param-lsp
-
-# Using uv
-uv tool install param-lsp
-
-# Using pip
 pip install param-lsp
 ```
 
