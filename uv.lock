@@ -1762,8 +1762,8 @@ jupyter = [
 [package.dev-dependencies]
 dev = [
     { name = "debugpy" },
-    { name = "holoviews", marker = "python_full_version != '3.14.*'" },
-    { name = "panel", marker = "python_full_version != '3.14.*'" },
+    { name = "holoviews" },
+    { name = "panel" },
     { name = "param-lsp", extra = ["jupyter"] },
     { name = "pytest" },
     { name = "setuptools-scm" },
@@ -1788,8 +1788,8 @@ provides-extras = ["jupyter"]
 [package.metadata.requires-dev]
 dev = [
     { name = "debugpy" },
-    { name = "holoviews", marker = "python_full_version != '3.14.*'" },
-    { name = "panel", marker = "python_full_version != '3.14.*'" },
+    { name = "holoviews" },
+    { name = "panel" },
     { name = "param-lsp", extras = ["jupyter"] },
     { name = "pytest" },
     { name = "setuptools-scm" },
