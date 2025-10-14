@@ -27,7 +27,6 @@ from ._server.completion import CompletionMixin
 from ._server.hover import HoverMixin
 from ._server.validation import ValidationMixin
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
