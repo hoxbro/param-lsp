@@ -74,8 +74,10 @@ class ColoredFormatter(logging.Formatter):
         ct = self.converter(record.created)
         timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
-        # Use ParamLSP as the app name (like ServerApp in JupyterLab)
-        app_name = "ParamLSP"
+        # Determine app name based on logger name
+        # Use the root module name (e.g., "param_lsp" -> "ParamLSP", "pygls" -> "pygls")
+        logger_root = record.name.split(".")[0]
+        app_name = "ParamLSP" if logger_root == "param_lsp" else logger_root
 
         # Build the formatted message in JupyterLab style
         # Module context is added by ContextLogger via get_logger()
@@ -110,8 +112,10 @@ class PlainFormatter(logging.Formatter):
         ct = self.converter(record.created)
         timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
-        # Use ParamLSP as the app name (like ServerApp in JupyterLab)
-        app_name = "ParamLSP"
+        # Determine app name based on logger name
+        # Use the root module name (e.g., "param_lsp" -> "ParamLSP", "pygls" -> "pygls")
+        logger_root = record.name.split(".")[0]
+        app_name = "ParamLSP" if logger_root == "param_lsp" else logger_root
 
         # Build the formatted message in JupyterLab style
         # Module context is added by ContextLogger via get_logger()
@@ -127,6 +131,8 @@ class PlainFormatter(logging.Formatter):
 def setup_colored_logging(level: int = logging.INFO) -> None:
     """Configure colored logging for param-lsp in JupyterLab style.
 
+    Applies formatting to all loggers (param_lsp, pygls, etc.) with appropriate app names.
+
     Args:
         level: The logging level to use (e.g., logging.INFO, logging.DEBUG)
     """
@@ -136,7 +142,7 @@ def setup_colored_logging(level: int = logging.INFO) -> None:
     # Create formatter (use colored if terminal supports it, otherwise plain)
     formatter = ColoredFormatter() if supports_color else PlainFormatter()
 
-    # Configure root logger
+    # Configure root logger to apply formatting to all logs
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
@@ -148,3 +154,9 @@ def setup_colored_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
+
+    # Set param_lsp to specified level
+    logging.getLogger("param_lsp").setLevel(level)
+
+    # Set pygls to INFO to show registration messages
+    logging.getLogger("pygls").setLevel(logging.INFO)
