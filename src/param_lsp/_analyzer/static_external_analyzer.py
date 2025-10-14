@@ -128,7 +128,11 @@ class ExternalClassInspector:
 
         return dependencies
 
-    def _build_reexport_map(self, library_name: str, source_paths: list[Path]) -> dict[str, str]:
+    def _build_reexport_map(
+        self,
+        library_name: str,
+        file_data: dict[Path, tuple[Any, dict[str, str], list[str]]],
+    ) -> dict[str, str]:
         """Build a map of re-exported class paths from __init__.py files.
 
         Parses __init__.py files to understand re-exports like:
@@ -138,22 +142,21 @@ class ExternalClassInspector:
 
         Args:
             library_name: Name of the library (e.g., "panel")
-            source_paths: List of all source file paths in the library
+            file_data: Dictionary mapping file paths to (tree, imports, source_lines)
 
         Returns:
             Dictionary mapping short paths (re-exported) to full paths (actual definition)
         """
         reexport_map: dict[str, str] = {}  # short_path -> full_path
 
-        # Find all __init__.py files
-        init_files = [p for p in source_paths if p.name == "__init__.py"]
+        # Find all __init__.py files in file_data
+        init_files = [p for p in file_data if p.name == "__init__.py"]
 
         logger.debug(f"Building re-export map from {len(init_files)} __init__.py files")
 
         for init_file in init_files:
             try:
-                source_code = init_file.read_text(encoding="utf-8")
-                tree = parso.parse(source_code)
+                tree, _, _ = file_data[init_file]
 
                 # Extract the module path for this __init__.py
                 # e.g., /path/to/panel/widgets/__init__.py -> panel.widgets
@@ -174,7 +177,7 @@ class ExternalClassInspector:
                     logger.debug(f"Could not determine module path for {init_file}")
                     continue
 
-                # Parse import statements
+                # Parse import statements from already-parsed tree
                 for node in parso_utils.walk_tree(tree):
                     if node.type == "import_from":
                         # Extract "from .module import Name1, Name2"
@@ -426,65 +429,100 @@ class ExternalClassInspector:
             logger.debug(f"No source files found for {library_name}")
             return 0
 
-        # Phase 0: Build re-export map
-        logger.debug("Phase 0: Building re-export map")
-        reexport_map = self._build_reexport_map(library_name, source_paths)
-
-        # Phase 1: Build inheritance map
-        logger.debug("Phase 1: Building inheritance map")
+        # Phase 0: Parse all files once and extract imports, classes, and re-exports in a single pass
+        logger.debug("Phase 0: Parsing all source files and extracting classes")
+        file_data: dict[
+            Path, tuple[Any, dict[str, str], list[str]]
+        ] = {}  # path -> (tree, imports, source_lines)
         inheritance_map: dict[str, list[str]] = {}  # full_class_path -> [base_class_paths]
         class_ast_nodes: dict[
             str, tuple[NodeOrLeaf, dict[str, str], Path]
         ] = {}  # full_class_path -> (ast_node, imports, source_file)
+        reexport_map: dict[str, str] = {}  # short_path -> full_path
+
+        # Pre-compute site directories and library root path for module path resolution
+        search_dirs = list(self.python_env.site_packages)
+        if self.python_env.user_site:
+            search_dirs.append(self.python_env.user_site)
+
+        # Cache library root path to avoid repeated exists() and is_relative_to() checks
+        library_root_path = None
+        for site_dir in search_dirs:
+            lib_path = site_dir / library_name
+            if lib_path.exists():
+                library_root_path = lib_path
+                break
+
+        if not library_root_path:
+            logger.debug(f"Could not find library root path for {library_name}")
+            return 0
 
         for source_path in source_paths:
             try:
                 source_code = source_path.read_text(encoding="utf-8")
                 tree = parso.parse(source_code)
+                source_lines = source_code.split("\n")
 
-                # Extract imports for this file
+                # Extract imports, classes, and re-exports in a single tree walk
                 file_imports: dict[str, str] = {}
                 import_handler = ImportHandler(file_imports)
+
+                # Check if this is an __init__.py for re-export processing
+                is_init_file = source_path.name == "__init__.py"
+                module_path = None
+                if is_init_file and source_path.is_relative_to(library_root_path):
+                    # Pre-compute module path for this __init__.py using cached library root
+                    relative_path = source_path.relative_to(library_root_path)
+                    parts = list(relative_path.parts[:-1])  # Exclude __init__.py
+                    module_path = ".".join([library_name, *parts]) if parts else library_name
+
                 for node in parso_utils.walk_tree(tree):
+                    # Extract imports
                     if node.type == "import_name":
                         import_handler.handle_import(node)
                     elif node.type == "import_from":
                         import_handler.handle_import_from(node)
-
-                # Cache source lines for later parameter extraction
-                self.file_source_cache[source_path] = source_code.split("\n")
-
-                # Find all class definitions
-                for node in parso_utils.walk_tree(tree):
-                    if node.type == "classdef":
+                        # Also process re-exports if this is an __init__.py
+                        if is_init_file and module_path:
+                            self._process_import_from_for_reexport(
+                                node, module_path, library_name, reexport_map
+                            )
+                    # Extract class definitions
+                    elif node.type == "classdef":
                         class_name = parso_utils.get_class_name(node)
-                        if not class_name:
-                            continue
+                        if class_name:
+                            # Construct full class path using cached library root
+                            full_class_path = self._get_full_class_path_cached(
+                                source_path, class_name, library_name, library_root_path
+                            )
+                            if full_class_path:
+                                # Get base classes as full paths
+                                bases = self._resolve_base_class_paths(
+                                    node, file_imports, library_name, source_path
+                                )
+                                # Store in inheritance map
+                                inheritance_map[full_class_path] = bases
+                                class_ast_nodes[full_class_path] = (
+                                    node,
+                                    file_imports,
+                                    source_path,
+                                )
 
-                        # Construct full class path
-                        full_class_path = self._get_full_class_path(
-                            source_path, class_name, library_name
-                        )
-                        if not full_class_path:
-                            continue
-
-                        # Get base classes as full paths
-                        bases = self._resolve_base_class_paths(
-                            node, file_imports, library_name, source_path
-                        )
-
-                        # Store in inheritance map
-                        inheritance_map[full_class_path] = bases
-                        class_ast_nodes[full_class_path] = (node, file_imports, source_path)
+                # Store parsed data
+                file_data[source_path] = (tree, file_imports, source_lines)
+                # Cache source lines for later parameter extraction
+                self.file_source_cache[source_path] = source_lines
 
             except Exception as e:
-                logger.debug(f"Error processing {source_path}: {e}")
+                logger.debug(f"Error parsing {source_path}: {e}")
                 continue
 
-        logger.debug(f"Found {len(inheritance_map)} classes in inheritance map")
+        logger.debug(
+            f"Parsed {len(file_data)} source files, found {len(inheritance_map)} classes, {len(reexport_map)} re-exports"
+        )
 
-        # Phase 2: Iterative Parameterized detection
-        logger.debug("Phase 2: Iterative Parameterized detection")
+        # Phase 1: Iterative Parameterized detection
+        logger.debug("Phase 1: Iterative Parameterized detection")
         parameterized_classes: set[str] = set()
 
         # Round 1: Find direct Parameterized subclasses
@@ -518,8 +556,8 @@ class ExternalClassInspector:
 
         logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
 
-        # Phase 3: Extract parameters for Parameterized classes
-        logger.debug("Phase 3: Extracting parameters")
+        # Phase 2: Extract parameters for Parameterized classes
+        logger.debug("Phase 2: Extracting parameters")
         count = 0
         for class_path in parameterized_classes:
             try:
@@ -668,6 +706,39 @@ class ExternalClassInspector:
         # Clean up AST caches when class not found
         self._cleanup_ast_caches()
         return None
+
+    def _get_full_class_path_cached(
+        self, source_path: Path, class_name: str, library_name: str, library_root_path: Path
+    ) -> str | None:
+        """Construct full class path from source file path and class name using cached library root.
+
+        Args:
+            source_path: Path to the source file
+            class_name: Name of the class
+            library_name: Root library name (e.g., "panel")
+            library_root_path: Pre-resolved library root path
+
+        Returns:
+            Full class path like "panel.widgets.IntSlider" or None if unable to construct
+        """
+        try:
+            if source_path.is_relative_to(library_root_path):
+                # Get relative path from library root
+                relative_path = source_path.relative_to(library_root_path)
+                # Convert path to module notation
+                parts = list(relative_path.parts[:-1])  # Exclude filename
+                if relative_path.stem != "__init__":
+                    parts.append(relative_path.stem)
+                # Construct full path: library.module.submodule.ClassName
+                module_path = ".".join([library_name, *parts])
+                return f"{module_path}.{class_name}"
+
+            return None
+        except Exception as e:
+            logger.debug(
+                f"Failed to construct full class path for {class_name} in {source_path}: {e}"
+            )
+            return None
 
     def _get_full_class_path(
         self, source_path: Path, class_name: str, library_name: str
