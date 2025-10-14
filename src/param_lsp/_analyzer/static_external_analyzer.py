@@ -8,13 +8,13 @@ from source files directly.
 
 from __future__ import annotations
 
-import logging
 import sys
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
 import parso
 
+from param_lsp._logging import get_logger
 from param_lsp.cache import external_library_cache
 from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
 from param_lsp.models import ParameterInfo, ParameterizedInfo
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
     from .python_environment import PythonEnvironment
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, "cache")
 
 _STDLIB_MODULES = tuple(f"{c}." for c in ("__future__", *sys.stdlib_module_names))
 

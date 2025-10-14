@@ -8,12 +8,13 @@ site-packages directories, enabling cross-environment analysis.
 from __future__ import annotations
 
 import json
-import logging
 import subprocess
 import sys
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from param_lsp._logging import get_logger
+
+logger = get_logger(__name__, "python_env")
 
 
 class PythonEnvironment:
