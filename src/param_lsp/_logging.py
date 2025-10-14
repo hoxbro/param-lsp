@@ -30,7 +30,7 @@ def get_logger(name: str, context: str) -> ContextLogger:
     Example:
         >>> logger = get_logger(__name__, "server")
         >>> logger.info("Starting server")
-        # Output: [I 2025-10-14 10:00:00.000 ParamLSP] server | Starting server
+        # Output: [I 2025-10-14 10:00:00.000 param-lsp] server | Starting server
     """
     base_logger = logging.getLogger(name)
     return ContextLogger(base_logger, {"context": context})
@@ -75,9 +75,9 @@ class ColoredFormatter(logging.Formatter):
         timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
         # Determine app name based on logger name
-        # Use the root module name (e.g., "param_lsp" -> "ParamLSP", "pygls" -> "pygls")
+        # Use the root module name (e.g., "param_lsp" -> "param-lsp", "pygls" -> "pygls")
         logger_root = record.name.split(".")[0]
-        app_name = "ParamLSP" if logger_root == "param_lsp" else logger_root
+        app_name = "param-lsp" if logger_root == "param_lsp" else logger_root
 
         # Build the formatted message in JupyterLab style
         # Module context is added by ContextLogger via get_logger()
@@ -113,9 +113,9 @@ class PlainFormatter(logging.Formatter):
         timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
         # Determine app name based on logger name
-        # Use the root module name (e.g., "param_lsp" -> "ParamLSP", "pygls" -> "pygls")
+        # Use the root module name (e.g., "param_lsp" -> "param-lsp", "pygls" -> "pygls")
         logger_root = record.name.split(".")[0]
-        app_name = "ParamLSP" if logger_root == "param_lsp" else logger_root
+        app_name = "param-lsp" if logger_root == "param_lsp" else logger_root
 
         # Build the formatted message in JupyterLab style
         # Module context is added by ContextLogger via get_logger()
@@ -158,5 +158,5 @@ def setup_colored_logging(level: int = logging.INFO) -> None:
     # Set param_lsp to specified level
     logging.getLogger("param_lsp").setLevel(level)
 
-    # Set pygls to INFO to show registration messages
-    logging.getLogger("pygls").setLevel(logging.INFO)
+    # Set pygls to same level as param_lsp
+    logging.getLogger("pygls").setLevel(level)
