@@ -20,7 +20,7 @@ from .parameter_extractor import (
     is_none_value,
     resolve_parameter_class,
 )
-from .parso_utils import (
+from .ts_utils import (
     find_all_parameter_assignments,
     get_children,
     get_class_name,
@@ -31,12 +31,13 @@ from .parso_utils import (
 )
 
 if TYPE_CHECKING:
+    from tree_sitter import Node
+
     from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
     from param_lsp._types import (
         ExternalParamClassDict,
         ImportDict,
         ParamClassDict,
-        ParsoNode,
         TypeErrorDict,
     )
 
@@ -79,7 +80,7 @@ class ParameterValidator:
         self.type_errors: list[TypeErrorDict] = []
 
     def check_parameter_types(
-        self, tree: ParsoNode, lines: list[str], cached_nodes: list[ParsoNode] | None = None
+        self, tree: Node, lines: list[str], cached_nodes: list[Node] | None = None
     ) -> list[TypeErrorDict]:
         """Perform comprehensive parameter type validation on a parsed AST.
 
@@ -105,21 +106,21 @@ class ParameterValidator:
         nodes_to_check = cached_nodes if cached_nodes is not None else walk_tree(tree)
 
         for node in nodes_to_check:
-            if node.type == "classdef":
+            if node.type == "class_definition":
                 self._check_class_parameter_defaults(node, lines)
 
             # Check runtime parameter assignments like obj.param = value
-            elif node.type == "expr_stmt" and is_assignment_stmt(node):
+            elif node.type in ("assignment", "expression_statement") and is_assignment_stmt(node):
                 if self._has_attribute_target(node):
                     self._check_runtime_parameter_assignment_parso(node, lines)
 
             # Check constructor calls like MyClass(x="A")
-            elif node.type in ("power", "atom_expr") and is_function_call(node):
+            elif node.type == "call" and is_function_call(node):
                 self._check_constructor_parameter_types(node, lines)
 
         return self.type_errors.copy()
 
-    def _check_class_parameter_defaults(self, class_node: ParsoNode, lines: list[str]) -> None:
+    def _check_class_parameter_defaults(self, class_node: Node, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
         class_name = get_class_name(class_node)
         if not class_name or class_name not in self.param_classes:
@@ -130,8 +131,8 @@ class ParameterValidator:
         ):
             self._check_parameter_default_type(assignment_node, target_name, lines)
 
-    def _check_constructor_parameter_types(self, node: ParsoNode, lines: list[str]) -> None:
-        """Check for type errors in constructor parameter calls like MyClass(x="A") (parso version)."""
+    def _check_constructor_parameter_types(self, node: Node, lines: list[str]) -> None:
+        """Check for type errors in constructor parameter calls like MyClass(x="A") (tree-sitter version)."""
         # Get the class name from the call
         class_name = self._get_instance_class(node)
         if not class_name:
@@ -196,47 +197,41 @@ class ParameterValidator:
                 node, class_name, param_name, cls, param_value
             )
 
-    def _infer_value_type(self, node: ParsoNode) -> type | None:
-        """Infer Python type from parso node."""
-        if hasattr(node, "type"):
-            if node.type == "number":
+    def _infer_value_type(self, node: Node) -> type | None:
+        """Infer Python type from tree-sitter node."""
+        if node:
+            if node.type in ("integer", "float"):
                 # Check if it's a float or int
-                value = get_value(node)
-                if value is None:
-                    return None
-                if "." in value:
+                if node.type == "float":
                     return float
                 else:
                     return int
             elif node.type == "string":
                 return str
-            elif node.type == "name":
-                if get_value(node) in {"True", "False"}:
+            elif node.type == "identifier":
+                value = get_value(node)
+                if value in {"True", "False"}:
                     return bool
-                elif get_value(node) == "None":
+                elif value == "None":
                     return type(None)
                 # Could be a variable - would need more sophisticated analysis
                 return None
-            elif node.type == "keyword":
-                if get_value(node) in {"True", "False"}:
-                    return bool
-                elif get_value(node) == "None":
-                    return type(None)
-                return None
-            elif node.type == "atom":
-                # Check for list, dict, tuple
-                if get_children(node) and get_value(get_children(node)[0]) == "[":
-                    return list
-                elif get_children(node) and get_value(get_children(node)[0]) == "{":
-                    return dict
-                elif get_children(node) and get_value(get_children(node)[0]) == "(":
-                    return tuple
+            elif node.type in ("true", "false"):
+                return bool
+            elif node.type == "none":
+                return type(None)
+            elif node.type == "list":
+                return list
+            elif node.type == "dictionary":
+                return dict
+            elif node.type == "tuple":
+                return tuple
         return None
 
-    def _is_boolean_literal(self, node: ParsoNode) -> bool:
-        """Check if a parso node represents a boolean literal (True/False)."""
-        return (node.type == "name" and get_value(node) in ("True", "False")) or (
-            node.type == "keyword" and get_value(node) in ("True", "False")
+    def _is_boolean_literal(self, node: Node) -> bool:
+        """Check if a tree-sitter node represents a boolean literal (True/False)."""
+        return node.type in ("true", "false") or (
+            node.type == "identifier" and get_value(node) in ("True", "False")
         )
 
     def _format_expected_types(self, expected_types: tuple) -> str:
@@ -248,15 +243,15 @@ class ParameterValidator:
             return " or ".join(type_names)
 
     def _create_type_error(
-        self, node: ParsoNode | None, message: str, code: str, severity: str = "error"
+        self, node: Node | None, message: str, code: str, severity: str = "error"
     ) -> None:
-        """Helper function to create and append a type error (parso version)."""
-        # Get position information from parso node
-        if node is not None and hasattr(node, "start_pos"):
-            line = node.start_pos[0] - 1  # Convert to 0-based
-            col = node.start_pos[1]
-            end_line = node.end_pos[0] - 1 if hasattr(node, "end_pos") else line
-            end_col = node.end_pos[1] if hasattr(node, "end_pos") else col
+        """Helper function to create and append a type error (tree-sitter version)."""
+        # Get position information from tree-sitter node
+        if node is not None:
+            line = node.start_point[0]  # tree-sitter is 0-indexed
+            col = node.start_point[1]
+            end_line = node.end_point[0]
+            end_col = node.end_point[1]
         else:
             # Fallback if position info is not available
             line = 0
@@ -304,29 +299,29 @@ class ParameterValidator:
         right_bracket = "]" if right_inclusive else ")"
         return f"{left_bracket}{min_str}, {max_str}{right_bracket}"
 
-    def _has_attribute_target(self, node: ParsoNode) -> bool:
+    def _has_attribute_target(self, node: Node) -> bool:
         """Check if assignment has an attribute target (like obj.attr = value)."""
+        # In tree-sitter, check if left side of assignment is an attribute
+        if node.type == "assignment":
+            left_node = node.child_by_field_name("left")
+            if left_node and left_node.type == "attribute":
+                return True
+
+        # Fallback: check children for attribute nodes
         for child in get_children(node):
-            if child.type in ("power", "atom_expr"):
-                # Check if this node has attribute access (trailer with '.')
-                for sub_child in get_children(child):
-                    if (
-                        sub_child.type == "trailer"
-                        and get_children(sub_child)
-                        and get_value(get_children(sub_child)[0]) == "."
-                    ):
-                        return True
-            elif child.type == "operator" and get_value(child) == "=":
+            if child.type == "attribute":
+                return True
+            elif child.text == b"=" or get_value(child) == "=":
                 break
         return False
 
     def _check_constructor_bounds(
         self,
-        node: ParsoNode,
+        node: Node,
         class_name: str,
         param_name: str,
         cls: str,
-        param_value: ParsoNode,
+        param_value: Node,
     ) -> None:
         """Check if constructor parameter value is within parameter bounds."""
         # Only check bounds for numeric types
@@ -374,11 +369,11 @@ class ParameterValidator:
 
     def _check_constructor_container_constraints(
         self,
-        node: ParsoNode,
+        node: Node,
         class_name: str,
         param_name: str,
         cls: str,
-        param_value: ParsoNode,
+        param_value: Node,
     ) -> None:
         """Check container constraints for List item_type and Tuple length."""
         if cls == "List":
@@ -388,10 +383,10 @@ class ParameterValidator:
 
     def _check_list_item_type_constructor(
         self,
-        node: ParsoNode,
+        node: Node,
         class_name: str,
         param_name: str,
-        param_value: ParsoNode,
+        param_value: Node,
     ) -> None:
         """Check that all items in a List match the specified item_type."""
         # Get item_type constraint for this parameter
@@ -413,10 +408,10 @@ class ParameterValidator:
 
     def _check_tuple_length_constructor(
         self,
-        node: ParsoNode,
+        node: Node,
         class_name: str,
         param_name: str,
-        param_value: ParsoNode,
+        param_value: Node,
     ) -> None:
         """Check that Tuple has the expected length."""
         # Get length constraint for this parameter
@@ -434,16 +429,20 @@ class ParameterValidator:
             message = f"Tuple parameter '{param_name}' has {actual_length} elements, expected {expected_length}"
             self._create_type_error(node, message, "tuple-length-mismatch")
 
-    def _check_parameter_default_type(
-        self, node: ParsoNode, param_name: str, lines: list[str]
-    ) -> None:
-        """Check if parameter default value matches declared type (parso version)."""
+    def _check_parameter_default_type(self, node: Node, param_name: str, lines: list[str]) -> None:
+        """Check if parameter default value matches declared type (tree-sitter version)."""
         # Find the parameter call on the right side of the assignment
         param_call = None
-        for child in get_children(node):
-            if child.type in ("power", "atom_expr"):
-                param_call = child
-                break
+        if node.type == "assignment":
+            right_node = node.child_by_field_name("right")
+            if right_node and right_node.type == "call":
+                param_call = right_node
+        else:
+            # Fallback: scan children for call node
+            for child in get_children(node):
+                if child.type == "call":
+                    param_call = child
+                    break
 
         if not param_call:
             return
@@ -502,48 +501,40 @@ class ParameterValidator:
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
 
-    def _check_runtime_parameter_assignment_parso(self, node: ParsoNode, lines: list[str]) -> None:
-        """Check runtime parameter assignments like obj.param = value (parso version)."""
-        # Extract target and assigned value from parso expr_stmt node
+    def _check_runtime_parameter_assignment_parso(self, node: Node, lines: list[str]) -> None:
+        """Check runtime parameter assignments like obj.param = value (tree-sitter version)."""
+        # Extract target and assigned value
         target = None
         assigned_value = None
 
-        # Look for attribute target and assigned value
-        for child in get_children(node):
-            if child.type in ("power", "atom_expr"):
-                # Check if this is an attribute access (obj.attr)
-                has_attribute = False
-                for sub_child in get_children(child):
-                    if (
-                        sub_child.type == "trailer"
-                        and get_children(sub_child)
-                        and get_value(get_children(sub_child)[0]) == "."
-                    ):
-                        has_attribute = True
-                        break
-                if has_attribute:
+        # In tree-sitter, check if this is an assignment with attribute target
+        if node.type == "assignment":
+            left_node = node.child_by_field_name("left")
+            right_node = node.child_by_field_name("right")
+            if left_node and left_node.type == "attribute":
+                target = left_node
+                assigned_value = right_node
+        else:
+            # Fallback: scan children for attribute and value
+            for child in get_children(node):
+                if child.type == "attribute":
                     target = child
-            elif child.type == "operator" and get_value(child) == "=":
-                # Next non-operator child should be the assigned value
-                continue
-            elif target is not None and child.type != "operator":
-                assigned_value = child
-                break
+                elif child.text == b"=" or get_value(child) == "=":
+                    continue
+                elif target is not None:
+                    assigned_value = child
+                    break
 
         if not target or not assigned_value:
             return
 
         # Extract parameter name from the attribute access
+        # In tree-sitter, attribute has 'attribute' field
         param_name = None
-        for child in get_children(target):
-            if (
-                child.type == "trailer"
-                and len(get_children(child)) >= 2
-                and get_value(get_children(child)[0]) == "."
-                and get_children(child)[1].type == "name"
-            ):
-                param_name = get_value(get_children(child)[1])
-                break
+        if target.type == "attribute":
+            attr_node = target.child_by_field_name("attribute")
+            if attr_node:
+                param_name = get_value(attr_node)
 
         if not param_name:
             return
@@ -631,11 +622,11 @@ class ParameterValidator:
 
     def _check_runtime_bounds_parso(
         self,
-        node: ParsoNode,
+        node: Node,
         instance_class: str,
         param_name: str,
         cls: str,
-        assigned_value: ParsoNode,
+        assigned_value: Node,
     ) -> None:
         """Check if assigned value is within parameter bounds (parso version)."""
         # Only check bounds for numeric types
@@ -792,9 +783,7 @@ class ParameterValidator:
 
         return False
 
-    def _check_parameter_constraints(
-        self, node: ParsoNode, param_name: str, lines: list[str]
-    ) -> None:
+    def _check_parameter_constraints(self, node: Node, param_name: str, lines: list[str]) -> None:
         """Check for parameter-specific constraints (parso version)."""
         # Find the parameter call on the right side of the assignment
         param_call = None
@@ -913,7 +902,7 @@ class ParameterValidator:
                     message = f"Parameter '{param_name}' has empty default but bounds specified"
                     self._create_type_error(node, message, "empty-default-with-bounds", "warning")
 
-    def _check_deprecated_parameter_type(self, node: ParsoNode, param_type: str) -> None:
+    def _check_deprecated_parameter_type(self, node: Node, param_type: str) -> None:
         """Check if a parameter type is deprecated and emit a warning."""
         if param_type in DEPRECATED_PARAMETER_TYPES:
             deprecation_info = DEPRECATED_PARAMETER_TYPES[param_type]
@@ -956,7 +945,7 @@ class ParameterValidator:
 
         return None
 
-    def _extract_list_items(self, node: ParsoNode) -> list[ParsoNode] | None:
+    def _extract_list_items(self, node: Node) -> list[Node] | None:
         """Extract items from a list literal like [1, 2, 3]."""
         if not hasattr(node, "type") or node.type != "atom":
             return None
@@ -979,7 +968,7 @@ class ParameterValidator:
 
         return items
 
-    def _extract_tuple_items(self, node: ParsoNode) -> list[ParsoNode] | None:
+    def _extract_tuple_items(self, node: Node) -> list[Node] | None:
         """Extract items from a tuple literal like (1, 2, 3)."""
         if not hasattr(node, "type") or node.type != "atom":
             return None
