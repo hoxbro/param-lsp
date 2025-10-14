@@ -190,7 +190,7 @@ class ImportHandler:
         if not module_name:
             return
 
-        # Find imported names - look for aliased_import or identifier children
+        # Find imported names - look for aliased_import, identifier, or dotted_name children
         for child in ts_utils.get_children(node):
             if child.type == "aliased_import":
                 # Handle "from module import name as alias"
@@ -202,9 +202,9 @@ class ImportHandler:
                     if import_name:
                         full_name = f"{module_name}.{import_name}"
                         self.imports[alias_name or import_name] = full_name
-            elif child.type == "identifier" and child != module_node:
+            elif child.type in ("identifier", "dotted_name") and child != module_node:
                 # Handle "from module import name"
-                import_name = ts_utils.get_value(child)
+                import_name = self._reconstruct_dotted_name(child)
                 if import_name and import_name not in ("from", "import"):
                     full_name = f"{module_name}.{import_name}"
                     self.imports[import_name] = full_name
