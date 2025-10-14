@@ -45,18 +45,12 @@ class ColoredFormatter(logging.Formatter):
         ct = self.converter(record.created)
         timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
-        # Simplify module name (remove param_lsp prefix for cleaner output)
-        module_name = record.name
-        if module_name.startswith("param_lsp."):
-            module_name = module_name[10:]  # Remove "param_lsp." prefix
-            # Special case: __main__ should show as param-lsp
-            if module_name == "__main__":
-                module_name = "param-lsp"
-        elif module_name == "param_lsp":
-            module_name = "param-lsp"
+        # Use ParamLSP as the app name (like ServerApp in JupyterLab)
+        app_name = "ParamLSP"
 
         # Build the formatted message in JupyterLab style
-        prefix = f"{color}[{level_code} {timestamp} {module_name}]{self.RESET}"
+        # The module context should be added by the logger in the message with " | "
+        prefix = f"{color}[{level_code} {timestamp} {app_name}]{self.RESET}"
         message = f"{prefix} {record.getMessage()}"
 
         # Add exception info if present
@@ -87,18 +81,12 @@ class PlainFormatter(logging.Formatter):
         ct = self.converter(record.created)
         timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
-        # Simplify module name (remove param_lsp prefix for cleaner output)
-        module_name = record.name
-        if module_name.startswith("param_lsp."):
-            module_name = module_name[10:]  # Remove "param_lsp." prefix
-            # Special case: __main__ should show as param-lsp
-            if module_name == "__main__":
-                module_name = "param-lsp"
-        elif module_name == "param_lsp":
-            module_name = "param-lsp"
+        # Use ParamLSP as the app name (like ServerApp in JupyterLab)
+        app_name = "ParamLSP"
 
         # Build the formatted message in JupyterLab style
-        message = f"[{level_code} {timestamp} {module_name}] {record.getMessage()}"
+        # The module context should be added by the logger in the message with " | "
+        message = f"[{level_code} {timestamp} {app_name}] {record.getMessage()}"
 
         # Add exception info if present
         if record.exc_info:
