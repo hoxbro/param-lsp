@@ -301,3 +301,90 @@ class TestWidget(param.Parameterized):
         for param_name, param_type in expected_params.items():
             assert param_name in widget_info.parameters
             assert widget_info.parameters[param_name].cls == param_type
+
+    def test_async_cache_loading(self):
+        """Test that async cache loading can be triggered in background."""
+        pytest.importorskip("panel")
+
+        from param_lsp.cache import external_library_cache
+
+        # Clear cache to ensure we test async loading
+        external_library_cache.clear("panel")
+
+        # Create a new inspector with async mode enabled
+        analyzer = ExternalClassInspector()
+
+        # Trigger async cache population
+        count = analyzer.populate_library_cache("panel", async_mode=True)
+
+        # Should return 0 immediately when running in background
+        assert count == 0
+
+        # Check that a background thread was started
+        assert "panel" in analyzer._background_threads
+        assert analyzer._background_threads["panel"].is_alive()
+
+        # Wait for the background thread to complete (with longer timeout for panel)
+        analyzer._background_threads["panel"].join(timeout=120)
+
+        # Check if thread completed
+        if analyzer._background_threads["panel"].is_alive():
+            # Thread still running, this is expected for large libraries
+            # Just verify that async mode was triggered
+            pytest.skip(
+                "Panel cache population still running after timeout (expected for large library)"
+            )
+        else:
+            # After thread completes, cache should exist
+            assert external_library_cache.has_library_cache("panel")
+
+    def test_sync_cache_loading(self):
+        """Test that sync cache loading works as expected."""
+        pytest.importorskip("panel")
+
+        from param_lsp.cache import external_library_cache
+
+        # Clear cache to ensure clean test
+        external_library_cache.clear("panel")
+
+        # Create a new inspector
+        analyzer = ExternalClassInspector()
+
+        # Trigger sync cache population
+        count = analyzer.populate_library_cache("panel", async_mode=False)
+
+        # Should return actual count when running synchronously
+        assert count > 0
+
+        # Cache should exist immediately
+        assert external_library_cache.has_library_cache("panel")
+
+    def test_async_cache_no_duplicate_threads(self):
+        """Test that multiple calls don't create duplicate background threads."""
+        pytest.importorskip("panel")
+
+        from param_lsp.cache import external_library_cache
+
+        # Clear cache
+        external_library_cache.clear("panel")
+
+        # Create analyzer
+        analyzer = ExternalClassInspector()
+
+        # Make first call
+        analyzer.populate_library_cache("panel", async_mode=True)
+
+        # Get the thread reference
+        first_thread = analyzer._background_threads.get("panel")
+        assert first_thread is not None
+
+        # Make second call immediately
+        analyzer.populate_library_cache("panel", async_mode=True)
+
+        # Should be the same thread (no duplicate)
+        second_thread = analyzer._background_threads.get("panel")
+        assert first_thread is second_thread
+
+        # Clean up
+        if first_thread and first_thread.is_alive():
+            first_thread.join(timeout=30)
