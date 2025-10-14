@@ -8,12 +8,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from .parso_utils import get_children, get_class_bases, get_value
+from .ts_utils import get_class_bases, get_value
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from parso.tree import NodeOrLeaf
+    from tree_sitter import Node
 
     from param_lsp.models import ParameterInfo, ParameterizedInfo
 
@@ -58,14 +58,14 @@ class InheritanceResolver:
         self.analyze_external_class_ast = analyze_external_class_ast_func
         self.resolve_full_class_path = resolve_full_class_path_func
 
-    def is_param_base(self, base: NodeOrLeaf, current_file_path: str | None = None) -> bool:
-        """Check if a base class is param.Parameterized or similar (parso node).
+    def is_param_base(self, base: Node, current_file_path: str | None = None) -> bool:
+        """Check if a base class is param.Parameterized or similar (tree-sitter node).
 
         Args:
             base: The base class AST node to check
             current_file_path: Path to the current file being analyzed (for cross-file resolution)
         """
-        if base.type == "name":
+        if base.type == "identifier":
             base_name = get_value(base)
             if not base_name:
                 return False
@@ -87,20 +87,24 @@ class InheritanceResolver:
             )
             if imported_class_info:
                 return True
-        elif base.type in ("power", "atom_expr"):
+        elif base.type == "attribute":
             # Handle dotted names like param.Parameterized or pn.widgets.IntSlider
+            # In tree-sitter, attribute has 'object' and 'attribute' fields
             parts = []
-            for child in get_children(base):
-                if child.type == "name":
-                    parts.append(get_value(child))
-                elif child.type == "trailer":
-                    parts.extend(
-                        [
-                            get_value(trailer_child)
-                            for trailer_child in get_children(child)
-                            if trailer_child.type == "name"
-                        ]
-                    )
+
+            # Recursively extract parts from attribute chain
+            current = base
+            while current:
+                if current.type == "attribute":
+                    attr_node = current.child_by_field_name("attribute")
+                    if attr_node:
+                        parts.insert(0, get_value(attr_node))
+                    current = current.child_by_field_name("object")
+                elif current.type == "identifier":
+                    parts.insert(0, get_value(current))
+                    current = None
+                else:
+                    break
 
             if len(parts) >= 2:
                 # Handle simple case: param.Parameterized
@@ -122,14 +126,14 @@ class InheritanceResolver:
         return False
 
     def collect_inherited_parameters(
-        self, node: NodeOrLeaf, current_file_path: str | None = None
+        self, node: Node, current_file_path: str | None = None
     ) -> dict[str, ParameterInfo]:
-        """Collect parameters from parent classes in inheritance hierarchy (parso node)."""
+        """Collect parameters from parent classes in inheritance hierarchy (tree-sitter node)."""
         inherited_parameters = {}  # Last wins
 
         bases = get_class_bases(node)
         for base in bases:
-            if base.type == "name":
+            if base.type == "identifier":
                 parent_class_name = get_value(base)
                 if not parent_class_name:
                     continue
@@ -152,7 +156,7 @@ class InheritanceResolver:
                         for param_name, param_info in imported_class_info.parameters.items():
                             inherited_parameters[param_name] = param_info  # noqa: PERF403
 
-            elif base.type in ("atom_expr", "power"):
+            elif base.type in ("attribute", "call"):
                 # Handle complex attribute access like pn.widgets.IntSlider
                 full_class_path = self.resolve_full_class_path(base)
                 # Skip analysis of param.Parameterized itself (base class has no parameters)
