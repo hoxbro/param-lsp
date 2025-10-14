@@ -49,8 +49,11 @@ class ColoredFormatter(logging.Formatter):
         module_name = record.name
         if module_name.startswith("param_lsp."):
             module_name = module_name[10:]  # Remove "param_lsp." prefix
+            # Special case: __main__ should show as param-lsp
+            if module_name == "__main__":
+                module_name = "param-lsp"
         elif module_name == "param_lsp":
-            module_name = "ParamLSP"
+            module_name = "param-lsp"
 
         # Build the formatted message in JupyterLab style
         prefix = f"{color}[{level_code} {timestamp} {module_name}]{self.RESET}"
@@ -88,8 +91,11 @@ class PlainFormatter(logging.Formatter):
         module_name = record.name
         if module_name.startswith("param_lsp."):
             module_name = module_name[10:]  # Remove "param_lsp." prefix
+            # Special case: __main__ should show as param-lsp
+            if module_name == "__main__":
+                module_name = "param-lsp"
         elif module_name == "param_lsp":
-            module_name = "ParamLSP"
+            module_name = "param-lsp"
 
         # Build the formatted message in JupyterLab style
         message = f"[{level_code} {timestamp} {module_name}] {record.getMessage()}"
