@@ -85,7 +85,7 @@ class ParameterValidator:
         """Perform comprehensive parameter type validation on a parsed AST.
 
         Args:
-            tree: The root parso AST node to validate
+            tree: The root tree-sitter AST node to validate
             lines: Source code lines for error reporting
             cached_nodes: Optional pre-computed list of all nodes for performance optimization
 
@@ -112,7 +112,7 @@ class ParameterValidator:
             # Check runtime parameter assignments like obj.param = value
             elif node.type in ("assignment", "expression_statement") and is_assignment_stmt(node):
                 if self._has_attribute_target(node):
-                    self._check_runtime_parameter_assignment_parso(node, lines)
+                    self._check_runtime_parameter_assignment(node, lines)
 
             # Check constructor calls like MyClass(x="A")
             elif node.type == "call" and is_function_call(node):
@@ -146,7 +146,7 @@ class ParameterValidator:
         if not is_valid_param_class:
             return
 
-        # Get keyword arguments from the parso node
+        # Get keyword arguments from the tree-sitter node
         kwargs = get_keyword_arguments(node)
 
         # Check each keyword argument passed to the constructor
@@ -172,7 +172,7 @@ class ParameterValidator:
 
                 # Special handling for Boolean parameters - they should only accept actual bool values
                 if cls == "Boolean" and inferred_type and inferred_type is not bool:
-                    # For parso nodes, check if it's a keyword node with True/False
+                    # For tree-sitter nodes, check if it's a keyword node with True/False
                     is_bool_value = (
                         hasattr(param_value, "type")
                         and param_value.type == "keyword"
@@ -501,8 +501,8 @@ class ParameterValidator:
         # Check for additional parameter constraints
         self._check_parameter_constraints(node, param_name, lines)
 
-    def _check_runtime_parameter_assignment_parso(self, node: Node, lines: list[str]) -> None:
-        """Check runtime parameter assignments like obj.param = value (tree-sitter version)."""
+    def _check_runtime_parameter_assignment(self, node: Node, lines: list[str]) -> None:
+        """Check runtime parameter assignments like obj.param = value."""
         # Extract target and assigned value
         target = None
         assigned_value = None
@@ -618,9 +618,9 @@ class ParameterValidator:
                 self._create_type_error(node, message, "runtime-type-mismatch")
 
         # Check bounds for numeric parameters
-        self._check_runtime_bounds_parso(node, instance_class, param_name, cls, assigned_value)
+        self._check_runtime_bounds(node, instance_class, param_name, cls, assigned_value)
 
-    def _check_runtime_bounds_parso(
+    def _check_runtime_bounds(
         self,
         node: Node,
         instance_class: str,
@@ -628,7 +628,7 @@ class ParameterValidator:
         cls: str,
         assigned_value: Node,
     ) -> None:
-        """Check if assigned value is within parameter bounds (parso version)."""
+        """Check if assigned value is within parameter bounds."""
         # Only check bounds for numeric types
         if cls not in ["Number", "Integer"]:
             return
@@ -688,8 +688,8 @@ class ParameterValidator:
         return None
 
     def _get_instance_class(self, call_node) -> str | None:
-        """Get the class name from an instance creation call (parso version)."""
-        # For parso nodes, we need to find the function name from the power/atom_expr structure
+        """Get the class name from an instance creation call."""
+        # For tree-sitter nodes, we need to find the function name from the power/atom_expr structure
         if call_node.type in ("power", "atom_expr"):
             # First try to resolve the full class path for external classes
             full_class_path = self._resolve_full_class_path(call_node)
@@ -725,7 +725,7 @@ class ParameterValidator:
         return None
 
     def _resolve_full_class_path(self, base) -> str | None:
-        """Resolve the full class path from a parso power/atom_expr node like pn.widgets.IntSlider."""
+        """Resolve the full class path from a tree-sitter power/atom_expr node like pn.widgets.IntSlider."""
         parts = []
         for child in get_children(base):
             if child.type == "name":
@@ -784,7 +784,7 @@ class ParameterValidator:
         return False
 
     def _check_parameter_constraints(self, node: Node, param_name: str, lines: list[str]) -> None:
-        """Check for parameter-specific constraints (parso version)."""
+        """Check for parameter-specific constraints."""
         # Find the parameter call on the right side of the assignment
         param_call = None
         for child in get_children(node):
