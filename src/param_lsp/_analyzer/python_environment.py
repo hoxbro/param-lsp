@@ -14,7 +14,7 @@ from pathlib import Path
 
 from param_lsp._logging import get_logger
 
-logger = get_logger(__name__, "python_env")
+logger = get_logger(__name__, "python-env")
 
 
 class PythonEnvironment:
