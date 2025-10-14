@@ -8,7 +8,11 @@ from typing import ClassVar
 
 
 class ColoredFormatter(logging.Formatter):
-    """Custom formatter that adds color to log messages based on level."""
+    """Custom formatter that adds color to log messages based on level.
+
+    Formats log messages in JupyterLab style:
+    [LEVEL YYYY-MM-DD HH:MM:SS.mmm ModuleName] message
+    """
 
     # ANSI color codes
     COLORS: ClassVar[dict[str, str]] = {
@@ -19,30 +23,86 @@ class ColoredFormatter(logging.Formatter):
         "CRITICAL": "\033[35m",  # Magenta
     }
     RESET: ClassVar[str] = "\033[0m"
-    BOLD: ClassVar[str] = "\033[1m"
+
+    # Map full level names to single-letter codes like JupyterLab
+    LEVEL_CODES: ClassVar[dict[str, str]] = {
+        "DEBUG": "D",
+        "INFO": "I",
+        "WARNING": "W",
+        "ERROR": "E",
+        "CRITICAL": "C",
+    }
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format the log record with color."""
+        """Format the log record with color in JupyterLab style."""
         # Get the color for this log level
         color = self.COLORS.get(record.levelname, self.RESET)
 
-        # Save the original levelname
-        original_levelname = record.levelname
+        # Get single-letter level code
+        level_code = self.LEVEL_CODES.get(record.levelname, record.levelname[0])
 
-        # Add color to levelname
-        record.levelname = f"{color}{self.BOLD}{record.levelname}{self.RESET}"
+        # Format timestamp with milliseconds
+        ct = self.converter(record.created)
+        timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
 
-        # Format the message
-        formatted = super().format(record)
+        # Simplify module name (remove param_lsp prefix for cleaner output)
+        module_name = record.name
+        if module_name.startswith("param_lsp."):
+            module_name = module_name[10:]  # Remove "param_lsp." prefix
+        elif module_name == "param_lsp":
+            module_name = "ParamLSP"
 
-        # Restore original levelname
-        record.levelname = original_levelname
+        # Build the formatted message in JupyterLab style
+        prefix = f"{color}[{level_code} {timestamp} {module_name}]{self.RESET}"
+        message = f"{prefix} {record.getMessage()}"
 
-        return formatted
+        # Add exception info if present
+        if record.exc_info:
+            message += "\n" + self.formatException(record.exc_info)
+
+        return message
+
+
+class PlainFormatter(logging.Formatter):
+    """Plain formatter without colors, but same JupyterLab style format."""
+
+    # Map full level names to single-letter codes like JupyterLab
+    LEVEL_CODES: ClassVar[dict[str, str]] = {
+        "DEBUG": "D",
+        "INFO": "I",
+        "WARNING": "W",
+        "ERROR": "E",
+        "CRITICAL": "C",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format the log record in JupyterLab style without colors."""
+        # Get single-letter level code
+        level_code = self.LEVEL_CODES.get(record.levelname, record.levelname[0])
+
+        # Format timestamp with milliseconds
+        ct = self.converter(record.created)
+        timestamp = f"{ct.tm_year:04d}-{ct.tm_mon:02d}-{ct.tm_mday:02d} {ct.tm_hour:02d}:{ct.tm_min:02d}:{ct.tm_sec:02d}.{int(record.msecs):03d}"
+
+        # Simplify module name (remove param_lsp prefix for cleaner output)
+        module_name = record.name
+        if module_name.startswith("param_lsp."):
+            module_name = module_name[10:]  # Remove "param_lsp." prefix
+        elif module_name == "param_lsp":
+            module_name = "ParamLSP"
+
+        # Build the formatted message in JupyterLab style
+        message = f"[{level_code} {timestamp} {module_name}] {record.getMessage()}"
+
+        # Add exception info if present
+        if record.exc_info:
+            message += "\n" + self.formatException(record.exc_info)
+
+        return message
 
 
 def setup_colored_logging(level: int = logging.INFO) -> None:
-    """Configure colored logging for param-lsp.
+    """Configure colored logging for param-lsp in JupyterLab style.
 
     Args:
         level: The logging level to use (e.g., logging.INFO, logging.DEBUG)
@@ -50,18 +110,8 @@ def setup_colored_logging(level: int = logging.INFO) -> None:
     # Check if we're in a terminal that supports colors
     supports_color = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
 
-    # Create formatter
-    if supports_color:
-        formatter = ColoredFormatter(
-            fmt="%(levelname)s - %(name)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-    else:
-        # Fall back to plain formatter if colors not supported
-        formatter = logging.Formatter(
-            fmt="%(levelname)s - %(name)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+    # Create formatter (use colored if terminal supports it, otherwise plain)
+    formatter = ColoredFormatter() if supports_color else PlainFormatter()
 
     # Configure root logger
     root_logger = logging.getLogger()
