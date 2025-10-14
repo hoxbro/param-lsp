@@ -18,10 +18,10 @@ from typing import TYPE_CHECKING
 
 from param_lsp.constants import PARAM_TYPES
 
-from . import parso_utils
+from . import ts_utils
 
 if TYPE_CHECKING:
-    from parso.tree import NodeOrLeaf
+    from tree_sitter import Node
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,8 @@ class ParameterDetector:
         """
         self.imports = imports
 
-    def is_parameter_assignment(self, node: NodeOrLeaf) -> bool:
-        """Check if a parso assignment statement looks like a parameter definition.
+    def is_parameter_assignment(self, node: Node) -> bool:
+        """Check if a tree-sitter assignment statement looks like a parameter definition.
 
         Args:
             node: AST node to check
@@ -46,18 +46,24 @@ class ParameterDetector:
         Returns:
             True if node represents a parameter assignment
         """
-        # Find the right-hand side of the assignment (after '=')
+        # In tree-sitter: assignment node has 'left', 'right' fields
+        if node.type == "assignment":
+            right_node = node.child_by_field_name("right")
+            if right_node and right_node.type == "call":
+                return self.is_parameter_call(right_node)
+
+        # Fallback: scan children for '=' and check right side
         found_equals = False
-        for child in parso_utils.get_children(node):
-            if child.type == "operator" and parso_utils.get_value(child) == "=":
+        for child in ts_utils.get_children(node):
+            if child.text == b"=" or ts_utils.get_value(child) == "=":
                 found_equals = True
-            elif found_equals and child.type in ("power", "atom_expr"):
+            elif found_equals and child.type == "call":
                 # Check if it's a parameter type call
                 return self.is_parameter_call(child)
         return False
 
-    def is_parameter_call(self, node: NodeOrLeaf) -> bool:
-        """Check if a parso power/atom_expr node represents a parameter type call.
+    def is_parameter_call(self, node: Node) -> bool:
+        """Check if a tree-sitter call node represents a parameter type call.
 
         Args:
             node: AST node to check
@@ -65,23 +71,25 @@ class ParameterDetector:
         Returns:
             True if node represents a parameter type call
         """
-        # Extract the function name and check if it's a param type
+        if node.type != "call":
+            return False
+
+        # Get the function being called (the 'function' field)
+        func_node = node.child_by_field_name("function")
+        if not func_node:
+            return False
+
+        # Extract the function name
         func_name = None
 
-        # Look through children to find the actual function being called
-        for child in parso_utils.get_children(node):
-            if child.type == "name":
-                # This could be a direct function call (e.g., "String") or module name
-                func_name = parso_utils.get_value(child)
-            elif child.type == "trailer":
-                # Handle dotted calls like param.Integer
-                for trailer_child in parso_utils.get_children(child):
-                    if trailer_child.type == "name":
-                        func_name = parso_utils.get_value(trailer_child)
-                        break
-                # If we found a function name in a trailer, that's the final function name
-                if func_name:
-                    break
+        if func_node.type == "identifier":
+            # Simple call: String()
+            func_name = ts_utils.get_value(func_node)
+        elif func_node.type == "attribute":
+            # Dotted call: param.String()
+            attr_node = func_node.child_by_field_name("attribute")
+            if attr_node:
+                func_name = ts_utils.get_value(attr_node)
 
         if func_name:
             # Check if it's a direct param type
@@ -109,123 +117,97 @@ class ImportHandler:
         """
         self.imports = imports
 
-    def _reconstruct_dotted_name(self, node: NodeOrLeaf) -> str | None:
-        """Reconstruct a dotted name from a parso dotted_name node.
+    def _reconstruct_dotted_name(self, node: Node) -> str | None:
+        """Reconstruct a dotted name from a tree-sitter dotted_name/attribute node.
 
         Args:
-            node: The dotted_name node
+            node: The dotted_name or attribute node
 
         Returns:
             The reconstructed dotted name string
         """
-        if node.type != "dotted_name":
-            return parso_utils.get_value(node)
+        if node.type == "identifier":
+            return ts_utils.get_value(node)
 
-        parts = [
-            parso_utils.get_value(child)
-            for child in parso_utils.get_children(node)
-            if child.type == "name"
-        ]
+        if node.type == "dotted_name":
+            parts = [
+                ts_utils.get_value(child)
+                for child in ts_utils.get_children(node)
+                if child.type == "identifier"
+            ]
+            # Filter out None values before joining
+            valid_parts = [part for part in parts if part is not None]
+            return ".".join(valid_parts) if valid_parts else None
 
-        # Filter out None values before joining
-        valid_parts = [part for part in parts if part is not None]
-        return ".".join(valid_parts) if valid_parts else None
+        if node.type == "attribute":
+            # Recursively build dotted name from attribute chain
+            obj_node = node.child_by_field_name("object")
+            attr_node = node.child_by_field_name("attribute")
+            if obj_node and attr_node:
+                obj_name = self._reconstruct_dotted_name(obj_node)
+                attr_name = ts_utils.get_value(attr_node)
+                if obj_name and attr_name:
+                    return f"{obj_name}.{attr_name}"
 
-    def handle_import(self, node: NodeOrLeaf) -> None:
-        """Handle 'import' statements (parso node).
+        return ts_utils.get_value(node)
+
+    def handle_import(self, node: Node) -> None:
+        """Handle 'import' statements (tree-sitter node).
 
         Args:
             node: AST node representing import statement
         """
-        # For parso import_name nodes, parse the import statement
-        for child in parso_utils.get_children(node):
-            if child.type == "dotted_as_name":
+        # Tree-sitter import_statement structure:
+        # import_statement -> name: dotted_name/identifier, alias: (as) identifier?
+        for child in ts_utils.get_children(node):
+            if child.type == "aliased_import":
                 # Handle "import module as alias"
-                module_name = None
-                alias_name = None
-                for part in parso_utils.get_children(child):
-                    if part.type == "name":
-                        if module_name is None:
-                            module_name = parso_utils.get_value(part)
-                        else:
-                            alias_name = parso_utils.get_value(part)
-                if module_name:
-                    self.imports[alias_name or module_name] = module_name
-            elif child.type == "dotted_name":
-                # Handle "import module" - reconstruct dotted name from children
+                name_node = child.child_by_field_name("name")
+                alias_node = child.child_by_field_name("alias")
+                if name_node:
+                    module_name = self._reconstruct_dotted_name(name_node)
+                    alias_name = ts_utils.get_value(alias_node) if alias_node else None
+                    if module_name:
+                        self.imports[alias_name or module_name] = module_name
+            elif child.type in ("dotted_name", "identifier"):
+                # Handle "import module"
                 module_name = self._reconstruct_dotted_name(child)
                 if module_name:
                     self.imports[module_name] = module_name
-            elif child.type == "name" and parso_utils.get_value(child) not in ("import", "as"):
-                # Simple case: "import module"
-                module_name = parso_utils.get_value(child)
-                if module_name:
-                    self.imports[module_name] = module_name
 
-    def handle_import_from(self, node: NodeOrLeaf) -> None:
-        """Handle 'from ... import ...' statements (parso node).
+    def handle_import_from(self, node: Node) -> None:
+        """Handle 'from ... import ...' statements (tree-sitter node).
 
         Args:
             node: AST node representing from-import statement
         """
-        # For parso import_from nodes, parse the from...import statement
-        module_name = None
-        import_names = []
+        # Tree-sitter import_from_statement has 'module_name' field
+        module_node = node.child_by_field_name("module_name")
+        if not module_node:
+            return
 
-        # First pass: find module name and collect import names
-        for child in parso_utils.get_children(node):
-            if (
-                child.type == "name"
-                and module_name is None
-                and parso_utils.get_value(child) not in ("from", "import")
-            ) or (child.type == "dotted_name" and module_name is None):
-                module_name = self._reconstruct_dotted_name(child)
-            elif child.type == "import_as_name":
-                # Handle direct "from module import name as alias"
-                import_name = None
-                alias_name = None
-                for part in parso_utils.get_children(child):
-                    if part.type == "name":
-                        if import_name is None:
-                            import_name = parso_utils.get_value(part)
-                        else:
-                            alias_name = parso_utils.get_value(part)
-                if import_name:
-                    import_names.append((import_name, alias_name))
-            elif child.type == "import_as_names":
-                for name_child in parso_utils.get_children(child):
-                    if name_child.type == "import_as_name":
-                        # Handle "from module import name as alias"
-                        import_name = None
-                        alias_name = None
-                        for part in parso_utils.get_children(name_child):
-                            if part.type == "name":
-                                if import_name is None:
-                                    import_name = parso_utils.get_value(part)
-                                else:
-                                    alias_name = parso_utils.get_value(part)
-                        if import_name:
-                            import_names.append((import_name, alias_name))
-                    elif name_child.type == "name":
-                        # Handle "from module import name"
-                        name_value = parso_utils.get_value(name_child)
-                        if name_value:
-                            import_names.append((name_value, None))
-            elif (
-                child.type == "name"
-                and parso_utils.get_value(child) not in ("from", "import")
-                and module_name is not None
-            ):
-                # Handle simple "from module import name" where name is a direct child
-                child_value = parso_utils.get_value(child)
-                if child_value:
-                    import_names.append((child_value, None))
+        module_name = self._reconstruct_dotted_name(module_node)
+        if not module_name:
+            return
 
-        # Second pass: register all imports
-        if module_name:
-            for import_name, alias_name in import_names:
-                full_name = f"{module_name}.{import_name}"
-                self.imports[alias_name or import_name] = full_name
+        # Find imported names - look for aliased_import or identifier children
+        for child in ts_utils.get_children(node):
+            if child.type == "aliased_import":
+                # Handle "from module import name as alias"
+                name_node = child.child_by_field_name("name")
+                alias_node = child.child_by_field_name("alias")
+                if name_node:
+                    import_name = ts_utils.get_value(name_node)
+                    alias_name = ts_utils.get_value(alias_node) if alias_node else None
+                    if import_name:
+                        full_name = f"{module_name}.{import_name}"
+                        self.imports[alias_name or import_name] = full_name
+            elif child.type == "identifier" and child != module_node:
+                # Handle "from module import name"
+                import_name = ts_utils.get_value(child)
+                if import_name and import_name not in ("from", "import"):
+                    full_name = f"{module_name}.{import_name}"
+                    self.imports[import_name] = full_name
 
 
 class SourceAnalyzer:
