@@ -8,9 +8,7 @@ from source files directly.
 
 from __future__ import annotations
 
-import os
 import sys
-import threading
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
@@ -66,11 +64,6 @@ class ExternalClassInspector:
         self.current_file_context: Path | None = None  # Track current file for import resolution
         # Track which libraries have been pre-populated in this session
         self.populated_libraries: set[str] = set()
-
-        # Background cache loading support
-        self._background_threads: dict[str, threading.Thread] = {}  # library_name -> thread
-        self._background_locks: dict[str, threading.Lock] = {}  # library_name -> lock
-        self._async_enabled = os.getenv("PARAM_LSP_ASYNC_CACHE", "1").lower() in ("1", "true")
 
         # Python environment for analysis
         if python_env is None:
@@ -331,7 +324,7 @@ class ExternalClassInspector:
         result = ".".join([*base_parts, remaining]) if remaining else ".".join(base_parts)
         return result
 
-    def populate_library_cache(self, library_name: str, async_mode: bool | None = None) -> int:
+    def populate_library_cache(self, library_name: str) -> int:
         """Pre-populate cache with all Parameterized classes from a library.
 
         Uses iterative inheritance resolution to find all classes that transitively
@@ -342,84 +335,34 @@ class ExternalClassInspector:
 
         Args:
             library_name: Name of the library (e.g., "panel", "holoviews")
-            async_mode: If True, run in background thread. If False, run synchronously.
-                       If None (default), use environment variable PARAM_LSP_ASYNC_CACHE.
 
         Returns:
-            Number of classes cached (0 if running in background)
+            Number of classes cached
         """
         if library_name not in ALLOWED_EXTERNAL_LIBRARIES:
             logger.debug(f"Library {library_name} not in allowed list")
             return 0
 
-        # Determine if we should run asynchronously
-        should_run_async = async_mode if async_mode is not None else self._async_enabled
+        # Check if we've already populated this library in this session
+        if library_name in self.populated_libraries:
+            logger.debug(f"Already populated {library_name} in this session")
+            return 0
+
+        # Mark as populated to avoid re-running
+        self.populated_libraries.add(library_name)
 
         # Check if cache already has content for this library
         if external_library_cache.has_library_cache(library_name):
             logger.debug(f"Cache already exists for {library_name}")
             return 0
 
-        # Check if we've already started background loading for this library
-        if should_run_async:
-            if library_name not in self._background_locks:
-                self._background_locks[library_name] = threading.Lock()
-
-            with self._background_locks[library_name]:
-                # Check if already running or completed
-                if library_name in self.populated_libraries:
-                    logger.debug(f"Already populated or loading {library_name}")
-                    return 0
-
-                # Check again if cache exists (might have been created by another thread)
-                if external_library_cache.has_library_cache(library_name):
-                    logger.debug(f"Cache already exists for {library_name}")
-                    self.populated_libraries.add(library_name)
-                    return 0
-
-                # Mark as being processed
-                self.populated_libraries.add(library_name)
-
-                # Start background thread
-                thread = threading.Thread(
-                    target=self._populate_library_cache_sync,
-                    args=(library_name,),
-                    name=f"param-lsp-cache-{library_name}",
-                    daemon=True,
-                )
-                self._background_threads[library_name] = thread
-                thread.start()
-                logger.info(f"Started background cache population for {library_name}")
-                return 0
-        else:
-            # Run synchronously
-            # Check if we've already populated this library in this session
-            if library_name in self.populated_libraries:
-                logger.debug(f"Already populated {library_name} in this session")
-                return 0
-
-            # Mark as populated to avoid re-running
-            self.populated_libraries.add(library_name)
-
-            return self._populate_library_cache_sync(library_name)
-
-    def _populate_library_cache_sync(self, library_name: str) -> int:
-        """Internal method to populate cache synchronously.
-
-        Args:
-            library_name: Name of the library (e.g., "panel", "holoviews")
-
-        Returns:
-            Number of classes cached
-        """
         # Populate dependencies first to ensure we can resolve inheritance
         # from classes in dependent libraries
         dependencies = self._get_library_dependencies(library_name)
         for dep in dependencies:
             if dep not in self.populated_libraries:
                 logger.info(f"Pre-populating dependency {dep} for {library_name}")
-                # Always run dependencies synchronously to avoid complex dependency chains
-                self.populate_library_cache(dep, async_mode=False)
+                self.populate_library_cache(dep)
 
         logger.info(f"Pre-populating cache for {library_name} using iterative resolution")
 
