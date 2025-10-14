@@ -6,13 +6,25 @@ This guide covers installing param-lsp for your development environment.
 
 param-lsp can be installed via:
 
+=== "pipx"
+
+    ```bash
+    pipx install param-lsp
+    ```
+
+=== "uv tool"
+
+    ```bash
+    uv tool install param-lsp
+    ```
+
 === "pip"
 
     ```bash
     pip install param-lsp
     ```
 
-=== "uv"
+=== "uv pip"
 
     ```bash
     uv pip install param-lsp
