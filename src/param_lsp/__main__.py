@@ -113,7 +113,8 @@ def main():
         total_cached = 0
         for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
             logger.info(f"Generating cache for {library}...")
-            count = inspector.populate_library_cache(library)
+            # Force synchronous mode for cache generation
+            count = inspector.populate_library_cache(library, async_mode=False)
             if count > 0:
                 logger.info(f"Cached {count} classes from {library}")
             total_cached += count
@@ -129,7 +130,8 @@ def main():
         total_cached = 0
         for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
             logger.info(f"Generating cache for {library}...")
-            count = inspector.populate_library_cache(library)
+            # Force synchronous mode for cache generation
+            count = inspector.populate_library_cache(library, async_mode=False)
             if count > 0:
                 logger.info(f"Cached {count} classes from {library}")
             total_cached += count
