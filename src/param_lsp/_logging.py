@@ -7,6 +7,35 @@ import sys
 from typing import ClassVar
 
 
+class ContextLogger(logging.LoggerAdapter):
+    """Logger adapter that prepends module context to messages."""
+
+    def process(self, msg, kwargs):
+        """Prepend context to the log message."""
+        if self.extra:
+            return f"{self.extra['context']} | {msg}", kwargs
+        return msg, kwargs
+
+
+def get_logger(name: str, context: str) -> ContextLogger:
+    """Get a logger with module context.
+
+    Args:
+        name: The logger name (typically __name__)
+        context: The module context to prepend to messages (e.g., "server", "cache", "analyzer")
+
+    Returns:
+        A ContextLogger that prepends the context to all log messages
+
+    Example:
+        >>> logger = get_logger(__name__, "server")
+        >>> logger.info("Starting server")
+        # Output: [I 2025-10-14 10:00:00.000 ParamLSP] server | Starting server
+    """
+    base_logger = logging.getLogger(name)
+    return ContextLogger(base_logger, {"context": context})
+
+
 class ColoredFormatter(logging.Formatter):
     """Custom formatter that adds color to log messages based on level.
 
@@ -49,7 +78,7 @@ class ColoredFormatter(logging.Formatter):
         app_name = "ParamLSP"
 
         # Build the formatted message in JupyterLab style
-        # The module context should be added by the logger in the message with " | "
+        # Module context is added by ContextLogger via get_logger()
         prefix = f"{color}[{level_code} {timestamp} {app_name}]{self.RESET}"
         message = f"{prefix} {record.getMessage()}"
 
@@ -85,7 +114,7 @@ class PlainFormatter(logging.Formatter):
         app_name = "ParamLSP"
 
         # Build the formatted message in JupyterLab style
-        # The module context should be added by the logger in the message with " | "
+        # Module context is added by ContextLogger via get_logger()
         message = f"[{level_code} {timestamp} {app_name}] {record.getMessage()}"
 
         # Add exception info if present

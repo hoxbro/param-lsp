@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 import time
@@ -14,9 +13,10 @@ from typing import Any
 
 import platformdirs
 
+from ._logging import get_logger
 from .models import ParameterInfo, ParameterizedInfo
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, "cache")
 
 # Current cache version
 CACHE_VERSION = (1, 1, 0)

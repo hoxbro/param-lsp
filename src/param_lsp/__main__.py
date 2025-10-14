@@ -4,9 +4,9 @@ import argparse
 import logging
 
 from .__version import __version__
-from ._logging import setup_colored_logging
+from ._logging import get_logger, setup_colored_logging
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, "main")
 
 _DESCRIPTION = """\
 param-lsp: Language Server Protocol implementation for HoloViz Param

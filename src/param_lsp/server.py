@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from lsprotocol.types import (
     CompletionList,
     CompletionOptions,
@@ -23,11 +21,12 @@ from lsprotocol.types import (
 
 from param_lsp import __version__
 
+from ._logging import get_logger
 from ._server.completion import CompletionMixin
 from ._server.hover import HoverMixin
 from ._server.validation import ValidationMixin
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__, "server")
 
 
 class ParamLanguageServer(ValidationMixin, HoverMixin, CompletionMixin):
