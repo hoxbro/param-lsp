@@ -155,8 +155,5 @@ def setup_colored_logging(level: int = logging.INFO) -> None:
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
 
-    # Set param_lsp to specified level
     logging.getLogger("param_lsp").setLevel(level)
-
-    # Set pygls to same level as param_lsp
-    logging.getLogger("pygls").setLevel(level)
+    logging.getLogger("pygls").setLevel(logging.WARNING)

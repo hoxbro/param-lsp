@@ -206,10 +206,10 @@ class PythonEnvironment:
 
         if venv_path:
             try:
-                logger.info(f"Detected venv from VIRTUAL_ENV: {venv_path}")
+                logger.info(f"Detected virtual environment: {venv_path}")
                 return cls.from_venv(venv_path)
             except ValueError as e:
-                logger.warning(f"Failed to use VIRTUAL_ENV: {e}")
+                logger.warning(f"Failed to use virtual environment: {e}")
 
         # Check for conda environment
         if conda_env and conda_prefix:
