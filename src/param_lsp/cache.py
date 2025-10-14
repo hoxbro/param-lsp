@@ -258,9 +258,6 @@ class ExternalLibraryCache:
         cache_data = self._pending_cache[cache_key]
 
         try:
-            # Ensure cache directory exists before writing
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-
             with cache_path.open("w", encoding="utf-8") as f:
                 json.dump(cache_data, f, indent=2)
             logger.debug(f"Flushed cache for {library_name} to {cache_path}")
