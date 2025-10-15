@@ -4,8 +4,7 @@ Tests for the parameter_extractor module.
 
 from __future__ import annotations
 
-import parso
-
+from param_lsp._analyzer import ts_parser
 from param_lsp._analyzer.parameter_extractor import (
     extract_boolean_value,
     extract_bounds_from_call,
@@ -22,14 +21,28 @@ from param_lsp._analyzer.parameter_extractor import (
 
 
 def parse_expression(code: str):
-    """Helper to parse a code expression into parso nodes."""
-    tree = parso.parse(code)
-    # For simple expressions, parso puts them directly under file_input
-    # Skip the endmarker and get the actual expression
-    for child in tree.children:
-        if child.type != "endmarker":
+    """Helper to parse a code expression into tree-sitter nodes."""
+    tree = ts_parser.parse(code)
+    # For tree-sitter, the root is a module node
+    # Return the first meaningful child node (skip newlines/comments)
+    for child in tree.root_node.children:
+        if child.type in (
+            "expression_statement",
+            "assignment",
+            "integer",
+            "float",
+            "string",
+            "true",
+            "false",
+            "none",
+            "call",
+            "unary_operator",
+        ):
+            # For expression statements, return the actual expression inside
+            if child.type == "expression_statement" and child.children:
+                return child.children[0]
             return child
-    return tree.children[0] if tree.children else tree
+    return tree.root_node.children[0] if tree.root_node.children else tree.root_node
 
 
 class TestExtractNumericValue:
@@ -192,16 +205,34 @@ class TestIsParameterAssignment:
 
     def test_is_parameter_assignment_true(self):
         code = "width = param.Integer(default=100)"
-        tree = parso.parse(code)
-        stmt = tree.children[0]
+        tree = ts_parser.parse(code)
+        # Get the first statement (skip module wrapper)
+        stmt = None
+        for child in tree.root_node.children:
+            if child.type in ("expression_statement", "assignment"):
+                if child.type == "expression_statement" and child.children:
+                    stmt = child.children[0]
+                else:
+                    stmt = child
+                break
         # This is a simplified test - the function needs more context in practice
+        assert stmt is not None
         result = is_parameter_assignment(stmt)
         assert isinstance(result, bool)
 
     def test_is_regular_assignment(self):
         code = "x = 5"
-        tree = parso.parse(code)
-        stmt = tree.children[0]
+        tree = ts_parser.parse(code)
+        # Get the first statement (skip module wrapper)
+        stmt = None
+        for child in tree.root_node.children:
+            if child.type in ("expression_statement", "assignment"):
+                if child.type == "expression_statement" and child.children:
+                    stmt = child.children[0]
+                else:
+                    stmt = child
+                break
+        assert stmt is not None
         result = is_parameter_assignment(stmt)
         assert result is False
 
