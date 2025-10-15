@@ -111,13 +111,13 @@ class NotParameterized:
     value = 42
 """
 
-        # Parse with parso
-        import parso
+        # Parse with tree-sitter
+        from src.param_lsp._analyzer import ts_parser
 
-        tree = parso.parse(test_code)
+        tree = ts_parser.parse(test_code)
 
         # Analyze the file
-        file_analysis = self.static_analyzer._analyze_file_ast(tree, test_code)
+        file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_code)
 
         # Should find MyWidget but not NotParameterized
         assert "MyWidget" in file_analysis
@@ -153,10 +153,10 @@ class ComplexWidget(param.Parameterized):
     enabled = param.Boolean(default=True, doc="Enable feature")
 """
 
-        import parso
+        from src.param_lsp._analyzer import ts_parser
 
-        tree = parso.parse(test_code)
-        file_analysis = self.static_analyzer._analyze_file_ast(tree, test_code)
+        tree = ts_parser.parse(test_code)
+        file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_code)
 
         assert "ComplexWidget" in file_analysis
         widget_info = file_analysis["ComplexWidget"]
@@ -202,10 +202,10 @@ class Widget3(param.Parameterized):
     choice = ParamSelector(default="a", objects=["a", "b"])
 """
 
-        import parso
+        from src.param_lsp._analyzer import ts_parser
 
-        tree = parso.parse(test_code)
-        file_analysis = self.static_analyzer._analyze_file_ast(tree, test_code)
+        tree = ts_parser.parse(test_code)
+        file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_code)
 
         # All three widgets should be found
         assert "Widget1" in file_analysis
@@ -289,10 +289,10 @@ class TestWidget(param.Parameterized):
     )
     def test_parameter_type_detection(self, test_class_code: str, expected_params: dict[str, str]):
         """Test detection of various parameter types."""
-        import parso
+        from src.param_lsp._analyzer import ts_parser
 
-        tree = parso.parse(test_class_code)
-        file_analysis = self.static_analyzer._analyze_file_ast(tree, test_class_code)
+        tree = ts_parser.parse(test_class_code)
+        file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_class_code)
 
         assert "TestWidget" in file_analysis
         widget_info = file_analysis["TestWidget"]
