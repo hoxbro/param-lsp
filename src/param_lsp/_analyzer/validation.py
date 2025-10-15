@@ -787,10 +787,17 @@ class ParameterValidator:
         """Check for parameter-specific constraints."""
         # Find the parameter call on the right side of the assignment
         param_call = None
-        for child in get_children(node):
-            if child.type in ("power", "atom_expr"):
-                param_call = child
-                break
+        # For tree-sitter, check if this is an assignment node
+        if node.type == "assignment":
+            right_node = node.child_by_field_name("right")
+            if right_node and right_node.type == "call":
+                param_call = right_node
+        else:
+            # Fallback: scan children for call node
+            for child in get_children(node):
+                if child.type == "call":
+                    param_call = child
+                    break
 
         if not param_call:
             return
@@ -814,86 +821,82 @@ class ParameterValidator:
             inclusive_bounds = (True, True)  # Default to inclusive
 
             # Parse inclusive_bounds if present
-            if inclusive_bounds_node and inclusive_bounds_node.type == "atom":
+            if inclusive_bounds_node and inclusive_bounds_node.type == "tuple":
                 # Parse (True, False) pattern
-                for child in get_children(inclusive_bounds_node):
-                    if child.type == "testlist_comp":
-                        elements = [
-                            c for c in get_children(child) if c.type in ("name", "keyword")
-                        ]
-                        if len(elements) >= 2:
-                            left_inclusive = extract_boolean_value(elements[0])
-                            right_inclusive = extract_boolean_value(elements[1])
-                            if left_inclusive is not None and right_inclusive is not None:
-                                inclusive_bounds = (left_inclusive, right_inclusive)
+                # In tree-sitter, tuple children are directly the elements
+                elements = [
+                    c
+                    for c in get_children(inclusive_bounds_node)
+                    if c.type in ("identifier", "true", "false")
+                ]
+                if len(elements) >= 2:
+                    left_inclusive = extract_boolean_value(elements[0])
+                    right_inclusive = extract_boolean_value(elements[1])
+                    if left_inclusive is not None and right_inclusive is not None:
+                        inclusive_bounds = (left_inclusive, right_inclusive)
 
             # Parse bounds if present
-            if bounds_node and bounds_node.type == "atom":
+            if bounds_node and bounds_node.type == "tuple":
                 # Parse (min, max) pattern
-                for child in get_children(bounds_node):
-                    if child.type == "testlist_comp":
-                        elements = [
-                            c
-                            for c in get_children(child)
-                            if c.type in ("number", "name", "factor")
-                        ]
-                        if len(elements) >= 2:
-                            try:
-                                min_val = extract_numeric_value(elements[0])
-                                max_val = extract_numeric_value(elements[1])
+                # In tree-sitter, tuple children are directly the numeric elements
+                elements = [
+                    c
+                    for c in get_children(bounds_node)
+                    if c.type in ("integer", "float", "unary_operator", "identifier")
+                ]
+                if len(elements) >= 2:
+                    try:
+                        min_val = extract_numeric_value(elements[0])
+                        max_val = extract_numeric_value(elements[1])
 
-                                if (
-                                    min_val is not None
-                                    and max_val is not None
-                                    and min_val >= max_val
-                                ):
-                                    message = f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})"
-                                    self._create_type_error(node, message, "invalid-bounds")
+                        if min_val is not None and max_val is not None and min_val >= max_val:
+                            message = f"Parameter '{param_name}' has invalid bounds: min ({min_val}) >= max ({max_val})"
+                            self._create_type_error(node, message, "invalid-bounds")
 
-                                # Check if default value violates bounds
-                                if (
-                                    default_value is not None
-                                    and min_val is not None
-                                    and max_val is not None
-                                ):
-                                    default_numeric = extract_numeric_value(default_value)
-                                    if default_numeric is not None:
-                                        left_inclusive, right_inclusive = inclusive_bounds
+                        # Check if default value violates bounds
+                        if (
+                            default_value is not None
+                            and min_val is not None
+                            and max_val is not None
+                        ):
+                            default_numeric = extract_numeric_value(default_value)
+                            if default_numeric is not None:
+                                left_inclusive, right_inclusive = inclusive_bounds
 
-                                        # Check bounds violation
-                                        violates_lower = (
-                                            (default_numeric < min_val)
-                                            if left_inclusive
-                                            else (default_numeric <= min_val)
-                                        )
-                                        violates_upper = (
-                                            (default_numeric > max_val)
-                                            if right_inclusive
-                                            else (default_numeric >= max_val)
-                                        )
+                                # Check bounds violation
+                                violates_lower = (
+                                    (default_numeric < min_val)
+                                    if left_inclusive
+                                    else (default_numeric <= min_val)
+                                )
+                                violates_upper = (
+                                    (default_numeric > max_val)
+                                    if right_inclusive
+                                    else (default_numeric >= max_val)
+                                )
 
-                                        if violates_lower or violates_upper:
-                                            bound_description = self._format_bounds_description(
-                                                min_val, max_val, left_inclusive, right_inclusive
-                                            )
-                                            message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
-                                            self._create_type_error(
-                                                node, message, "default-bounds-violation"
-                                            )
+                                if violates_lower or violates_upper:
+                                    bound_description = self._format_bounds_description(
+                                        min_val, max_val, left_inclusive, right_inclusive
+                                    )
+                                    message = f"Default value {default_numeric} for parameter '{param_name}' is outside bounds {bound_description}"
+                                    self._create_type_error(
+                                        node, message, "default-bounds-violation"
+                                    )
 
-                            except (ValueError, TypeError):
-                                pass
+                    except (ValueError, TypeError):
+                        pass
 
         # Check for empty lists/tuples with List/Tuple parameters
         elif resolved_cls in ["List", "Tuple"]:
             default_value = kwargs.get("default")
-            if default_value and default_value.type == "atom":
+            if default_value and default_value.type in ("list", "tuple"):
                 # Check if it's an empty list or tuple
-                # Get all child values to check for empty containers
+                # In tree-sitter, empty containers have only parentheses/brackets as children
                 child_values = [
                     get_value(child)
                     for child in get_children(default_value)
-                    if hasattr(child, "value")
+                    if get_value(child) not in (",",)  # Ignore commas
                 ]
                 is_empty_list = child_values == ["[", "]"]
                 is_empty_tuple = child_values == ["(", ")"]
