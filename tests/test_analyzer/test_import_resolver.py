@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 
 import pytest
-from parso import parse
 
+from src.param_lsp._analyzer import ts_parser
 from src.param_lsp._analyzer.import_resolver import ImportResolver
-from src.param_lsp._analyzer.parso_utils import walk_tree
+from src.param_lsp._analyzer.ts_utils import walk_tree
 
 
 class TestImportResolver:
@@ -81,8 +81,10 @@ class TestImportResolver:
     def test_handle_import_simple(self, resolver):
         """Test handle_import with simple import statement."""
         code = "import os"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_name"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_statement"
+        ]
         assert len(import_nodes) == 1
 
         resolver.handle_import(import_nodes[0])
@@ -94,8 +96,10 @@ class TestImportResolver:
     def test_handle_import_as_alias(self, resolver):
         """Test handle_import with import as alias."""
         code = "import numpy as np"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_name"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_statement"
+        ]
         assert len(import_nodes) == 1
 
         resolver.handle_import(import_nodes[0])
@@ -107,8 +111,10 @@ class TestImportResolver:
     def test_handle_import_from_simple(self, resolver):
         """Test handle_import_from with simple from import."""
         code = "from os import path"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_from"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
+        ]
         assert len(import_nodes) == 1
 
         resolver.handle_import_from(import_nodes[0])
@@ -120,8 +126,10 @@ class TestImportResolver:
     def test_handle_import_from_multiple(self, resolver):
         """Test handle_import_from with multiple imports."""
         code = "from os import path, environ"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_from"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
+        ]
         assert len(import_nodes) == 1
 
         resolver.handle_import_from(import_nodes[0])
@@ -135,16 +143,17 @@ class TestImportResolver:
     def test_handle_import_from_alias(self, resolver):
         """Test handle_import_from with alias."""
         code = "from param import Parameterized as P"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_from"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
+        ]
         assert len(import_nodes) == 1
 
         resolver.handle_import_from(import_nodes[0])
 
-        # Should add the aliased import (if parsing succeeds)
-        # Note: Complex import parsing may vary based on parso version
-        if "P" in resolver.imports:
-            assert resolver.imports["P"] == "param.Parameterized"
+        # Should add the aliased import
+        assert "P" in resolver.imports
+        assert resolver.imports["P"] == "param.Parameterized"
 
     def test_resolve_module_path_absolute(self, resolver):
         """Test resolve_module_path with absolute module."""
@@ -162,36 +171,36 @@ class TestImportResolver:
     def test_resolve_full_class_path_simple(self, resolver):
         """Test resolve_full_class_path with simple class path."""
         code = "pn.widgets.Button"
-        tree = parse(code)
-        # Find the power/atom_expr node
-        expr_nodes = [node for node in walk_tree(tree) if node.type in ("power", "atom_expr")]
-        assert len(expr_nodes) == 1
-
-        result = resolver.resolve_full_class_path(expr_nodes[0])
+        tree = ts_parser.parse(code)
+        # Find the attribute node (dotted name like pn.widgets.Button)
+        attr_nodes = [node for node in walk_tree(tree.root_node) if node.type == "attribute"]
+        assert len(attr_nodes) > 0
+        # Get the first (top-level) attribute node which contains the full path
+        result = resolver.resolve_full_class_path(attr_nodes[0])
         assert result == "panel.widgets.Button"  # pn resolves to panel
 
     def test_resolve_full_class_path_unknown_alias(self, resolver):
         """Test resolve_full_class_path with unknown alias."""
         code = "unknown.widgets.Button"
-        tree = parse(code)
-        # Find the power/atom_expr node
-        expr_nodes = [node for node in walk_tree(tree) if node.type in ("power", "atom_expr")]
-        assert len(expr_nodes) == 1
-
-        result = resolver.resolve_full_class_path(expr_nodes[0])
+        tree = ts_parser.parse(code)
+        # Find the attribute node
+        attr_nodes = [node for node in walk_tree(tree.root_node) if node.type == "attribute"]
+        assert len(attr_nodes) > 0
+        # Get the first (top-level) attribute node which contains the full path
+        result = resolver.resolve_full_class_path(attr_nodes[0])
         assert result == "unknown.widgets.Button"  # Should use as-is
 
     def test_resolve_full_class_path_no_parts(self, resolver):
         """Test resolve_full_class_path with empty node."""
         code = "x"  # Simple name, not a complex path
-        tree = parse(code)
-        # Find a simple name node (not power/atom_expr)
-        name_nodes = [node for node in walk_tree(tree) if node.type == "name"]
-        assert len(name_nodes) == 1
+        tree = ts_parser.parse(code)
+        # Find a simple identifier node
+        id_nodes = [node for node in walk_tree(tree.root_node) if node.type == "identifier"]
+        assert len(id_nodes) == 1
 
-        # This should not be used with simple names, but test robustness
-        result = resolver.resolve_full_class_path(name_nodes[0])
-        assert result is None
+        # Simple identifier should return just the name
+        result = resolver.resolve_full_class_path(id_nodes[0])
+        assert result == "x"
 
     def test_analyze_imported_module_no_func(self):
         """Test analyze_imported_module without analyze_file_func."""
@@ -285,8 +294,10 @@ class TestImportResolver:
 
         # Add an import
         code = "import test_module"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_name"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_statement"
+        ]
         resolver.handle_import(import_nodes[0])
 
         # Should have the import
@@ -297,10 +308,12 @@ class TestImportResolver:
         """Test handle_import_from with edge cases."""
         # Test with relative import (from . import something)
         code = "from . import local_module"
-        tree = parse(code)
-        import_nodes = [node for node in walk_tree(tree) if node.type == "import_from"]
+        tree = ts_parser.parse(code)
+        import_nodes = [
+            node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
+        ]
 
-        if import_nodes:  # Only test if parso can parse this
+        if import_nodes:  # Only test if tree-sitter can parse this
             resolver.handle_import_from(import_nodes[0])
             # Relative imports may or may not be handled depending on implementation
 

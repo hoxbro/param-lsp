@@ -92,24 +92,26 @@ class ImportResolver:
         if not module_name:
             return
 
-        # Find imported names - look for aliased_import or identifier children
+        # Find imported names - look for aliased_import, dotted_name, or identifier children
         for child in get_children(node):
             if child.type == "aliased_import":
                 # Handle "from module import name as alias"
                 name_node = child.child_by_field_name("name")
                 alias_node = child.child_by_field_name("alias")
                 if name_node:
-                    import_name = get_value(name_node)
+                    import_name = self._reconstruct_dotted_name(name_node)
                     alias_name = get_value(alias_node) if alias_node else None
                     if import_name:
                         full_name = f"{module_name}.{import_name}"
                         self.imports[alias_name or import_name] = full_name
-            elif child.type == "identifier" and child != module_node:
-                # Handle "from module import name"
-                import_name = get_value(child)
+            elif child.type in ("dotted_name", "identifier") and child != module_node:
+                # Handle "from module import name" or "from module import dotted.name"
+                import_name = self._reconstruct_dotted_name(child)
                 if import_name and import_name not in ("from", "import"):
                     full_name = f"{module_name}.{import_name}"
-                    self.imports[import_name] = full_name
+                    # For dotted imports like "from pkg import sub.module", use the last part as the key
+                    key = import_name.split(".")[-1] if "." in import_name else import_name
+                    self.imports[key] = full_name
 
     def _reconstruct_dotted_name(self, node: Node) -> str | None:
         """Reconstruct a dotted name from a tree-sitter node."""
