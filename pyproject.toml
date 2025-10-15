@@ -21,7 +21,14 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
 ]
-dependencies = ["pygls", "lsprotocol", "param", "platformdirs", "parso>=0.8.5"]
+dependencies = [
+    "pygls",
+    "lsprotocol",
+    "param",
+    "platformdirs",
+    "tree-sitter>=0.25.0",
+    "tree-sitter-python>=0.25.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/hoxbro/param-lsp"
