@@ -56,32 +56,41 @@ Migrating param-lsp from parso AST parser to tree-sitter for better performance,
 - [x] **test_parameter_extractor.py** - Migrated (35 tests passing)
 - [x] **test_bounds_validation.py** - Fixed (9 tests passing)
 
-### =� In Progress / Remaining
+### Completed (Phase 2 - Test Migration)
 
-#### Test Files Needing Updates
+#### Test Files Migrated
 
-Many test files still use parso nodes in their setup:
+All major test files have been migrated to tree-sitter:
 
-- `test_import_resolver.py` - Import resolver tests (12 failures)
-- `test_inheritance_resolver.py` - Inheritance tests (10 failures)
-- `test_validation.py` - Validation helper tests (12 failures)
-- `test_static_external_analyzer.py` - External analyzer tests (6 failures)
-- `test_container_validation.py` - Container validation (3 failures)
-- Integration tests (50+ failures)
+- `test_validation.py` - ✅ 31/31 tests passing
+- `test_import_resolver.py` - ✅ 21/21 tests passing
+- `test_inheritance_resolver.py` - ✅ 12/12 tests passing
+- `test_static_external_analyzer.py` - ✅ 17/17 tests passing
+- `test_ast_navigator.py` - ✅ 23/23 tests passing
+- `test_parameter_extractor.py` - ✅ 35/35 tests passing
+- `test_bounds_validation.py` - ✅ 9/9 tests passing
+- `test_ts_utils.py` - ✅ 17/17 tests passing
 
-#### Validation.py Helpers
+#### Bug Fixes
 
-Some helper methods still need updates:
+- ✅ Fixed `import_resolver.py` to handle `dotted_name` nodes in from imports
+- ✅ Fixed validation.py helper methods (\_infer_value_type, \_is_boolean_literal, etc.)
 
-- `_infer_value_type()` - Type inference from AST nodes
-- `_is_boolean_literal()` - Boolean literal detection
-- `_has_attribute_target()` - Attribute target checking
-- `_create_type_error()` - Error creation with positions
+### 🔄 Remaining Work
 
-#### Files Not Yet Migrated
+#### Test Files with Minor Issues
 
-- `parso_utils.py` - Can be deprecated/removed after full migration
-- Any remaining analyzer components using parso
+- `test_container_validation.py` - 3/6 passing (3 edge case failures)
+- `test_inheritance.py` - 6/7 passing (1 edge case failure)
+
+#### Integration Tests
+
+- 48 failures in `test_server/*` - Constructor validation integration (needs investigation)
+
+#### Cleanup Tasks
+
+- `parso_utils.py` - Can be deprecated/removed after integration tests fixed
+- Remove parso dependency from pyproject.toml
 
 ## Node Type Mapping
 
@@ -263,12 +272,14 @@ if node.type == "assignment" or (
 - [x] Fix bounds validation tests
 - [x] Update test_ast_navigator.py
 - [x] Update test_parameter_extractor.py
-- [ ] Update test_import_resolver.py
-- [ ] Update test_inheritance_resolver.py
-- [ ] Update test_validation.py
-- [ ] Update test_static_external_analyzer.py
-- [ ] Update integration tests
-- [ ] Fix validation.py helper methods
+- [x] Update test_import_resolver.py (21 tests passing)
+- [x] Update test_inheritance_resolver.py (12 tests passing)
+- [x] Update test_validation.py (31 tests passing)
+- [x] Update test_static_external_analyzer.py (17 tests passing)
+- [x] Fix validation.py helper methods (\_infer_value_type, \_is_boolean_literal, etc.)
+- [x] Fix import_resolver.py to handle dotted_name nodes in from imports
+- [ ] Update integration tests (48 failures remaining in test_server/\*)
+- [ ] Fix remaining 4 test_analyzer failures (container_validation, inheritance)
 - [ ] Remove parso_utils.py
 - [ ] Remove parso dependency
 - [ ] Update documentation
