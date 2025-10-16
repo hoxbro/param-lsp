@@ -24,7 +24,6 @@ classifiers = [
 dependencies = [
     "pygls",
     "lsprotocol",
-    "param",
     "platformdirs",
     "tree-sitter>=0.25.0",
     "tree-sitter-python>=0.25.0",
@@ -41,7 +40,7 @@ param-lsp = "param_lsp.__main__:main"
 jupyter = ["jupyterlab-lsp"]
 
 [dependency-groups]
-dev = ["debugpy", "pytest", "setuptools_scm", "holoviews", "panel", "param-lsp[jupyter]"]
+dev = ["debugpy", "pytest", "setuptools_scm", "holoviews", "panel", "param", "param-lsp[jupyter]"]
 docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
 
 [tool.hatch.version]

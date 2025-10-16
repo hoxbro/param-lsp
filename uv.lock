@@ -1812,7 +1812,6 @@ name = "param-lsp"
 source = { editable = "." }
 dependencies = [
     { name = "lsprotocol" },
-    { name = "param" },
     { name = "platformdirs" },
     { name = "pygls" },
     { name = "tree-sitter" },
@@ -1829,6 +1828,7 @@ dev = [
     { name = "debugpy" },
     { name = "holoviews" },
     { name = "panel" },
+    { name = "param" },
     { name = "param-lsp", extra = ["jupyter"] },
     { name = "pytest" },
     { name = "setuptools-scm" },
@@ -1843,7 +1843,6 @@ docs = [
 requires-dist = [
     { name = "jupyterlab-lsp", marker = "extra == 'jupyter'" },
     { name = "lsprotocol" },
-    { name = "param" },
     { name = "platformdirs" },
     { name = "pygls" },
     { name = "tree-sitter", specifier = ">=0.25.0" },
@@ -1856,6 +1855,7 @@ dev = [
     { name = "debugpy" },
     { name = "holoviews" },
     { name = "panel" },
+    { name = "param" },
     { name = "param-lsp", extras = ["jupyter"] },
     { name = "pytest" },
     { name = "setuptools-scm" },
