@@ -13,13 +13,17 @@ logger = logging.getLogger(__name__)
 
 from param_lsp._treesitter import (
     find_all_parameter_assignments,
-    find_decorators,
     get_children,
     get_class_name,
     get_value,
     is_assignment_stmt,
     is_function_call,
-    walk_tree,
+)
+from param_lsp._treesitter.queries import (
+    find_assignments,
+    find_calls,
+    find_classes,
+    find_decorators,
 )
 from param_lsp.constants import DEPRECATED_PARAMETER_TYPES, PARAM_TYPE_MAP
 
@@ -80,15 +84,12 @@ class ParameterValidator:
         self.external_inspector = external_inspector
         self.type_errors: list[TypeErrorDict] = []
 
-    def check_parameter_types(
-        self, tree: Node, lines: list[str], cached_nodes: list[Node] | None = None
-    ) -> list[TypeErrorDict]:
+    def check_parameter_types(self, tree: Node, lines: list[str]) -> list[TypeErrorDict]:
         """Perform comprehensive parameter type validation on a parsed AST.
 
         Args:
             tree: The root tree-sitter AST node to validate
             lines: Source code lines for error reporting
-            cached_nodes: Optional pre-computed list of all nodes for performance optimization
 
         Returns:
             List of type error dictionaries containing validation errors found
@@ -103,21 +104,22 @@ class ParameterValidator:
         """
         self.type_errors.clear()
 
-        # Use cached nodes if provided for performance optimization
-        nodes_to_check = cached_nodes if cached_nodes is not None else walk_tree(tree)
+        # Use optimized tree-sitter queries instead of walking entire tree
+        # This is significantly faster, especially for large files
 
-        for node in nodes_to_check:
-            if node.type == "class_definition":
-                self._check_class_parameter_defaults(node, lines)
+        # Check class parameter defaults
+        for class_node, _captures in find_classes(tree):
+            self._check_class_parameter_defaults(class_node, lines)
 
-            # Check runtime parameter assignments like obj.param = value
-            elif node.type in ("assignment", "expression_statement") and is_assignment_stmt(node):
-                if self._has_attribute_target(node):
-                    self._check_runtime_parameter_assignment(node, lines)
+        # Check runtime parameter assignments like obj.param = value
+        for assignment_node, _captures in find_assignments(tree):
+            if is_assignment_stmt(assignment_node) and self._has_attribute_target(assignment_node):
+                self._check_runtime_parameter_assignment(assignment_node, lines)
 
-            # Check constructor calls like MyClass(x="A")
-            elif node.type == "call" and is_function_call(node):
-                self._check_constructor_parameter_types(node, lines)
+        # Check constructor calls like MyClass(x="A")
+        for call_node, _captures in find_calls(tree):
+            if is_function_call(call_node):
+                self._check_constructor_parameter_types(call_node, lines)
 
         # Check @param.depends decorators for invalid parameter references
         self._check_param_depends_decorators(tree)
