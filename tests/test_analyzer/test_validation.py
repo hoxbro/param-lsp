@@ -426,3 +426,193 @@ TestClass().invalid_param = 456
         assert len(validator2.type_errors) == 1
         assert validator1.type_errors[0]["message"] == "Error 1"
         assert validator2.type_errors[0]["message"] == "Error 2"
+
+    def test_check_param_depends_valid_parameters(self, validator):
+        """Test @param.depends with valid parameter references."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("test_param", "numeric_param")
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors for valid parameter references
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        # Filter for only depends-related errors
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0
+
+    def test_check_param_depends_invalid_parameter(self, validator):
+        """Test @param.depends with invalid parameter reference."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("test_param", "invalid_param")
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create an error for invalid parameter reference
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        # Filter for only depends-related errors
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 1
+        assert "invalid_param" in depends_errors[0]["message"]
+        assert "does not exist" in depends_errors[0]["message"]
+
+    def test_check_param_depends_multiple_invalid_parameters(self, validator):
+        """Test @param.depends with multiple invalid parameter references."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+
+    @param.depends("test_param", "invalid1", "invalid2")
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create errors for both invalid parameters
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 2
+        error_messages = [e["message"] for e in depends_errors]
+        assert any("invalid1" in msg for msg in error_messages)
+        assert any("invalid2" in msg for msg in error_messages)
+
+    def test_check_param_depends_with_single_quotes(self, validator):
+        """Test @param.depends with single-quoted parameter names."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+
+    @param.depends('test_param', 'invalid_param')
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create an error for invalid parameter (single quotes)
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 1
+        assert "invalid_param" in depends_errors[0]["message"]
+
+    def test_check_param_depends_multiline_decorator(self, validator):
+        """Test @param.depends across multiple lines."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0)
+
+    @param.depends(
+        "test_param",
+        "numeric_param",
+        "invalid_param"
+    )
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create an error for invalid parameter in multiline decorator
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 1
+        assert "invalid_param" in depends_errors[0]["message"]
+
+    def test_check_param_depends_non_parameterized_class_ignored(self, validator):
+        """Test that @param.depends in non-Parameterized classes is ignored."""
+        code = """
+import param
+
+class RegularClass:
+    @param.depends("some_param")
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create errors for non-Parameterized classes
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0
+
+    def test_is_param_depends_decorator(self, validator):
+        """Test _is_param_depends_decorator method."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    @param.depends("x")
+    def method1(self):
+        pass
+
+    @other_decorator
+    def method2(self):
+        pass
+"""
+        tree = parser.parse(code)
+        from param_lsp._treesitter import find_decorators
+
+        decorators = find_decorators(tree.root_node)
+
+        # Find the param.depends decorator
+        param_depends_decorators = [
+            d for d, _ in decorators if validator._is_param_depends_decorator(d)
+        ]
+        assert len(param_depends_decorators) == 1
+
+    def test_extract_depends_parameters(self, validator):
+        """Test _extract_depends_parameters method."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    @param.depends("x", "y", "z")
+    def method(self):
+        pass
+"""
+        tree = parser.parse(code)
+        from param_lsp._treesitter import find_decorators
+
+        decorators = find_decorators(tree.root_node)
+        decorator_node = decorators[0][0]
+
+        params = validator._extract_depends_parameters(decorator_node)
+        param_names = [name for name, _ in params]
+
+        assert len(params) == 3
+        assert "x" in param_names
+        assert "y" in param_names
+        assert "z" in param_names
+
+    def test_get_class_parameters(self, validator):
+        """Test _get_class_parameters method."""
+        params = validator._get_class_parameters("TestClass")
+
+        assert "test_param" in params
+        assert "numeric_param" in params
+        assert "bool_param" in params
+
+    def test_get_class_parameters_missing_class(self, validator):
+        """Test _get_class_parameters with missing class."""
+        params = validator._get_class_parameters("MissingClass")
+        assert len(params) == 0
