@@ -542,21 +542,37 @@ class ParameterValidator:
         # Determine the instance class
         instance_class = None
 
-        # Check if this is a direct instantiation (has parentheses before the dot)
+        # Check if this is a direct instantiation (has call before the dot)
+        # In tree-sitter, attribute nodes have 'object' and 'attribute' fields
+        # For S().value, object is the call node S()
         has_call = False
-        for child in get_children(target):
-            if (
-                child.type == "trailer"
-                and len(get_children(child)) >= 2
-                and get_value(get_children(child)[0]) == "("
-                and get_value(get_children(child)[-1]) == ")"
-            ):
+        call_node = None
+
+        if target.type == "attribute":
+            obj_node = target.child_by_field_name("object")
+            if obj_node and obj_node.type == "call":
                 has_call = True
-                break
+                call_node = obj_node
+        else:
+            # Legacy parso check
+            for child in get_children(target):
+                if (
+                    child.type == "trailer"
+                    and len(get_children(child)) >= 2
+                    and get_value(get_children(child)[0]) == "("
+                    and get_value(get_children(child)[-1]) == ")"
+                ):
+                    has_call = True
+                    break
 
         if has_call:
             # Case: MyClass().param = value (direct instantiation)
-            instance_class = self._get_instance_class(target)
+            if call_node:
+                # For tree-sitter, extract class name from the call node
+                instance_class = self._get_instance_class(call_node)
+            else:
+                # For parso, use the target node
+                instance_class = self._get_instance_class(target)
         else:
             # Case: instance_var.param = value
             # Try to find which param class has this parameter
@@ -689,8 +705,36 @@ class ParameterValidator:
 
     def _get_instance_class(self, call_node) -> str | None:
         """Get the class name from an instance creation call."""
-        # For tree-sitter nodes, we need to find the function name from the power/atom_expr structure
-        if call_node.type in ("power", "atom_expr"):
+        # For tree-sitter call nodes like TestClass(...) or pn.widgets.IntSlider(...)
+        if call_node.type == "call":
+            # Get the function/class being called (first child, before argument_list)
+            children = get_children(call_node)
+            if not children:
+                return None
+
+            function_node = children[0]
+
+            # Simple case: TestClass(...)
+            if function_node.type == "identifier":
+                return get_value(function_node)
+
+            # Attribute case: module.Class(...) or pn.widgets.IntSlider(...)
+            elif function_node.type == "attribute":
+                # Try to resolve the full path for external classes
+                full_class_path = self._resolve_full_class_path_from_attribute(function_node)
+                # Check if this is an external Parameterized class
+                class_info = self._analyze_external_class_ast(full_class_path)
+                if class_info:
+                    # Return the full path as the class identifier for external classes
+                    return full_class_path
+
+                # Otherwise return just the final attribute name
+                attr_node = function_node.child_by_field_name("attribute")
+                if attr_node:
+                    return get_value(attr_node)
+
+        # Legacy support for parso node types (power, atom_expr) - may be removed once migration complete
+        elif call_node.type in ("power", "atom_expr"):
             # First try to resolve the full class path for external classes
             full_class_path = self._resolve_full_class_path(call_node)
             # Check if this is an external Parameterized class
@@ -722,6 +766,45 @@ class ParameterValidator:
 
             # If we found a name but no explicit function call, return the last name
             return last_name
+        return None
+
+    def _resolve_full_class_path_from_attribute(self, attribute_node: Node) -> str | None:
+        """Resolve the full class path from a tree-sitter attribute node like pn.widgets.IntSlider.
+
+        For an attribute node representing pn.widgets.IntSlider:
+        - object field: pn.widgets (could be nested attribute)
+        - attribute field: IntSlider
+        """
+        parts = []
+
+        # Recursively collect all parts from nested attributes
+        def collect_parts(node: Node) -> None:
+            if node.type == "identifier":
+                parts.append(get_value(node))
+            elif node.type == "attribute":
+                # First get the object part (left side)
+                obj_node = node.child_by_field_name("object")
+                if obj_node:
+                    collect_parts(obj_node)
+                # Then get the attribute part (right side)
+                attr_node = node.child_by_field_name("attribute")
+                if attr_node:
+                    parts.append(get_value(attr_node))
+
+        collect_parts(attribute_node)
+
+        if parts:
+            # Resolve the root module through imports
+            root_alias = parts[0]
+            if root_alias in self.imports:
+                full_module_name = self.imports[root_alias]
+                # Replace the alias with the full module name
+                parts[0] = full_module_name
+                return ".".join(parts)
+            else:
+                # Use the alias directly if no import mapping found
+                return ".".join(parts)
+
         return None
 
     def _resolve_full_class_path(self, base) -> str | None:
@@ -950,49 +1033,25 @@ class ParameterValidator:
 
     def _extract_list_items(self, node: Node) -> list[Node] | None:
         """Extract items from a list literal like [1, 2, 3]."""
-        if not hasattr(node, "type") or node.type != "atom":
+        if not hasattr(node, "type") or node.type != "list":
             return None
 
-        children = get_children(node)
-        if not children or get_value(children[0]) != "[":
-            return None
+        # In tree-sitter, list children are directly the items plus brackets and commas
+        # Filter out punctuation to get just the items
+        items = [child for child in get_children(node) if child.type not in ("[", "]", ",")]
 
-        # Find testlist_comp inside the list
-        items = []
-        for child in children:
-            if child.type == "testlist_comp":
-                # Extract individual elements from testlist_comp
-                items.extend(
-                    item_child
-                    for item_child in get_children(child)
-                    if item_child.type not in ("operator",)
-                )
-                break
-
-        return items
+        return items if items else None
 
     def _extract_tuple_items(self, node: Node) -> list[Node] | None:
         """Extract items from a tuple literal like (1, 2, 3)."""
-        if not hasattr(node, "type") or node.type != "atom":
+        if not hasattr(node, "type") or node.type != "tuple":
             return None
 
-        children = get_children(node)
-        if not children or get_value(children[0]) != "(":
-            return None
+        # In tree-sitter, tuple children are directly the items plus parentheses and commas
+        # Filter out punctuation to get just the items
+        items = [child for child in get_children(node) if child.type not in ("(", ")", ",")]
 
-        # Find testlist_comp inside the tuple
-        items = []
-        for child in children:
-            if child.type == "testlist_comp":
-                # Extract individual elements from testlist_comp
-                items.extend(
-                    item_child
-                    for item_child in get_children(child)
-                    if item_child.type not in ("operator",)
-                )
-                break
-
-        return items
+        return items if items else None
 
     def _is_type_compatible(self, inferred_type: type, expected_type: type) -> bool:
         """Check if inferred type is compatible with expected type."""
