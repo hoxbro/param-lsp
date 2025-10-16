@@ -139,7 +139,7 @@ class PythonEnvironment:
 
         if venv_path:
             try:
-                logger.info(f"Detected virtual environment: {venv_path}")
+                logger.info(f"Detected virtual environment: {venv_path!r}")
                 return cls.from_venv(venv_path)
             except ValueError as e:
                 logger.warning(f"Failed to use virtual environment: {e}")
@@ -149,12 +149,12 @@ class PythonEnvironment:
             python_path = cls._find_python_in_prefix(Path(conda_prefix))
             if python_path:
                 try:
-                    logger.info(f"Detected conda environment: {conda_env}")
+                    logger.info(f"Detected conda environment: {conda_env!r}")
                     return cls.from_path(python_path)
                 except ValueError as e:
                     logger.warning(f"Failed to use conda environment: {e}")
             else:
-                logger.warning(f"Failed to locate Python in conda environment: {conda_env}")
+                logger.warning(f"Failed to locate Python in conda environment: {conda_env!r}")
 
         return None
 
