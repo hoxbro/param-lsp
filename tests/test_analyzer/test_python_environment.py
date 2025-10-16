@@ -40,6 +40,8 @@ def test_from_path_invalid():
 @patch("subprocess.check_output")
 def test_query_site_packages(mock_check_output, tmp_path):
     """Test querying site-packages from a Python environment."""
+    import json
+
     python_path = tmp_path / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
@@ -50,13 +52,8 @@ def test_query_site_packages(mock_check_output, tmp_path):
     user_site = tmp_path / ".local" / "lib" / "python3.10" / "site-packages"
     user_site.mkdir(parents=True)
 
-    # Mock subprocess.check_output to return output like `python -m site`
-    mock_output = rf"""sys.path = [
-    '',
-    '{site_pkg_1}',
-]
-USER_BASE: '/home/user/.local' (exists)
-USER_SITE: '{user_site}' (exists)"""
+    # Mock subprocess.check_output to return JSON output
+    mock_output = json.dumps({"sys_path": ["", str(site_pkg_1)], "user_site": str(user_site)})
     mock_check_output.return_value = mock_output
 
     env = PythonEnvironment(python=python_path)
@@ -69,6 +66,8 @@ USER_SITE: '{user_site}' (exists)"""
 @patch("subprocess.check_output")
 def test_query_user_site(mock_check_output, tmp_path):
     """Test querying user site-packages from a Python environment."""
+    import json
+
     python_path = tmp_path / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
@@ -76,12 +75,8 @@ def test_query_user_site(mock_check_output, tmp_path):
     user_site = tmp_path / ".local" / "lib" / "python3.10" / "site-packages"
     user_site.mkdir(parents=True)
 
-    # Mock subprocess.check_output to return output like `python -m site`
-    mock_output = f"""sys.path = [
-    '',
-]
-USER_BASE: '/home/user/.local' (exists)
-USER_SITE: '{user_site}' (exists)"""
+    # Mock subprocess.check_output to return JSON output
+    mock_output = json.dumps({"sys_path": [""], "user_site": str(user_site)})
     mock_check_output.return_value = mock_output
 
     env = PythonEnvironment(python=python_path)

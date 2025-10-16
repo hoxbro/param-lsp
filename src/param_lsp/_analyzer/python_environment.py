@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
-from ast import literal_eval
 from pathlib import Path
 from typing import cast
 
@@ -63,17 +61,21 @@ class PythonEnvironment:
 
     def _query_python_exe(self) -> Path | None:
         try:
+            # Use JSON output for reliable cross-platform path handling
+            script = "import json, sys, site; print(json.dumps({'sys_path': sys.path, 'user_site': site.USER_SITE}))"
             output = subprocess.check_output(  # noqa: S603
-                [os.fspath(self.python), "-m", "site"], text=True, timeout=10
+                [os.fspath(self.python), "-c", script], text=True, timeout=10
             )
-            site_info = re.search(
-                r"sys\.path\s*=\s*(\[[^\]]*\]).*?USER_SITE:\s*'([^']+)'", output, re.DOTALL
-            )
-            assert site_info is not None, f"Could not get {self.python} -m site"  # noqa: S101
-            self._site_packages = list(map(Path, literal_eval(site_info.group(1))[1:]))
-            user_site = Path(site_info.group(2))
+            site_info = json.loads(output)
+            # Skip the first empty entry in sys.path
+            self._site_packages = [Path(p) for p in site_info["sys_path"][1:]]
+            user_site = Path(site_info["user_site"])
             self._user_site = user_site if user_site.exists() else None
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            json.JSONDecodeError,
+        ) as e:
             logger.warning(f"Failed to query site from {self.python}: {e}")
 
     @classmethod
