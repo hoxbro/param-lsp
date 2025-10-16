@@ -8,10 +8,13 @@ from __future__ import annotations
 import importlib.util
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from param_lsp._types import AnalysisResult, ImportDict, ParsoNode
+from param_lsp._treesitter import get_children, get_value
+from param_lsp._types import AnalysisResult, ImportDict
 
-from .parso_utils import get_children, get_value
+if TYPE_CHECKING:
+    from tree_sitter import Node
 
 logger = logging.getLogger(__name__)
 
@@ -58,81 +61,80 @@ class ImportResolver:
         self.file_cache: dict[str, AnalysisResult] = file_cache if file_cache is not None else {}
         self.analyze_file_func = analyze_file_func
 
-    def handle_import(self, node: ParsoNode) -> None:
-        """Handle 'import' statements (parso node)."""
-        # For parso import_name nodes, parse the import statement
+    def handle_import(self, node: Node) -> None:
+        """Handle 'import' statements (tree-sitter node)."""
+        # Tree-sitter import_statement structure
         for child in get_children(node):
-            if child.type == "dotted_as_name":
+            if child.type == "aliased_import":
                 # Handle "import module as alias"
-                module_name = None
-                alias_name = None
-                for part in get_children(child):
-                    if part.type == "name":
-                        if module_name is None:
-                            module_name = get_value(part)
-                        else:
-                            alias_name = get_value(part)
-                if module_name:
-                    self.imports[alias_name or module_name] = module_name
-            elif child.type == "dotted_name":
+                name_node = child.child_by_field_name("name")
+                alias_node = child.child_by_field_name("alias")
+                if name_node:
+                    module_name = self._reconstruct_dotted_name(name_node)
+                    alias_name = get_value(alias_node) if alias_node else None
+                    if module_name:
+                        self.imports[alias_name or module_name] = module_name
+            elif child.type in ("dotted_name", "identifier"):
                 # Handle "import module"
-                module_name = get_value(child)
-                if module_name:
-                    self.imports[module_name] = module_name
-            elif child.type == "name" and get_value(child) not in ("import", "as"):
-                # Simple case: "import module"
-                module_name = get_value(child)
+                module_name = self._reconstruct_dotted_name(child)
                 if module_name:
                     self.imports[module_name] = module_name
 
-    def handle_import_from(self, node: ParsoNode) -> None:
-        """Handle 'from ... import ...' statements (parso node)."""
-        # For parso import_from nodes, parse the from...import statement
-        module_name = None
-        import_names = []
+    def handle_import_from(self, node: Node) -> None:
+        """Handle 'from ... import ...' statements (tree-sitter node)."""
+        # Tree-sitter import_from_statement has 'module_name' field
+        module_node = node.child_by_field_name("module_name")
+        if not module_node:
+            return
 
-        # First pass: find module name and collect import names
+        module_name = self._reconstruct_dotted_name(module_node)
+        if not module_name:
+            return
+
+        # Find imported names - look for aliased_import, dotted_name, or identifier children
         for child in get_children(node):
-            if (
-                child.type == "name"
-                and module_name is None
-                and get_value(child) not in ("from", "import")
-            ) or (child.type == "dotted_name" and module_name is None):
-                module_name = get_value(child)
-            elif child.type == "import_as_names":
-                for name_child in get_children(child):
-                    if name_child.type == "import_as_name":
-                        # Handle "from module import name as alias"
-                        import_name = None
-                        alias_name = None
-                        for part in get_children(name_child):
-                            if part.type == "name":
-                                if import_name is None:
-                                    import_name = get_value(part)
-                                else:
-                                    alias_name = get_value(part)
-                        if import_name:
-                            import_names.append((import_name, alias_name))
-                    elif name_child.type == "name":
-                        # Handle "from module import name"
-                        name_value = get_value(name_child)
-                        if name_value:
-                            import_names.append((name_value, None))
-            elif (
-                child.type == "name"
-                and get_value(child) not in ("from", "import")
-                and module_name is not None
-            ):
-                # Handle simple "from module import name" where name is a direct child
-                child_value = get_value(child)
-                if child_value:
-                    import_names.append((child_value, None))
+            if child.type == "aliased_import":
+                # Handle "from module import name as alias"
+                name_node = child.child_by_field_name("name")
+                alias_node = child.child_by_field_name("alias")
+                if name_node:
+                    import_name = self._reconstruct_dotted_name(name_node)
+                    alias_name = get_value(alias_node) if alias_node else None
+                    if import_name:
+                        full_name = f"{module_name}.{import_name}"
+                        self.imports[alias_name or import_name] = full_name
+            elif child.type in ("dotted_name", "identifier") and child != module_node:
+                # Handle "from module import name" or "from module import dotted.name"
+                import_name = self._reconstruct_dotted_name(child)
+                if import_name and import_name not in ("from", "import"):
+                    full_name = f"{module_name}.{import_name}"
+                    # For dotted imports like "from pkg import sub.module", use the last part as the key
+                    key = import_name.split(".")[-1] if "." in import_name else import_name
+                    self.imports[key] = full_name
 
-        # Second pass: register all imports
-        if module_name:
-            for import_name, alias_name in import_names:
-                full_name = f"{module_name}.{import_name}"
-                self.imports[alias_name or import_name] = full_name
+    def _reconstruct_dotted_name(self, node: Node) -> str | None:
+        """Reconstruct a dotted name from a tree-sitter node."""
+        if node.type == "identifier":
+            return get_value(node)
+
+        if node.type == "dotted_name":
+            parts = [
+                get_value(child) for child in get_children(node) if child.type == "identifier"
+            ]
+            valid_parts = [part for part in parts if part is not None]
+            return ".".join(valid_parts) if valid_parts else None
+
+        if node.type == "attribute":
+            # Recursively build dotted name from attribute chain
+            obj_node = node.child_by_field_name("object")
+            attr_node = node.child_by_field_name("attribute")
+            if obj_node and attr_node:
+                obj_name = self._reconstruct_dotted_name(obj_node)
+                attr_name = get_value(attr_node)
+                if obj_name and attr_name:
+                    return f"{obj_name}.{attr_name}"
+
+        return get_value(node)
 
     def resolve_module_path(
         self, module_name: str | None, current_file_path: str | None = None
@@ -194,19 +196,31 @@ class ImportResolver:
         return None
 
     def resolve_full_class_path(self, base) -> str | None:
-        """Resolve the full class path from a parso power/atom_expr node like pn.widgets.IntSlider."""
+        """Resolve the full class path from a tree-sitter node like pn.widgets.IntSlider."""
         parts = []
-        for child in get_children(base):
-            if child.type == "name":
-                parts.append(get_value(child))
-            elif child.type == "trailer":
-                parts.extend(
-                    [
-                        get_value(trailer_child)
-                        for trailer_child in get_children(child)
-                        if trailer_child.type == "name"
-                    ]
-                )
+
+        # Extract parts based on node type
+        if base.type == "identifier":
+            parts.append(get_value(base))
+        elif base.type == "attribute":
+            # Recursively extract parts from attribute chain
+            current = base
+            while current:
+                if current.type == "attribute":
+                    attr_node = current.child_by_field_name("attribute")
+                    if attr_node:
+                        parts.insert(0, get_value(attr_node))
+                    current = current.child_by_field_name("object")
+                elif current.type == "identifier":
+                    parts.insert(0, get_value(current))
+                    current = None
+                else:
+                    break
+        elif base.type == "call":
+            # For call nodes, extract the function being called
+            func_node = base.child_by_field_name("function")
+            if func_node:
+                return self.resolve_full_class_path(func_node)
 
         if parts:
             # Resolve the root module through imports

@@ -21,7 +21,13 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
 ]
-dependencies = ["pygls", "lsprotocol", "param", "platformdirs", "parso>=0.8.5"]
+dependencies = [
+    "pygls",
+    "lsprotocol",
+    "platformdirs",
+    "tree-sitter>=0.25.0",
+    "tree-sitter-python>=0.25.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/hoxbro/param-lsp"
@@ -34,7 +40,7 @@ param-lsp = "param_lsp.__main__:main"
 jupyter = ["jupyterlab-lsp"]
 
 [dependency-groups]
-dev = ["debugpy", "pytest", "setuptools_scm", "holoviews", "panel", "param-lsp[jupyter]"]
+dev = ["debugpy", "pytest", "setuptools_scm", "holoviews", "panel", "param", "param-lsp[jupyter]"]
 docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
 
 [tool.hatch.version]

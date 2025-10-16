@@ -9,17 +9,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict
 
 if TYPE_CHECKING:
-    from parso.tree import NodeOrLeaf
+    from tree_sitter import Node
 
     from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
 # =============================================================================
-# PARSO TYPE ALIASES
+# TREE-SITTER TYPE ALIASES
 # =============================================================================
 
-# Re-export parso types for convenience
-ParsoNode: TypeAlias = "NodeOrLeaf"
+# Re-export tree-sitter types for convenience
+TSNode: TypeAlias = "Node"
 
 
 # =============================================================================
@@ -44,8 +44,8 @@ StringDict: TypeAlias = dict[str, str]
 # String to Any mappings (for cache data, document cache, etc.)
 AnyDict: TypeAlias = dict[str, Any]
 
-# Keyword arguments from parso nodes
-KwargsDict: TypeAlias = dict[str, "NodeOrLeaf"]
+# Keyword arguments from tree-sitter nodes
+KwargsDict: TypeAlias = dict[str, "Node"]
 
 
 # =============================================================================

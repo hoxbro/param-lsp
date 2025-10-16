@@ -12,19 +12,17 @@ import sys
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
-import parso
-
+from param_lsp import _treesitter
 from param_lsp._logging import get_logger
 from param_lsp.cache import external_library_cache
 from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 
-from . import parso_utils
 from .ast_navigator import ImportHandler, ParameterDetector
 from .parameter_extractor import extract_parameter_info_from_assignment
 
 if TYPE_CHECKING:
-    from parso.tree import NodeOrLeaf
+    from tree_sitter import Node
 
     from .python_environment import PythonEnvironment
 
@@ -57,7 +55,7 @@ class ExternalClassInspector:
             Path, list[str]
         ] = {}  # Store source lines for parameter extraction
         # Cache all class AST nodes for inheritance resolution
-        self.class_ast_cache: dict[str, tuple[NodeOrLeaf, dict[str, str]]] = {}
+        self.class_ast_cache: dict[str, tuple[Node, dict[str, str]]] = {}
         # Multi-file analysis queue
         self.analysis_queue: list[tuple[Path, str]] = []  # (file_path, reason)
         self.currently_analyzing: set[Path] = set()  # Prevent circular analysis
@@ -171,8 +169,8 @@ class ExternalClassInspector:
                     continue
 
                 # Parse import statements from already-parsed tree
-                for node in parso_utils.walk_tree(tree):
-                    if node.type == "import_from":
+                for node in _treesitter.walk_tree(tree.root_node):
+                    if node.type == "import_from_statement":
                         # Extract "from .module import Name1, Name2"
                         self._process_import_from_for_reexport(
                             node, module_path, library_name, reexport_map
@@ -187,7 +185,7 @@ class ExternalClassInspector:
 
     def _process_import_from_for_reexport(
         self,
-        import_node: NodeOrLeaf,
+        import_node: Node,
         current_module: str,
         library_name: str,
         reexport_map: dict[str, str],
@@ -200,64 +198,48 @@ class ExternalClassInspector:
             library_name: Root library name (e.g., "panel")
             reexport_map: Map to populate with re-export entries
         """
-        # Extract source module and imported names
-        # e.g., "from .input import TextInput, Checkbox"
-        source_module = None
+        # Extract source module and imported names using tree-sitter structure
+        # Tree-sitter import_from_statement has:
+        # - module_name field: the module being imported from
+        # - name field or aliased_import nodes: the names being imported
+
+        # Get the module name (e.g., ".input" in "from .input import TextInput")
+        module_name_node = import_node.child_by_field_name("module_name")
+        if not module_name_node:
+            # Check for dotted_name or relative_import nodes
+            for child in _treesitter.get_children(import_node):
+                if child.type in ("dotted_name", "relative_import", "identifier"):
+                    module_name_node = child
+                    break
+
+        if not module_name_node:
+            return
+
+        source_module = _treesitter.get_value(module_name_node)
+        if not source_module:
+            return
+
+        # Get the imported names
         imported_names = []
+        for child in _treesitter.get_children(import_node):
+            if child.type == "identifier":
+                # Single import: from .input import TextInput
+                name = _treesitter.get_value(child)
+                if name and name not in ("from", "import"):
+                    imported_names.append(name)
+            elif child.type == "aliased_import":
+                # Import with alias: from .input import TextInput as TI
+                # Get the original name (before "as")
+                name_node = child.child_by_field_name("name")
+                if name_node:
+                    name = _treesitter.get_value(name_node)
+                    if name:
+                        imported_names.append(name)
+            elif child.type == "dotted_name":
+                # Skip - this is the module name
+                pass
 
-        children = list(parso_utils.get_children(import_node))
-
-        # First pass: collect module path after 'from'
-        i = 0
-        while i < len(children):
-            child = children[i]
-            if child.type == "keyword" and parso_utils.get_value(child) == "from":
-                # Collect module path until we hit 'import' keyword
-                i += 1
-                module_parts = []
-                while i < len(children):
-                    next_child = children[i]
-                    if (
-                        next_child.type == "keyword"
-                        and parso_utils.get_value(next_child) == "import"
-                    ):
-                        break
-                    if next_child.type in ("name", "operator"):
-                        value = parso_utils.get_value(next_child)
-                        if value and value not in (",", " "):
-                            module_parts.append(value)
-                    i += 1
-                source_module = "".join(module_parts)
-                break  # Found the module, exit first pass
-            i += 1
-
-        # Second pass: collect imported names after 'import'
-        i = 0
-        while i < len(children):
-            child = children[i]
-            if child.type == "keyword" and parso_utils.get_value(child) == "import":
-                # Collect all imported names
-                i += 1
-                while i < len(children):
-                    next_child = children[i]
-                    if next_child.type == "name":
-                        imported_names.append(parso_utils.get_value(next_child))
-                    elif next_child.type == "import_as_names":
-                        # Handle multiple imports: "import Name1, Name2"
-                        for subchild in parso_utils.get_children(next_child):
-                            if subchild.type == "name":
-                                imported_names.append(parso_utils.get_value(subchild))
-                            elif subchild.type == "import_as_name":
-                                # Handle "import Name as Alias" - take the original name
-                                for name_child in parso_utils.get_children(subchild):
-                                    if name_child.type == "name":
-                                        imported_names.append(parso_utils.get_value(name_child))
-                                        break
-                    i += 1
-                break  # Found the imports, exit second pass
-            i += 1
-
-        if not source_module or not imported_names:
+        if not imported_names:
             return
 
         # Resolve relative imports like ".input" to "panel.widgets.input"
@@ -379,7 +361,7 @@ class ExternalClassInspector:
         ] = {}  # path -> (tree, imports, source_lines)
         inheritance_map: dict[str, list[str]] = {}  # full_class_path -> [base_class_paths]
         class_ast_nodes: dict[
-            str, tuple[NodeOrLeaf, dict[str, str], Path]
+            str, tuple[Node, dict[str, str], Path]
         ] = {}  # full_class_path -> (ast_node, imports, source_file)
         reexport_map: dict[str, str] = {}  # short_path -> full_path
 
@@ -403,7 +385,7 @@ class ExternalClassInspector:
         for source_path in source_paths:
             try:
                 source_code = source_path.read_text(encoding="utf-8")
-                tree = parso.parse(source_code)
+                tree = _treesitter.parser.parse(source_code)
                 source_lines = source_code.split("\n")
 
                 # Extract imports, classes, and re-exports in a single tree walk
@@ -419,11 +401,11 @@ class ExternalClassInspector:
                     parts = list(relative_path.parts[:-1])  # Exclude __init__.py
                     module_path = ".".join([library_name, *parts]) if parts else library_name
 
-                for node in parso_utils.walk_tree(tree):
+                for node in _treesitter.walk_tree(tree.root_node):
                     # Extract imports
-                    if node.type == "import_name":
+                    if node.type == "import_statement":
                         import_handler.handle_import(node)
-                    elif node.type == "import_from":
+                    elif node.type == "import_from_statement":
                         import_handler.handle_import_from(node)
                         # Also process re-exports if this is an __init__.py
                         if is_init_file and module_path:
@@ -431,8 +413,8 @@ class ExternalClassInspector:
                                 node, module_path, library_name, reexport_map
                             )
                     # Extract class definitions
-                    elif node.type == "classdef":
-                        class_name = parso_utils.get_class_name(node)
+                    elif node.type == "class_definition":
+                        class_name = _treesitter.get_class_name(node)
                         if class_name:
                             # Construct full class path using cached library root
                             full_class_path = self._get_full_class_path_cached(
@@ -793,7 +775,7 @@ class ExternalClassInspector:
         return python_files
 
     def _analyze_file_ast(
-        self, tree: NodeOrLeaf, source_code: str
+        self, tree: Node, source_code: str
     ) -> dict[str, ParameterizedInfo | None]:
         """Analyze a parsed AST to find Parameterized classes.
 
@@ -819,24 +801,24 @@ class ExternalClassInspector:
 
         return classes
 
-    def _cache_all_class_nodes(self, node: NodeOrLeaf, imports: dict[str, str]) -> None:
+    def _cache_all_class_nodes(self, node: Node, imports: dict[str, str]) -> None:
         """Cache all class AST nodes for later inheritance resolution.
 
         Args:
             node: AST node to search
             imports: Import mappings for this file
         """
-        if hasattr(node, "type") and node.type == "classdef":
+        if hasattr(node, "type") and node.type == "class_definition":
             class_name = self._get_class_name(node)
             if class_name:
                 # Store the class node and its imports context
                 self.class_ast_cache[class_name] = (node, imports.copy())
 
         # Recursively cache children
-        for child in parso_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             self._cache_all_class_nodes(child, imports)
 
-    def _walk_ast_for_imports(self, node: NodeOrLeaf, import_handler: ImportHandler) -> None:
+    def _walk_ast_for_imports(self, node: Node, import_handler: ImportHandler) -> None:
         """Walk AST to find and parse import statements.
 
         Args:
@@ -844,18 +826,18 @@ class ExternalClassInspector:
             import_handler: Handler for processing imports
         """
         if hasattr(node, "type"):
-            if node.type == "import_name":
+            if node.type == "import_statement":
                 import_handler.handle_import(node)
-            elif node.type == "import_from":
+            elif node.type == "import_from_statement":
                 import_handler.handle_import_from(node)
 
         # Recursively walk children
-        for child in parso_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             self._walk_ast_for_imports(child, import_handler)
 
     def _walk_ast_for_classes(
         self,
-        node: NodeOrLeaf,
+        node: Node,
         imports: dict[str, str],
         classes: dict[str, ParameterizedInfo | None],
         source_lines: list[str],
@@ -868,17 +850,17 @@ class ExternalClassInspector:
             classes: Dictionary to store found classes
             source_lines: Source code lines for parameter extraction
         """
-        if hasattr(node, "type") and node.type == "classdef":
+        if hasattr(node, "type") and node.type == "class_definition":
             class_info = self._analyze_class_definition(node, imports, source_lines)
             if class_info:
                 classes[class_info.name] = class_info
 
         # Recursively walk children
-        for child in parso_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             self._walk_ast_for_classes(child, imports, classes, source_lines)
 
     def _analyze_class_definition(
-        self, class_node: NodeOrLeaf, imports: dict[str, str], source_lines: list[str]
+        self, class_node: Node, imports: dict[str, str], source_lines: list[str]
     ) -> ParameterizedInfo | None:
         """Analyze a class definition to extract parameter information.
 
@@ -910,7 +892,7 @@ class ExternalClassInspector:
 
         return class_info if class_info.parameters else None
 
-    def _get_class_name(self, class_node: NodeOrLeaf) -> str | None:
+    def _get_class_name(self, class_node: Node) -> str | None:
         """Extract class name from class definition node.
 
         Args:
@@ -919,14 +901,10 @@ class ExternalClassInspector:
         Returns:
             Class name or None if not found
         """
-        for child in parso_utils.get_children(class_node):
-            if child.type == "name":
-                return parso_utils.get_value(child)
-        return None
+        # Use ts_utils helper function
+        return _treesitter.get_class_name(class_node)
 
-    def _inherits_from_parameterized(
-        self, class_node: NodeOrLeaf, imports: dict[str, str]
-    ) -> bool:
+    def _inherits_from_parameterized(self, class_node: Node, imports: dict[str, str]) -> bool:
         """Check if a class inherits from param.Parameterized.
 
         Args:
@@ -951,7 +929,7 @@ class ExternalClassInspector:
 
         return False
 
-    def _get_base_classes(self, class_node: NodeOrLeaf) -> list[str]:
+    def _get_base_classes(self, class_node: Node) -> list[str]:
         """Extract base class names from class definition.
 
         Args:
@@ -960,32 +938,14 @@ class ExternalClassInspector:
         Returns:
             List of base class names
         """
+        # Use ts_utils helper to get base nodes
+        base_nodes = _treesitter.get_class_bases(class_node)
         base_classes = []
-        in_parentheses = False
 
-        for child in parso_utils.get_children(class_node):
-            if child.type == "operator" and parso_utils.get_value(child) == "(":
-                in_parentheses = True
-            elif child.type == "operator" and parso_utils.get_value(child) == ")":
-                in_parentheses = False
-            elif in_parentheses:
-                if child.type in ("name", "power", "atom_expr"):
-                    base_class_name = self._resolve_base_class_name(child)
-                    if base_class_name:
-                        base_classes.append(base_class_name)
-                elif child.type == "arglist":
-                    # Handle multiple base classes in arglist
-                    for arg_child in parso_utils.get_children(child):
-                        if arg_child.type in ("name", "power", "atom_expr"):
-                            base_class_name = self._resolve_base_class_name(arg_child)
-                            if base_class_name:
-                                base_classes.append(base_class_name)
-                        elif (
-                            arg_child.type == "operator"
-                            and parso_utils.get_value(arg_child) == ","
-                        ):
-                            # Skip commas
-                            pass
+        for base_node in base_nodes:
+            base_class_name = self._resolve_base_class_name(base_node)
+            if base_class_name:
+                base_classes.append(base_class_name)
 
         return base_classes
 
@@ -1030,7 +990,7 @@ class ExternalClassInspector:
         finally:
             self._inheritance_check_visited.discard(base_class)
 
-    def _find_class_definition(self, class_name: str) -> tuple[NodeOrLeaf, dict[str, str]] | None:
+    def _find_class_definition(self, class_name: str) -> tuple[Node, dict[str, str]] | None:
         """Find the AST node for a class definition.
 
         Args:
@@ -1195,13 +1155,13 @@ class ExternalClassInspector:
                 # Read and parse the file
                 source_code = file_path.read_text(encoding="utf-8")
                 source_lines = source_code.split("\n")
-                tree = parso.parse(source_code)
+                tree = _treesitter.parser.parse(source_code)
 
                 # Store source lines for parameter extraction
                 self.file_source_cache[file_path] = source_lines
 
                 # Analyze the file (this may queue additional files)
-                file_analysis = self._analyze_file_ast(tree, source_code)
+                file_analysis = self._analyze_file_ast(tree.root_node, source_code)
                 self.analyzed_files[file_path] = file_analysis
 
                 logger.debug(
@@ -1241,12 +1201,12 @@ class ExternalClassInspector:
 
     def _convert_ast_to_class_info(
         self,
-        class_node: NodeOrLeaf,
+        class_node: Node,
         imports: dict[str, str],
         full_class_path: str,
         file_path: Path,
         inheritance_map: dict[str, list[str]] | None = None,
-        class_ast_nodes: dict[str, tuple[NodeOrLeaf, dict[str, str], Path]] | None = None,
+        class_ast_nodes: dict[str, tuple[Node, dict[str, str], Path]] | None = None,
     ) -> ParameterizedInfo:
         """Convert an AST class node to ParameterizedInfo.
 
@@ -1310,7 +1270,7 @@ class ExternalClassInspector:
 
     def _extract_inherited_parameters(
         self,
-        class_node: NodeOrLeaf,
+        class_node: Node,
         parameter_detector: ParameterDetector,
         class_info: ParameterizedInfo,
         source_lines: list[str],
@@ -1360,7 +1320,7 @@ class ExternalClassInspector:
         parameter_detector: ParameterDetector,
         class_info: ParameterizedInfo,
         inheritance_map: dict[str, list[str]],
-        class_ast_nodes: dict[str, tuple[NodeOrLeaf, dict[str, str], Path]],
+        class_ast_nodes: dict[str, tuple[Node, dict[str, str], Path]],
     ) -> None:
         """Extract parameters from parent classes using the inheritance map.
 
@@ -1510,9 +1470,7 @@ class ExternalClassInspector:
         # For now, return None and rely on heuristics
         return None
 
-    def _search_for_class_in_ast(
-        self, node: NodeOrLeaf, target_class_name: str
-    ) -> NodeOrLeaf | None:
+    def _search_for_class_in_ast(self, node: Node, target_class_name: str) -> Node | None:
         """Recursively search for a class definition in an AST.
 
         Args:
@@ -1522,13 +1480,13 @@ class ExternalClassInspector:
         Returns:
             AST node of the class definition if found, None otherwise
         """
-        if hasattr(node, "type") and node.type == "classdef":
+        if hasattr(node, "type") and node.type == "class_definition":
             class_name = self._get_class_name(node)
             if class_name == target_class_name:
                 return node
 
         # Recursively search children
-        for child in parso_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             result = self._search_for_class_in_ast(child, target_class_name)
             if result:
                 return result
@@ -1559,7 +1517,7 @@ class ExternalClassInspector:
 
         return False
 
-    def _resolve_base_class_name(self, node: NodeOrLeaf) -> str | None:
+    def _resolve_base_class_name(self, node: Node) -> str | None:
         """Resolve base class name from AST node.
 
         Args:
@@ -1568,26 +1526,16 @@ class ExternalClassInspector:
         Returns:
             Resolved base class name
         """
-        if node.type == "name":
-            return parso_utils.get_value(node)
-        elif node.type in ("power", "atom_expr"):
+        if node.type == "identifier":
+            return _treesitter.get_value(node)
+        elif node.type == "attribute":
             # Handle dotted names like param.Parameterized
-            parts = []
-            for child in parso_utils.get_children(node):
-                if child.type == "name":
-                    parts.append(parso_utils.get_value(child))
-                elif child.type == "trailer":
-                    parts.extend(
-                        parso_utils.get_value(trailer_child)
-                        for trailer_child in parso_utils.get_children(child)
-                        if trailer_child.type == "name"
-                    )
-            return ".".join(parts) if parts else None
+            return _treesitter.get_value(node)
         return None
 
     def _extract_class_parameters(
         self,
-        class_node: NodeOrLeaf,
+        class_node: Node,
         parameter_detector: ParameterDetector,
         class_info: ParameterizedInfo,
         source_lines: list[str],
@@ -1601,22 +1549,18 @@ class ExternalClassInspector:
             class_info: Class info to populate with parameters
             source_lines: Source code lines for extracting definitions
         """
-        # Find class suite (body)
-        suite_node = None
-        for child in parso_utils.get_children(class_node):
-            if child.type == "suite":
-                suite_node = child
-                break
+        # Find class block (body) - tree-sitter uses "block" instead of "suite"
+        block_node = class_node.child_by_field_name("body")
 
-        if not suite_node:
+        if not block_node:
             return
 
         # Walk through statements in class body
-        self._walk_class_body(suite_node, parameter_detector, class_info, source_lines, imports)
+        self._walk_class_body(block_node, parameter_detector, class_info, source_lines, imports)
 
     def _walk_class_body(
         self,
-        suite_node: NodeOrLeaf,
+        block_node: Node,
         parameter_detector: ParameterDetector,
         class_info: ParameterizedInfo,
         source_lines: list[str],
@@ -1625,17 +1569,21 @@ class ExternalClassInspector:
         """Walk through class body to find parameter assignments.
 
         Args:
-            suite_node: Suite AST node containing class body
+            block_node: Block AST node containing class body
             parameter_detector: Detector for parameter assignments
             class_info: Class info to populate
             source_lines: Source code lines
+            imports: Import mappings
         """
-        for child in parso_utils.get_children(suite_node):
-            if child.type == "simple_stmt":
-                # Check for assignment statements
-                for stmt_child in parso_utils.get_children(child):
+        for child in _treesitter.get_children(block_node):
+            # In tree-sitter, assignments can be:
+            # - "expression_statement" containing an "assignment"
+            # - Direct "assignment" nodes
+            if child.type == "expression_statement":
+                # Check for assignment statements inside expression_statement
+                for stmt_child in _treesitter.get_children(child):
                     if (
-                        stmt_child.type == "expr_stmt"
+                        stmt_child.type == "assignment"
                         and parameter_detector.is_parameter_assignment(stmt_child)
                     ):
                         param_info = self._extract_parameter_info(
@@ -1643,17 +1591,22 @@ class ExternalClassInspector:
                         )
                         if param_info:
                             class_info.add_parameter(param_info)
+            elif child.type == "assignment" and parameter_detector.is_parameter_assignment(child):
+                # Direct assignment node
+                param_info = self._extract_parameter_info(child, source_lines, imports)
+                if param_info:
+                    class_info.add_parameter(param_info)
             elif hasattr(child, "type") and child.type not in (
-                "funcdef",
-                "async_funcdef",
-                "classdef",
+                "function_definition",
+                "async_function_definition",
+                "class_definition",
             ):
                 # Recursively search in nested structures, but skip function/method definitions
                 # and nested class definitions to avoid treating method-local variables as parameters
                 self._walk_class_body(child, parameter_detector, class_info, source_lines, imports)
 
     def _extract_parameter_info(
-        self, assignment_node: NodeOrLeaf, source_lines: list[str], imports: dict[str, str]
+        self, assignment_node: Node, source_lines: list[str], imports: dict[str, str]
     ) -> ParameterInfo | None:
         """Extract parameter information from an assignment statement.
 
@@ -1678,7 +1631,7 @@ class ExternalClassInspector:
             assignment_node, param_name, imports, source_content
         )
 
-    def _get_parameter_name(self, assignment_node: NodeOrLeaf) -> str | None:
+    def _get_parameter_name(self, assignment_node: Node) -> str | None:
         """Extract parameter name from assignment node.
 
         Args:
@@ -1687,17 +1640,12 @@ class ExternalClassInspector:
         Returns:
             Parameter name or None
         """
-        # Find the name before the '=' operator
-        for child in parso_utils.get_children(assignment_node):
-            if child.type == "name":
-                return parso_utils.get_value(child)
-            elif child.type == "operator" and parso_utils.get_value(child) == "=":
-                break
-        return None
+        # Use ts_utils helper function
+        return _treesitter.get_assignment_target_name(assignment_node)
 
     def _resolve_base_class_paths(
         self,
-        class_node: NodeOrLeaf,
+        class_node: Node,
         file_imports: dict[str, str],
         library_name: str,
         source_path: Path | None = None,

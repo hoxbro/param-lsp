@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
-import parso
-
 from param_lsp._analyzer.ast_navigator import (
     ImportHandler,
     ParameterDetector,
     SourceAnalyzer,
 )
+from param_lsp._treesitter import parser
+
+
+def _get_first_statement(code: str):
+    """Helper to parse code and get the first statement node."""
+    tree = parser.parse(code)
+    # For tree-sitter, we need to find the first meaningful node
+    # The root is a module node, first child is usually the statement
+    for child in tree.root_node.children:
+        if child.type in (
+            "expression_statement",
+            "assignment",
+            "import_statement",
+            "import_from_statement",
+        ):
+            # For expression statements, we might need to go one level deeper
+            if (
+                child.type == "expression_statement"
+                and child.children
+                and child.children[0].type in ("assignment", "call", "attribute")
+            ):
+                # Return the actual expression (assignment or call)
+                return child.children[0]
+            return child
+    return tree.root_node.children[0] if tree.root_node.children else tree.root_node
 
 
 class TestParameterDetector:
@@ -17,8 +40,7 @@ class TestParameterDetector:
     def test_is_parameter_assignment_with_param_integer(self):
         """Test detection of param.Integer assignment."""
         code = "width = param.Integer(default=100)"
-        tree = parso.parse(code)
-        assignment = tree.children[0]
+        assignment = _get_first_statement(code)
 
         imports = {"param": "param"}
         detector = ParameterDetector(imports)
@@ -28,8 +50,7 @@ class TestParameterDetector:
     def test_is_parameter_assignment_with_direct_call(self):
         """Test detection of direct parameter type call."""
         code = "height = Integer(default=50)"
-        tree = parso.parse(code)
-        assignment = tree.children[0]
+        assignment = _get_first_statement(code)
 
         imports = {"Integer": "param.Integer"}
         detector = ParameterDetector(imports)
@@ -39,8 +60,7 @@ class TestParameterDetector:
     def test_is_parameter_assignment_not_parameter(self):
         """Test that non-parameter assignments are not detected."""
         code = "value = 42"
-        tree = parso.parse(code)
-        assignment = tree.children[0]
+        assignment = _get_first_statement(code)
 
         imports = {}
         detector = ParameterDetector(imports)
@@ -50,35 +70,32 @@ class TestParameterDetector:
     def test_is_parameter_call_direct_type(self):
         """Test detection of direct parameter type calls."""
         code = "param.Integer(default=100)"
-        tree = parso.parse(code)
-        power_node = tree.children[0]
+        call_node = _get_first_statement(code)
 
         imports = {"param": "param"}
         detector = ParameterDetector(imports)
 
-        assert detector.is_parameter_call(power_node)
+        assert detector.is_parameter_call(call_node)
 
     def test_is_parameter_call_imported_type(self):
         """Test detection of imported parameter type calls."""
         code = "Integer(default=100)"
-        tree = parso.parse(code)
-        atom_expr = tree.children[0]
+        call_node = _get_first_statement(code)
 
         imports = {"Integer": "param.Integer"}
         detector = ParameterDetector(imports)
 
-        assert detector.is_parameter_call(atom_expr)
+        assert detector.is_parameter_call(call_node)
 
     def test_is_parameter_call_not_parameter(self):
         """Test that non-parameter calls are not detected."""
         code = "some_function(arg=value)"
-        tree = parso.parse(code)
-        atom_expr = tree.children[0]
+        call_node = _get_first_statement(code)
 
         imports = {}
         detector = ParameterDetector(imports)
 
-        assert not detector.is_parameter_call(atom_expr)
+        assert not detector.is_parameter_call(call_node)
 
 
 class TestImportHandler:
@@ -87,8 +104,7 @@ class TestImportHandler:
     def test_handle_import_simple(self):
         """Test handling of simple import statement."""
         code = "import param"
-        tree = parso.parse(code)
-        import_node = tree.children[0]
+        import_node = _get_first_statement(code)
 
         imports = {}
         handler = ImportHandler(imports)
@@ -99,8 +115,7 @@ class TestImportHandler:
     def test_handle_import_with_alias(self):
         """Test handling of import with alias."""
         code = "import param as p"
-        tree = parso.parse(code)
-        import_node = tree.children[0]
+        import_node = _get_first_statement(code)
 
         imports = {}
         handler = ImportHandler(imports)
@@ -111,8 +126,7 @@ class TestImportHandler:
     def test_handle_import_dotted(self):
         """Test handling of dotted import."""
         code = "import param.version"
-        tree = parso.parse(code)
-        import_node = tree.children[0]
+        import_node = _get_first_statement(code)
 
         imports = {}
         handler = ImportHandler(imports)
@@ -123,8 +137,7 @@ class TestImportHandler:
     def test_handle_import_from_simple(self):
         """Test handling of from-import statement."""
         code = "from param import Integer"
-        tree = parso.parse(code)
-        import_node = tree.children[0]
+        import_node = _get_first_statement(code)
 
         imports = {}
         handler = ImportHandler(imports)
@@ -135,8 +148,7 @@ class TestImportHandler:
     def test_handle_import_from_multiple(self):
         """Test handling of from-import with multiple names."""
         code = "from param import Integer, String"
-        tree = parso.parse(code)
-        import_node = tree.children[0]
+        import_node = _get_first_statement(code)
 
         imports = {}
         handler = ImportHandler(imports)
@@ -148,8 +160,7 @@ class TestImportHandler:
     def test_handle_import_from_with_alias(self):
         """Test handling of from-import with alias."""
         code = "from param import Integer as Int"
-        tree = parso.parse(code)
-        import_node = tree.children[0]
+        import_node = _get_first_statement(code)
 
         imports = {}
         handler = ImportHandler(imports)
