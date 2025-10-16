@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from src.param_lsp._analyzer import ts_parser, ts_queries, ts_utils
+from src.param_lsp._treesitter import parser, queries, utils
 
 
 def load_test_files() -> list[tuple[str, str]]:
@@ -51,7 +51,7 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     # Parse all files once (with cache)
     trees = []
     for _, content in test_files:
-        tree = ts_parser.parse(content)
+        tree = parser.parse(content)
         trees.append(tree)
 
     # Benchmark 1: Find all classes using manual walking
@@ -59,7 +59,7 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     manual_classes = [
         node
         for tree in trees
-        for node in ts_utils.walk_tree(tree.root_node)
+        for node in utils.walk_tree(tree.root_node)
         if node.type == "class_definition"
     ]
     manual_time = time.perf_counter() - start_time
@@ -68,7 +68,7 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     start_time = time.perf_counter()
     query_classes = []
     for tree in trees:
-        results = ts_queries.find_classes(tree)
+        results = queries.find_classes(tree)
         query_classes.extend([node for node, _ in results])
     query_time = time.perf_counter() - start_time
 
@@ -84,7 +84,7 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     manual_imports = [
         node
         for tree in trees
-        for node in ts_utils.walk_tree(tree.root_node)
+        for node in utils.walk_tree(tree.root_node)
         if node.type in ("import_statement", "import_from_statement")
     ]
     manual_import_time = time.perf_counter() - start_time
@@ -92,7 +92,7 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     start_time = time.perf_counter()
     query_imports = []
     for tree in trees:
-        results = ts_queries.find_imports(tree)
+        results = queries.find_imports(tree)
         query_imports.extend([node for node, _ in results])
     query_import_time = time.perf_counter() - start_time
 
@@ -106,17 +106,14 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     # Benchmark 4: Find all function calls
     start_time = time.perf_counter()
     manual_calls = [
-        node
-        for tree in trees
-        for node in ts_utils.walk_tree(tree.root_node)
-        if node.type == "call"
+        node for tree in trees for node in utils.walk_tree(tree.root_node) if node.type == "call"
     ]
     manual_call_time = time.perf_counter() - start_time
 
     start_time = time.perf_counter()
     query_calls = []
     for tree in trees:
-        results = ts_queries.find_calls(tree)
+        results = queries.find_calls(tree)
         query_calls.extend([node for node, _ in results])
     query_call_time = time.perf_counter() - start_time
 
