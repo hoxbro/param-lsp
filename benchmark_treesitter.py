@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-"""Benchmark script for tree-sitter optimizations.
+"""Benchmark script for tree-sitter query optimization.
 
-Measures performance improvements from:
-1. Parse tree caching
-2. Query-based AST pattern matching vs manual tree walking
-3. Memory usage optimization
+Measures performance improvements from query-based AST pattern matching
+vs manual tree walking.
 """
 
 from __future__ import annotations
 
 import time
-import tracemalloc
 from pathlib import Path
 
 from src.param_lsp._analyzer import ts_parser, ts_queries, ts_utils
@@ -38,56 +35,6 @@ def load_test_files() -> list[tuple[str, str]]:
     return test_files
 
 
-def benchmark_parsing_with_cache(test_files: list[tuple[str, str]]) -> dict:
-    """Benchmark parsing performance with and without cache.
-
-    Args:
-        test_files: List of (filepath, content) tuples
-
-    Returns:
-        Dictionary with benchmark results
-    """
-    print("\n" + "=" * 70)
-    print("BENCHMARK 1: Parse Tree Caching")
-    print("=" * 70)
-
-    # First, clear cache and benchmark without cache
-    ts_parser.clear_cache()
-
-    # Warm-up run
-    for _, content in test_files:
-        ts_parser.parse(content)
-
-    # Cold cache (first parse)
-    ts_parser.clear_cache()
-    start_time = time.perf_counter()
-    for _, content in test_files:
-        ts_parser.parse(content)
-    cold_time = time.perf_counter() - start_time
-
-    # Warm cache (second parse - should use cache)
-    start_time = time.perf_counter()
-    for _, content in test_files:
-        ts_parser.parse(content)
-    warm_time = time.perf_counter() - start_time
-
-    cache_stats = ts_parser.get_cache_stats()
-    speedup = cold_time / warm_time if warm_time > 0 else 0
-
-    print(f"\nParsed {len(test_files)} files:")
-    print(f"  Cold cache (first parse):  {cold_time * 1000:.2f}ms")
-    print(f"  Warm cache (cached parse): {warm_time * 1000:.2f}ms")
-    print(f"  Speedup: {speedup:.2f}x faster with cache")
-    print(f"  Cache stats: {cache_stats}")
-
-    return {
-        "cold_time": cold_time,
-        "warm_time": warm_time,
-        "speedup": speedup,
-        "cache_stats": cache_stats,
-    }
-
-
 def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     """Benchmark query-based vs manual tree walking.
 
@@ -98,7 +45,7 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
         Dictionary with benchmark results
     """
     print("\n" + "=" * 70)
-    print("BENCHMARK 2: Query-based vs Manual Tree Walking")
+    print("BENCHMARK: Query-based vs Manual Tree Walking")
     print("=" * 70)
 
     # Parse all files once (with cache)
@@ -192,91 +139,34 @@ def benchmark_query_vs_walk(test_files: list[tuple[str, str]]) -> dict:
     }
 
 
-def benchmark_memory_usage(test_files: list[tuple[str, str]]) -> dict:
-    """Benchmark memory usage of different approaches.
-
-    Args:
-        test_files: List of (filepath, content) tuples
-
-    Returns:
-        Dictionary with memory usage results
-    """
-    print("\n" + "=" * 70)
-    print("BENCHMARK 3: Memory Usage")
-    print("=" * 70)
-
-    # Benchmark 1: Memory usage without cache
-    ts_parser.clear_cache()
-    tracemalloc.start()
-
-    for _, content in test_files:
-        ts_parser.parse(content)
-        # Force parse without using cache
-        ts_parser.clear_cache()
-
-    _, peak_no_cache = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-
-    # Benchmark 2: Memory usage with cache
-    ts_parser.clear_cache()
-    tracemalloc.start()
-
-    for _, content in test_files:
-        ts_parser.parse(content)
-
-    _, peak_with_cache = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
-
-    print(f"\nMemory usage for {len(test_files)} files:")
-    print(f"  Without cache: {peak_no_cache / 1024 / 1024:.2f} MB (peak)")
-    print(f"  With cache:    {peak_with_cache / 1024 / 1024:.2f} MB (peak)")
-    print(f"  Cache overhead: {(peak_with_cache - peak_no_cache) / 1024 / 1024:.2f} MB")
-
-    cache_stats = ts_parser.get_cache_stats()
-    print(f"  Cached trees: {cache_stats['size']} / {cache_stats['capacity']}")
-
-    return {
-        "peak_no_cache_mb": peak_no_cache / 1024 / 1024,
-        "peak_with_cache_mb": peak_with_cache / 1024 / 1024,
-        "cache_overhead_mb": (peak_with_cache - peak_no_cache) / 1024 / 1024,
-    }
-
-
-def print_summary(cache_results: dict, query_results: dict, memory_results: dict):
+def print_summary(query_results: dict):
     """Print overall summary of benchmarks."""
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
 
-    print("\n📊 Performance Improvements:")
-    print(f"  • Cache speedup:       {cache_results['speedup']:.2f}x faster")
-    print(f"  • Query avg speedup:   {query_results['avg_speedup']:.2f}x faster")
+    print("\n📊 Query-based AST Pattern Matching Performance:")
+    print(f"  • Average speedup:     {query_results['avg_speedup']:.2f}x faster")
     print(f"    - Classes:           {query_results['class_speedup']:.2f}x")
     print(f"    - Imports:           {query_results['import_speedup']:.2f}x")
     print(f"    - Function calls:    {query_results['call_speedup']:.2f}x")
 
-    print("\n💾 Memory Usage:")
-    print(f"  • Peak without cache:  {memory_results['peak_no_cache_mb']:.2f} MB")
-    print(f"  • Peak with cache:     {memory_results['peak_with_cache_mb']:.2f} MB")
-    print(f"  • Cache overhead:      {memory_results['cache_overhead_mb']:.2f} MB")
-
-    # Calculate overall improvement
-    total_speedup = cache_results["speedup"] * query_results["avg_speedup"]
-    print(f"\n✨ Combined optimization: ~{total_speedup:.1f}x faster (cache + queries)")
+    print(f"\n  • Total manual time:   {query_results['manual_time'] * 1000:.2f}ms")
+    print(f"  • Total query time:    {query_results['query_time'] * 1000:.2f}ms")
 
     # Determine if improvements are significant
-    if cache_results["speedup"] > 1.5 and query_results["avg_speedup"] > 1.5:
-        print("\n✅ SIGNIFICANT IMPROVEMENT - Ready to commit!")
-    elif cache_results["speedup"] > 1.2 or query_results["avg_speedup"] > 1.2:
-        print("\n⚠️  MODERATE IMPROVEMENT - Consider additional optimizations")
+    if query_results["avg_speedup"] > 1.5:
+        print("\n✅ SIGNIFICANT IMPROVEMENT - Queries are much faster than manual walking!")
+    elif query_results["avg_speedup"] > 1.2:
+        print("\n⚠️  MODERATE IMPROVEMENT - Queries provide some benefit")
     else:
-        print("\n❌ MINIMAL IMPROVEMENT - Further optimization needed")
+        print("\n❌ MINIMAL IMPROVEMENT - Query optimization not effective")
 
 
 def main():
     """Run all benchmarks."""
     print("=" * 70)
-    print("Tree-sitter Performance Benchmark Suite")
+    print("Tree-sitter Query Optimization Benchmark")
     print("=" * 70)
 
     # Load test files
@@ -288,12 +178,10 @@ def main():
     print(f"Total lines of code: {total_lines}")
 
     # Run benchmarks
-    cache_results = benchmark_parsing_with_cache(test_files)
     query_results = benchmark_query_vs_walk(test_files)
-    memory_results = benchmark_memory_usage(test_files)
 
     # Print summary
-    print_summary(cache_results, query_results, memory_results)
+    print_summary(query_results)
 
 
 if __name__ == "__main__":
