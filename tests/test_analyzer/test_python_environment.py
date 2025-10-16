@@ -37,8 +37,8 @@ def test_from_path_invalid():
         PythonEnvironment(python="/nonexistent/python")
 
 
-@patch("subprocess.run")
-def test_query_site_packages(mock_run, tmp_path):
+@patch("subprocess.check_output")
+def test_query_site_packages(mock_check_output, tmp_path):
     """Test querying site-packages from a Python environment."""
     import json
 
@@ -49,10 +49,12 @@ def test_query_site_packages(mock_run, tmp_path):
     site_pkg_1 = tmp_path / "lib" / "python3.10" / "site-packages"
     site_pkg_1.mkdir(parents=True)
 
-    # Mock subprocess.run to return site-packages paths - use json.dumps to properly escape
-    mock_result = MagicMock()
-    mock_result.stdout = json.dumps([str(site_pkg_1)])
-    mock_run.return_value = mock_result
+    user_site = tmp_path / ".local" / "lib" / "python3.10" / "site-packages"
+    user_site.mkdir(parents=True)
+
+    # Mock subprocess.check_output to return JSON output
+    mock_output = json.dumps({"sys_path": ["", str(site_pkg_1)], "user_site": str(user_site)})
+    mock_check_output.return_value = mock_output
 
     env = PythonEnvironment(python=python_path)
     site_packages = env.site_packages
@@ -61,9 +63,11 @@ def test_query_site_packages(mock_run, tmp_path):
     assert site_packages[0] == site_pkg_1
 
 
-@patch("subprocess.run")
-def test_query_user_site(mock_run, tmp_path):
+@patch("subprocess.check_output")
+def test_query_user_site(mock_check_output, tmp_path):
     """Test querying user site-packages from a Python environment."""
+    import json
+
     python_path = tmp_path / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.touch()
@@ -71,15 +75,9 @@ def test_query_user_site(mock_run, tmp_path):
     user_site = tmp_path / ".local" / "lib" / "python3.10" / "site-packages"
     user_site.mkdir(parents=True)
 
-    # Mock first call (site-packages)
-    mock_site_result = MagicMock()
-    mock_site_result.stdout = "[]"
-
-    # Mock second call (user site)
-    mock_user_result = MagicMock()
-    mock_user_result.stdout = str(user_site)
-
-    mock_run.side_effect = [mock_site_result, mock_user_result]
+    # Mock subprocess.check_output to return JSON output
+    mock_output = json.dumps({"sys_path": [""], "user_site": str(user_site)})
+    mock_check_output.return_value = mock_output
 
     env = PythonEnvironment(python=python_path)
     # Trigger queries
@@ -210,7 +208,7 @@ def test_repr(tmp_path):
     python_path.touch()
 
     env = PythonEnvironment(python=python_path)
-    assert repr(env) == f"PythonEnvironment(python={python_path})"
+    assert repr(env) == f"PythonEnvironment({str(python_path)!r})"
 
 
 def test_from_environment_variables_venv(tmp_path, monkeypatch):

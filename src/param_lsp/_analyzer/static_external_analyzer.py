@@ -9,7 +9,6 @@ from source files directly.
 from __future__ import annotations
 
 import sys
-from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
 from param_lsp import _treesitter
@@ -20,11 +19,13 @@ from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 from .ast_navigator import ImportHandler, ParameterDetector
 from .parameter_extractor import extract_parameter_info_from_assignment
+from .python_environment import PythonEnvironment
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from tree_sitter import Node
 
-    from .python_environment import PythonEnvironment
 
 logger = get_logger(__name__, "cache")
 
@@ -51,9 +52,8 @@ class ExternalClassInspector:
         self.library_source_paths: dict[str, list[Path]] = {}
         self.parsed_classes: dict[str, ParameterizedInfo | None] = {}
         self.analyzed_files: dict[Path, dict[str, Any]] = {}
-        self.file_source_cache: dict[
-            Path, list[str]
-        ] = {}  # Store source lines for parameter extraction
+        # Store source lines for parameter extraction
+        self.file_source_cache: dict[Path, list[str]] = {}
         # Cache all class AST nodes for inheritance resolution
         self.class_ast_cache: dict[str, tuple[Node, dict[str, str]]] = {}
         # Multi-file analysis queue
@@ -65,8 +65,6 @@ class ExternalClassInspector:
 
         # Python environment for analysis
         if python_env is None:
-            from .python_environment import PythonEnvironment
-
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
 
