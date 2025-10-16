@@ -213,17 +213,28 @@ def find_class_suites(class_node: Node) -> Generator[Node, None, None]:
     """Generator that yields class suite/body nodes from a class definition.
 
     In tree-sitter, the class body is typically accessed via the 'body' field.
+    Also checks ERROR nodes to handle syntax errors gracefully.
     """
+    yielded = False
+
     if hasattr(class_node, "child_by_field_name"):
         body_node = class_node.child_by_field_name("body")
         if body_node:
             yield body_node
-            return
+            yielded = True
 
-    # Fallback: search for block nodes
+    # Check for ERROR nodes and block/suite nodes in children
+    # This handles cases where syntax errors cause parameters to be in ERROR nodes
+    # Only yield these if we haven't yielded a body node yet
     for child in get_children(class_node):
-        if hasattr(child, "type") and child.type in ("block", "suite"):
-            yield child
+        if hasattr(child, "type"):
+            if child.type in ("block", "suite") and not yielded:
+                yield child
+                yielded = True
+            elif child.type == "ERROR":
+                # Always yield ERROR nodes as they might contain parameters
+                # even if there's also a body node
+                yield child
 
 
 def find_parameter_assignments(
