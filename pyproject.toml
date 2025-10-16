@@ -40,7 +40,16 @@ param-lsp = "param_lsp.__main__:main"
 jupyter = ["jupyterlab-lsp"]
 
 [dependency-groups]
-dev = ["debugpy", "pytest", "setuptools_scm", "holoviews", "panel", "param", "param-lsp[jupyter]"]
+dev = [
+    "debugpy",
+    "pytest",
+    "setuptools_scm",
+    "holoviews",
+    "panel",
+    "param",
+    "param-lsp[jupyter]",
+    "basedpyright",
+]
 docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
 
 [tool.hatch.version]
