@@ -51,7 +51,7 @@ def test_query_site_packages(mock_check_output, tmp_path):
     user_site.mkdir(parents=True)
 
     # Mock subprocess.check_output to return output like `python -m site`
-    mock_output = f"""sys.path = [
+    mock_output = rf"""sys.path = [
     '',
     '{site_pkg_1}',
 ]
