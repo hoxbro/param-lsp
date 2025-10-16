@@ -258,7 +258,7 @@ class PythonEnvironment:
 
     @property
     def _pretty_python(self):
-        if self.python is None:
+        if self.python is None or sys.platform.startswith("win"):
             return self.python
         return os.fspath(self.python).replace(os.path.expanduser("~"), "~")
 
