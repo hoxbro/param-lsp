@@ -10,14 +10,10 @@ repos:
       - id: check-json
       - id: check-executables-have-shebangs
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.13.1
+    rev: v0.14.0
     hooks:
       - id: ruff-check
       - id: ruff-format
-  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
-    rev: 1.31.4
-    hooks:
-      - id: basedpyright
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
@@ -48,7 +44,7 @@ repos:
             "indent_string=    ",
           ]
   - repo: https://github.com/johnnymorganz/stylua
-    rev: v2.2.0
+    rev: v2.3.0
     hooks:
       - id: stylua-github
         name: stylua
