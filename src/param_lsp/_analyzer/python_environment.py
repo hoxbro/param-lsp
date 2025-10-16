@@ -258,8 +258,10 @@ class PythonEnvironment:
 
     @property
     def _pretty_python(self):
-        if self.python is None or sys.platform.startswith("win"):
+        if self.python is None:
             return self.python
+        if sys.platform.startswith("win"):
+            return os.fspath(self.python)
         return os.fspath(self.python).replace(os.path.expanduser("~"), "~")
 
     def __repr__(self) -> str:
