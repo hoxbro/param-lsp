@@ -196,40 +196,32 @@ Tree-sitter provides:
 - Fixed constructor call detection
 - **448/450 tests passing (99.6% success rate)**
 
-### ✅ Phase 4: Performance Optimizations (Complete)
+### ✅ Phase 4: Query-based Optimizations (Complete)
 
-Achieved **~212x combined speedup** through caching and query-based optimizations!
+Achieved **~2x speedup** through query-based AST pattern matching!
 
-1. ✅ **Parse Tree Caching** - 97.5x faster on cached parses
-   - LRU cache with configurable size (default: 100 files)
-   - Hash-based cache keys with collision protection
-   - Environment variables: `PARAM_LSP_DISABLE_CACHE`, `PARAM_LSP_CACHE_SIZE`
-   - Cache statistics API for monitoring
-
-2. ✅ **Query-based AST Pattern Matching** - 2.2x average speedup
+1. ✅ **Query-based AST Pattern Matching** - 2x average speedup
    - Pre-compiled tree-sitter queries with caching
-   - Classes: 1.8x faster
-   - Imports: 2.5x faster
-   - Function calls: 2.2x faster
-   - Custom query support
+   - Classes: 1.91x faster
+   - Imports: 2.10x faster
+   - Function calls: 1.98x faster
+   - Custom query support via `ts_queries.py`
 
-3. ✅ **Incremental Parsing Support**
-   - `parse_incremental()` function for reusing old parse trees
-   - Optimized for LSP text document changes
-
-4. ✅ **Performance Benchmarking** - Comprehensive benchmark suite
-   - Cache effectiveness measurements
+2. ✅ **Performance Benchmarking** - Query optimization benchmark
    - Query vs manual tree walking comparisons
-   - Memory usage profiling
-   - Results: Peak memory 1.23 MB with 0.76 MB cache overhead
+   - Consistent 2x speedup across different AST patterns
+   - Total time: 15.75ms manual → 7.90ms queries
 
 #### Performance Improvements Summary
 
-| Optimization             | Speedup  | Memory Impact |
-| ------------------------ | -------- | ------------- |
-| Parse tree caching       | 97.5x    | +0.76 MB      |
-| Query-based AST matching | 2.2x avg | Minimal       |
-| Combined                 | ~212x    | +0.76 MB      |
+| Operation    | Manual Walking | Query-based | Speedup   |
+| ------------ | -------------- | ----------- | --------- |
+| Find classes | 5.25ms         | 2.75ms      | 1.91x     |
+| Find imports | 5.42ms         | 2.58ms      | 2.10x     |
+| Find calls   | 5.08ms         | 2.56ms      | 1.98x     |
+| **Total**    | **15.75ms**    | **7.90ms**  | **2.00x** |
+
+**Note on LSP optimization:** Parse tree caching was removed as it's not beneficial for LSP where files change constantly. The real LSP optimization would be incremental parsing (reusing old trees), which requires integration work with the LSP `textDocument/didChange` notifications.
 
 All 450 tests passing - optimizations maintain full compatibility ✅
 
@@ -379,11 +371,9 @@ if node.type == "assignment" or (
 - [x] Confirm parso dependency already removed
 - [x] Update migration plan documentation
 - [x] Document 2 edge case limitations (incomplete syntax completion)
-- [x] Implement parse tree caching (Phase 4)
 - [x] Implement query-based AST utilities (Phase 4)
-- [x] Add incremental parsing support (Phase 4)
-- [x] Create performance benchmarking suite (Phase 4)
-- [x] Achieve significant performance improvements (Phase 4)
+- [x] Create query optimization benchmarking (Phase 4)
+- [x] Achieve 2x speedup with queries (Phase 4)
 
 ## Lessons Learned
 
@@ -393,10 +383,10 @@ if node.type == "assignment" or (
 4. **Helper functions essential** - Create utilities early to avoid repetition
 5. **Test incrementally** - Migrate and test one file at a time
 6. **Type annotations help** - Using `Node` instead of `NodeOrLeaf` catches errors early
-7. **Caching is crucial** - Simple hash-based caching provides massive speedups (97x!)
-8. **Queries beat manual walking** - Tree-sitter queries are 2-2.5x faster than manual traversal
-9. **Measure before optimizing** - Comprehensive benchmarks validated optimization choices
-10. **LRU eviction matters** - Cache with bounded size prevents memory bloat
+7. **Queries beat manual walking** - Tree-sitter queries are ~2x faster than manual traversal
+8. **Measure before optimizing** - Comprehensive benchmarks validate optimization choices
+9. **LSP caching is different** - Parse tree caching doesn't help when files change constantly
+10. **Incremental > caching** - For LSP, incremental parsing (reusing old trees) is the real win
 
 ## References
 
