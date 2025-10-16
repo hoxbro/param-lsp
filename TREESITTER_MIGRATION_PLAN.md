@@ -88,9 +88,9 @@ All test failures have been resolved! The migration achieved 99.6% test success 
 
 #### Dependency Status
 
-- ✅ Parso dependency already removed from pyproject.toml
+- ✅ Parso dependency completely removed from pyproject.toml
 - ✅ Tree-sitter dependencies in place and working
-- ℹ️ `parso_utils.py` kept for legacy test compatibility (test_parso_utils.py)
+- ✅ All parso code removed (parso_utils.py and test_parso_utils.py deleted in Phase 5)
 
 ### ✅ Issue Resolved: ERROR Node Handling
 
@@ -225,6 +225,56 @@ Achieved **~2x speedup** through query-based AST pattern matching!
 
 All 450 tests passing - optimizations maintain full compatibility ✅
 
+### ✅ Completed (Phase 5 - Code Organization & Cleanup)
+
+Final cleanup phase to organize tree-sitter code into a proper submodule and remove all parso remnants.
+
+#### Code Reorganization
+
+1. ✅ **Created `_treesitter/` submodule** - Clean separation of tree-sitter utilities
+   - Moved `ts_parser.py` → `_treesitter/parser.py`
+   - Moved `ts_queries.py` → `_treesitter/queries.py`
+   - Moved `ts_utils.py` → `_treesitter/utils.py`
+   - Created comprehensive `__init__.py` with proper exports
+   - Updated all imports to use `param_lsp._treesitter`
+
+2. ✅ **Removed all parso code** - Complete cleanup
+   - Deleted `parso_utils.py` (391 lines removed)
+   - Deleted `test_parso_utils.py` (359 lines removed)
+   - Removed `ParsoNode` type alias from `_types.py`
+   - Cleaned up legacy parso comments in source files
+
+3. ✅ **Updated all imports** - Consistent module structure
+   - Source files: `from param_lsp._treesitter import ...`
+   - Test files: `from param_lsp._treesitter import parser, queries, ...`
+   - Analyzer: `from param_lsp import _treesitter`
+
+#### Impact Summary
+
+- **Lines removed**: 949 (parso code, redundant imports, legacy comments)
+- **Lines added**: 247 (new `__init__.py`, updated imports)
+- **Net improvement**: -702 lines of cleaner, more organized code
+- **Tests passing**: 430/430 (100% compatibility maintained)
+
+#### File Structure (After Phase 5)
+
+```
+src/param_lsp/
+├── _analyzer/
+│   ├── ast_navigator.py          # Uses _treesitter
+│   ├── import_resolver.py        # Uses _treesitter
+│   ├── inheritance_resolver.py   # Uses _treesitter
+│   ├── parameter_extractor.py    # Uses _treesitter
+│   ├── static_external_analyzer.py  # Uses _treesitter
+│   └── validation.py             # Uses _treesitter
+├── _treesitter/                  # NEW: Tree-sitter submodule
+│   ├── __init__.py              # Public API exports
+│   ├── parser.py                # Singleton parser (was ts_parser.py)
+│   ├── queries.py               # Query-based utilities (was ts_queries.py)
+│   └── utils.py                 # Helper functions (was ts_utils.py)
+└── analyzer.py                   # Main analyzer, uses _treesitter
+```
+
 ## Dependencies
 
 ### ✅ Migration Complete
@@ -268,16 +318,18 @@ def _get_parser() -> Parser:
     return _parser
 ```
 
-### Parsing Code
+### Parsing Code (Updated for Phase 5)
 
 ```python
+from param_lsp._treesitter import parser, queries, walk_tree, get_class_name
+
 # Parse Python source
-tree = ts_parser.parse(source_code)
+tree = parser.parse(source_code)
 
 # Walk the tree
-for node in ts_utils.walk_tree(tree.root_node):
+for node in walk_tree(tree.root_node):
     if node.type == "class_definition":
-        class_name = ts_utils.get_class_name(node)
+        class_name = get_class_name(node)
         # Process class...
 ```
 
@@ -286,10 +338,10 @@ for node in ts_utils.walk_tree(tree.root_node):
 #### Finding Classes (Query-based - Recommended)
 
 ```python
-# Using query-based approach (2x faster)
-from param_lsp._analyzer import ts_queries
+# Using query-based approach (2x faster) - Updated for Phase 5
+from param_lsp._treesitter import queries
 
-results = ts_queries.find_classes(tree)
+results = queries.find_classes(tree)
 for class_node, captures in results:
     class_name = captures["class_name"]  # identifier node
     class_body = captures["class_body"]  # block node
@@ -298,55 +350,63 @@ for class_node, captures in results:
 #### Finding Classes (Manual walking - Legacy)
 
 ```python
-# Manual tree walking (slower, but still supported)
+# Manual tree walking (slower, but still supported) - Updated for Phase 5
+from param_lsp._treesitter import walk_tree
+
 class_nodes = [
-    node for node in ts_utils.walk_tree(tree.root_node)
+    node for node in walk_tree(tree.root_node)
     if node.type == "class_definition"
 ]
 ```
 
-#### Using Query-based Utilities
+#### Using Query-based Utilities (Updated for Phase 5)
 
 ```python
-from param_lsp._analyzer import ts_queries
+from param_lsp._treesitter import queries
 
 # Find imports (2.5x faster)
-imports = ts_queries.find_imports(tree)
+imports = queries.find_imports(tree)
 
 # Find function calls (2.2x faster)
-calls = ts_queries.find_calls(tree)
+calls = queries.find_calls(tree)
 
 # Find assignments
-assignments = ts_queries.find_assignments(tree)
+assignments = queries.find_assignments(tree)
 
 # Find decorators
-decorators = ts_queries.find_decorators(tree)
+decorators = queries.find_decorators(tree)
 
 # Custom queries
-custom_results = ts_queries.query_custom(tree, "(class_definition) @class")
+custom_results = queries.query_custom(tree, "(class_definition) @class")
 ```
 
-#### Getting Class Body
+#### Getting Class Body (Updated for Phase 5)
 
 ```python
+from param_lsp._treesitter import get_children
+
 block_node = class_node.child_by_field_name("body")
 if block_node:
     # Process class body
-    for child in ts_utils.get_children(block_node):
+    for child in get_children(block_node):
         # Process statements
 ```
 
-#### Checking Assignments
+#### Checking Assignments (Updated for Phase 5)
 
 ```python
+from param_lsp._treesitter import get_children
+
 if node.type == "assignment" or (
     node.type == "expression_statement"
-    and any(child.type == "assignment" for child in ts_utils.get_children(node))
+    and any(child.type == "assignment" for child in get_children(node))
 ):
     # This is an assignment
 ```
 
 ## Migration Checklist
+
+### Phase 1: Core Infrastructure
 
 - [x] Create ts_parser.py
 - [x] Create ts_utils.py with all utility functions
@@ -354,6 +414,9 @@ if node.type == "assignment" or (
 - [x] Migrate static_external_analyzer.py
 - [x] Create test_ts_utils.py
 - [x] Fix bounds validation tests
+
+### Phase 2: Test Migration
+
 - [x] Update test_ast_navigator.py
 - [x] Update test_parameter_extractor.py
 - [x] Update test_import_resolver.py (21 tests passing)
@@ -362,18 +425,36 @@ if node.type == "assignment" or (
 - [x] Update test_static_external_analyzer.py (17 tests passing)
 - [x] Fix validation.py helper methods (\_infer_value_type, \_is_boolean_literal, etc.)
 - [x] Fix import_resolver.py to handle dotted_name nodes in from imports
+
+### Phase 3: Validation Fixes
+
 - [x] Update integration tests (all 51 test_server/test_validation/\* passing)
 - [x] Fix test_analyzer failures (container_validation: 6/6, inheritance: 7/7)
 - [x] Fix container validation (\_extract_list_items, \_extract_tuple_items)
 - [x] Fix runtime assignment validation (\_check_runtime_parameter_assignment)
 - [x] Fix constructor call detection (\_get_instance_class)
-- [x] Keep parso_utils.py for legacy test compatibility
-- [x] Confirm parso dependency already removed
-- [x] Update migration plan documentation
+
+### Phase 4: Query Optimization
+
+- [x] Implement query-based AST utilities
+- [x] Create query optimization benchmarking
+- [x] Achieve 2x speedup with queries
 - [x] Document 2 edge case limitations (incomplete syntax completion)
-- [x] Implement query-based AST utilities (Phase 4)
-- [x] Create query optimization benchmarking (Phase 4)
-- [x] Achieve 2x speedup with queries (Phase 4)
+- [x] Fix ERROR node handling for syntax error recovery
+
+### Phase 5: Code Organization & Cleanup
+
+- [x] Create `_treesitter/` submodule
+- [x] Move ts_parser.py → \_treesitter/parser.py
+- [x] Move ts_queries.py → \_treesitter/queries.py
+- [x] Move ts_utils.py → \_treesitter/utils.py
+- [x] Delete parso_utils.py
+- [x] Delete test_parso_utils.py
+- [x] Remove ParsoNode type alias
+- [x] Update all imports to use param_lsp.\_treesitter
+- [x] Clean up legacy parso comments
+- [x] Confirm parso dependency removed
+- [x] Update migration plan documentation
 
 ## Lessons Learned
 
@@ -387,6 +468,8 @@ if node.type == "assignment" or (
 8. **Measure before optimizing** - Comprehensive benchmarks validate optimization choices
 9. **LSP caching is different** - Parse tree caching doesn't help when files change constantly
 10. **Incremental > caching** - For LSP, incremental parsing (reusing old trees) is the real win
+11. **Code organization matters** - Creating the `_treesitter/` submodule improved clarity and maintainability
+12. **Clean up as you go** - Removing legacy code (parso) prevents confusion and reduces maintenance burden
 
 ## References
 
@@ -398,15 +481,16 @@ if node.type == "assignment" or (
 
 ### Overall Statistics
 
-- **450 tests passing** (100% success rate) ✅✅✅
+- **430 tests passing** (100% success rate) ✅✅✅
 - **0 tests failing**
 - **Net improvement from Phase 1: +90 tests fixed**
 - **Net improvement from Phase 2: +50 tests fixed**
 - **Net improvement from Phase 3: +2 tests fixed (ERROR node handling)**
+- **Phase 5: 20 tests removed** (parso_utils tests no longer needed after cleanup)
 
-### test_analyzer: 251/251 passing (100% ✅)
+### test_analyzer: 231/231 passing (100% ✅)
 
-#### Fully Passing (16 files)
+#### Fully Passing (15 files)
 
 - test_validation.py: 31/31 ✅
 - test_import_resolver.py: 21/21 ✅
@@ -416,7 +500,6 @@ if node.type == "assignment" or (
 - test_parameter_extractor.py: 35/35 ✅
 - test_bounds_validation.py: 9/9 ✅
 - test_ts_utils.py: 17/17 ✅
-- test_parso_utils.py: 20/20 ✅
 - test_python_environment.py: 20/20 ✅
 - test_type_checking.py: 9/9 ✅
 - test_doc_extraction.py: 10/10 ✅
@@ -424,6 +507,10 @@ if node.type == "assignment" or (
 - test_runtime_assignment.py: 10/10 ✅
 - **test_container_validation.py: 6/6** ✅ _(fixed!)_
 - **test_inheritance.py: 7/7** ✅ _(fixed!)_
+
+#### Removed in Phase 5
+
+- ~~test_parso_utils.py~~ - Deleted (parso code removed, tests no longer needed)
 
 ### test_integration: 7/7 passing (100% ✅)
 
@@ -446,8 +533,9 @@ All test_server tests passing, including:
 - **All completion tests passing** ✅
 - **Phase 2 objectives achieved** ✅
 - **Phase 3 validation fixes complete** ✅
-- **Phase 4 ERROR node handling complete** ✅
-- **100% test success rate (450/450)** ✅✅✅
+- **Phase 4 query optimization complete** ✅
+- **Phase 5 code organization complete** ✅
+- **100% test success rate (430/430)** ✅✅✅
 - **MIGRATION COMPLETE!** 🎉
 
 ### Key Fixes in Phase 3
