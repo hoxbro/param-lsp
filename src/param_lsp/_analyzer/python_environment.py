@@ -8,9 +8,13 @@ site-packages directories, enabling cross-environment analysis.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import sys
+from ast import literal_eval
 from pathlib import Path
+from typing import cast
 
 from param_lsp._logging import get_logger
 
@@ -40,115 +44,42 @@ class PythonEnvironment:
 
         # Validate the Python executable exists
         if not self.python.exists():
-            msg = f"Python executable not found: {self.python}"
+            msg = f"Python executable not found: {self._pretty_python}"
             raise ValueError(msg)
 
     @property
     def site_packages(self) -> list[Path]:
         """Get the site-packages directories for this environment."""
         if self._site_packages is None:
-            self._site_packages = self._query_site_packages()
-        return self._site_packages
+            self._query_python_exe()
+        return cast("list[Path]", self._site_packages)
 
     @property
     def user_site(self) -> Path | None:
         """Get the user site-packages directory for this environment."""
         if self._user_site is None:
-            self._user_site = self._query_user_site()
+            self._query_python_exe()
         return self._user_site
 
-    def _query_site_packages(self) -> list[Path]:
-        """Query the Python environment for site-packages and editable install paths."""
+    def _query_python_exe(self) -> Path | None:
         try:
-            # Query sys.path which includes both site-packages and paths from .pth files (editable installs)
-            # We filter to only include site-packages directories and editable install paths,
-            # excluding the base Python installation directories
-            result = subprocess.run(  # noqa: S603
-                [
-                    str(self.python),
-                    "-c",
-                    "import sys; import json; import os; "
-                    "from pathlib import Path; "
-                    "cwd = Path.cwd(); "
-                    # Filter sys.path to include only site-packages and editable install paths
-                    # Exclude: current dir, .zip files, base Python lib dirs (lib/python3.x without site-packages)
-                    "paths = [p for p in map(Path, sys.path) if p and p.is_absolute() and p.is_dir() "
-                    "and p != cwd "  # Exclude current working directory
-                    "and ('site-packages' in p.parts or 'dist-packages' in p.parts or "
-                    # Include paths added by .pth files for editable installs (src dirs in projects)
-                    "any((p / name).is_file() for name in ['.pth', 'setup.py', 'pyproject.toml']))]; "
-                    "print(json.dumps([str(p) for p in paths]))",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=10,
+            output = subprocess.check_output(  # noqa: S603
+                [os.fspath(self.python), "-m", "site"], text=True, timeout=10
             )
-            paths = json.loads(result.stdout.strip())
-            return [Path(p) for p in paths]
-        except (
-            subprocess.CalledProcessError,
-            subprocess.TimeoutExpired,
-            json.JSONDecodeError,
-        ) as e:
-            logger.warning(f"Failed to query site-packages from {self.python}: {e}")
-            return []
-
-    def _query_user_site(self) -> Path | None:
-        """Query the Python environment for user site-packages directory."""
-        try:
-            result = subprocess.run(  # noqa: S603
-                [
-                    str(self.python),
-                    "-c",
-                    "import site; print(site.getusersitepackages())",
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=10,
+            site_info = re.search(
+                r"sys\.path\s*=\s*(\[[^\]]*\]).*?USER_SITE:\s*'([^']+)'", output, re.DOTALL
             )
-            user_site = Path(result.stdout.strip())
-            return user_site if user_site.exists() else None
+            assert site_info is not None, f"Could not get {self.python} -m site"  # noqa: S101
+            self._site_packages = list(map(Path, literal_eval(site_info.group(1))[1:]))
+            user_site = Path(site_info.group(2))
+            self._user_site = user_site if user_site.exists() else None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            logger.warning(f"Failed to query user site from {self.python}: {e}")
-            return None
+            logger.warning(f"Failed to query site from {self.python}: {e}")
 
     @classmethod
     def from_current(cls) -> PythonEnvironment:
         """Create a PythonEnvironment from the current Python interpreter."""
-        import site
-
-        # Get the current working directory to exclude it from sys.path scan
-        cwd = Path.cwd()
-
-        # Use sys.path to include both site-packages and editable installs
-        # Filter to only include site-packages and editable install paths,
-        # excluding the base Python installation directories and current working directory
-        site_packages = [
-            p
-            for p in map(Path, sys.path)
-            if p
-            and p.is_absolute()
-            and p.is_dir()
-            and p != cwd  # Exclude current working directory
-            and (
-                "site-packages" in p.parts
-                or "dist-packages" in p.parts
-                # Include paths added by .pth files for editable installs
-                or any((p / name).is_file() for name in [".pth", "setup.py", "pyproject.toml"])
-            )
-        ]
-        user_site_path = site.getusersitepackages()
-        user_site = (
-            Path(user_site_path) if user_site_path and Path(user_site_path).exists() else None
-        )
-
-        return cls(
-            python=sys.executable,
-            site_packages=site_packages,
-            user_site=user_site,
-        )
+        return cls(python=sys.executable)
 
     @classmethod
     def _find_python_in_prefix(cls, prefix: Path) -> Path | None:
@@ -325,5 +256,11 @@ class PythonEnvironment:
             msg = "conda command not found. Is conda installed and in PATH?"
             raise ValueError(msg) from e
 
+    @property
+    def _pretty_python(self):
+        if self.python is None:
+            return self.python
+        return os.fspath(self.python).replace(os.path.expanduser("~"), "~")
+
     def __repr__(self) -> str:
-        return f"PythonEnvironment(python={self.python})"
+        return f"PythonEnvironment({self._pretty_python!r})"
