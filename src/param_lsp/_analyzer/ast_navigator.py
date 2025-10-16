@@ -16,9 +16,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from param_lsp import _treesitter
 from param_lsp.constants import PARAM_TYPES
-
-from . import ts_utils
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -54,8 +53,8 @@ class ParameterDetector:
 
         # Fallback: scan children for '=' and check right side
         found_equals = False
-        for child in ts_utils.get_children(node):
-            if child.text == b"=" or ts_utils.get_value(child) == "=":
+        for child in _treesitter.get_children(node):
+            if child.text == b"=" or _treesitter.get_value(child) == "=":
                 found_equals = True
             elif found_equals and child.type == "call":
                 # Check if it's a parameter type call
@@ -84,12 +83,12 @@ class ParameterDetector:
 
         if func_node.type == "identifier":
             # Simple call: String()
-            func_name = ts_utils.get_value(func_node)
+            func_name = _treesitter.get_value(func_node)
         elif func_node.type == "attribute":
             # Dotted call: param.String()
             attr_node = func_node.child_by_field_name("attribute")
             if attr_node:
-                func_name = ts_utils.get_value(attr_node)
+                func_name = _treesitter.get_value(attr_node)
 
         if func_name:
             # Check if it's a direct param type
@@ -127,12 +126,12 @@ class ImportHandler:
             The reconstructed dotted name string
         """
         if node.type == "identifier":
-            return ts_utils.get_value(node)
+            return _treesitter.get_value(node)
 
         if node.type == "dotted_name":
             parts = [
-                ts_utils.get_value(child)
-                for child in ts_utils.get_children(node)
+                _treesitter.get_value(child)
+                for child in _treesitter.get_children(node)
                 if child.type == "identifier"
             ]
             # Filter out None values before joining
@@ -145,11 +144,11 @@ class ImportHandler:
             attr_node = node.child_by_field_name("attribute")
             if obj_node and attr_node:
                 obj_name = self._reconstruct_dotted_name(obj_node)
-                attr_name = ts_utils.get_value(attr_node)
+                attr_name = _treesitter.get_value(attr_node)
                 if obj_name and attr_name:
                     return f"{obj_name}.{attr_name}"
 
-        return ts_utils.get_value(node)
+        return _treesitter.get_value(node)
 
     def handle_import(self, node: Node) -> None:
         """Handle 'import' statements (tree-sitter node).
@@ -159,14 +158,14 @@ class ImportHandler:
         """
         # Tree-sitter import_statement structure:
         # import_statement -> name: dotted_name/identifier, alias: (as) identifier?
-        for child in ts_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             if child.type == "aliased_import":
                 # Handle "import module as alias"
                 name_node = child.child_by_field_name("name")
                 alias_node = child.child_by_field_name("alias")
                 if name_node:
                     module_name = self._reconstruct_dotted_name(name_node)
-                    alias_name = ts_utils.get_value(alias_node) if alias_node else None
+                    alias_name = _treesitter.get_value(alias_node) if alias_node else None
                     if module_name:
                         self.imports[alias_name or module_name] = module_name
             elif child.type in ("dotted_name", "identifier"):
@@ -191,14 +190,14 @@ class ImportHandler:
             return
 
         # Find imported names - look for aliased_import, identifier, or dotted_name children
-        for child in ts_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             if child.type == "aliased_import":
                 # Handle "from module import name as alias"
                 name_node = child.child_by_field_name("name")
                 alias_node = child.child_by_field_name("alias")
                 if name_node:
-                    import_name = ts_utils.get_value(name_node)
-                    alias_name = ts_utils.get_value(alias_node) if alias_node else None
+                    import_name = _treesitter.get_value(name_node)
+                    alias_name = _treesitter.get_value(alias_node) if alias_node else None
                     if import_name:
                         full_name = f"{module_name}.{import_name}"
                         self.imports[alias_name or import_name] = full_name

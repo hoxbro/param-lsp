@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from .ts_utils import get_class_bases, get_value
+from param_lsp._treesitter import get_class_bases, get_value
 
 logger = logging.getLogger(__name__)
 

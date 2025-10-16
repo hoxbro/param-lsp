@@ -6,9 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.param_lsp._analyzer import ts_parser
-from src.param_lsp._analyzer.ts_utils import walk_tree
 from src.param_lsp._analyzer.validation import ParameterValidator
+from src.param_lsp._treesitter import parser, walk_tree
 from src.param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
@@ -97,7 +96,7 @@ class TestParameterValidator:
     def test_infer_value_type_string(self, validator):
         """Test _infer_value_type with string literals."""
         code = 'x = "test_string"'
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the string literal node
         string_nodes = [node for node in walk_tree(tree.root_node) if node.type == "string"]
         assert len(string_nodes) == 1
@@ -108,7 +107,7 @@ class TestParameterValidator:
     def test_infer_value_type_integer(self, validator):
         """Test _infer_value_type with integer literals."""
         code = "x = 42"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the integer literal node
         integer_nodes = [node for node in walk_tree(tree.root_node) if node.type == "integer"]
         assert len(integer_nodes) == 1
@@ -119,7 +118,7 @@ class TestParameterValidator:
     def test_infer_value_type_float(self, validator):
         """Test _infer_value_type with float literals."""
         code = "x = 3.14"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the float literal node
         float_nodes = [node for node in walk_tree(tree.root_node) if node.type == "float"]
         assert len(float_nodes) == 1
@@ -130,7 +129,7 @@ class TestParameterValidator:
     def test_infer_value_type_boolean_true(self, validator):
         """Test _infer_value_type with boolean True."""
         code = "x = True"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the true node
         true_nodes = [node for node in walk_tree(tree.root_node) if node.type == "true"]
         assert len(true_nodes) == 1
@@ -141,7 +140,7 @@ class TestParameterValidator:
     def test_infer_value_type_boolean_false(self, validator):
         """Test _infer_value_type with boolean False."""
         code = "x = False"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the false node
         false_nodes = [node for node in walk_tree(tree.root_node) if node.type == "false"]
         assert len(false_nodes) == 1
@@ -152,7 +151,7 @@ class TestParameterValidator:
     def test_infer_value_type_none(self, validator):
         """Test _infer_value_type with None."""
         code = "x = None"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the none node
         none_nodes = [node for node in walk_tree(tree.root_node) if node.type == "none"]
         assert len(none_nodes) == 1
@@ -163,7 +162,7 @@ class TestParameterValidator:
     def test_infer_value_type_list(self, validator):
         """Test _infer_value_type with list literals."""
         code = "x = [1, 2, 3]"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the list literal node
         list_nodes = [node for node in walk_tree(tree.root_node) if node.type == "list"]
         assert len(list_nodes) == 1
@@ -174,7 +173,7 @@ class TestParameterValidator:
     def test_infer_value_type_tuple(self, validator):
         """Test _infer_value_type with tuple literals."""
         code = "x = (1, 2, 3)"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the tuple literal node
         tuple_nodes = [node for node in walk_tree(tree.root_node) if node.type == "tuple"]
         assert len(tuple_nodes) == 1
@@ -185,7 +184,7 @@ class TestParameterValidator:
     def test_infer_value_type_dict(self, validator):
         """Test _infer_value_type with dict literals."""
         code = 'x = {"a": 1, "b": 2}'
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the dict literal node
         dict_nodes = [node for node in walk_tree(tree.root_node) if node.type == "dictionary"]
         assert len(dict_nodes) == 1
@@ -196,7 +195,7 @@ class TestParameterValidator:
     def test_is_boolean_literal_true(self, validator):
         """Test _is_boolean_literal with True."""
         code = "x = True"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the true node
         true_nodes = [node for node in walk_tree(tree.root_node) if node.type == "true"]
         assert len(true_nodes) == 1
@@ -206,7 +205,7 @@ class TestParameterValidator:
     def test_is_boolean_literal_false(self, validator):
         """Test _is_boolean_literal with False."""
         code = "x = False"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the false node
         false_nodes = [node for node in walk_tree(tree.root_node) if node.type == "false"]
         assert len(false_nodes) == 1
@@ -216,7 +215,7 @@ class TestParameterValidator:
     def test_is_boolean_literal_not_boolean(self, validator):
         """Test _is_boolean_literal with non-boolean."""
         code = 'x = "not_boolean"'
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the string literal node
         string_nodes = [node for node in walk_tree(tree.root_node) if node.type == "string"]
         assert len(string_nodes) == 1
@@ -288,7 +287,7 @@ class TestParameterValidator:
     def test_has_attribute_target_simple_assignment(self, validator):
         """Test _has_attribute_target with simple assignment."""
         code = "x = 5"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find assignment node in tree-sitter
         assignment_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "assignment"
@@ -300,7 +299,7 @@ class TestParameterValidator:
     def test_has_attribute_target_attribute_assignment(self, validator):
         """Test _has_attribute_target with attribute assignment."""
         code = "obj.attr = 5"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find assignment node in tree-sitter
         assignment_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "assignment"
@@ -312,7 +311,7 @@ class TestParameterValidator:
     def test_create_type_error(self, validator):
         """Test _create_type_error method."""
         code = "x = 5"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find assignment node in tree-sitter
         assignment_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "assignment"
@@ -333,7 +332,7 @@ class TestParameterValidator:
 class TestClass(param.Parameterized):
     test_param = param.String(default="valid_string")
 """
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -350,7 +349,7 @@ class TestClass(param.Parameterized):
 class TestClass(param.Parameterized):
     test_param = param.String(default=123)
 """
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -373,7 +372,7 @@ class TestClass(param.Parameterized):
 TestClass().valid_param = "still_valid"
 TestClass().invalid_param = 456
 """
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         lines = code.split("\n")
 
         # Should find type errors for invalid defaults and assignments

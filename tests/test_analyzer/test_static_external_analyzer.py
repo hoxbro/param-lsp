@@ -112,9 +112,9 @@ class NotParameterized:
 """
 
         # Parse with tree-sitter
-        from src.param_lsp._analyzer import ts_parser
+        from src.param_lsp._treesitter import parser
 
-        tree = ts_parser.parse(test_code)
+        tree = parser.parse(test_code)
 
         # Analyze the file
         file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_code)
@@ -153,9 +153,9 @@ class ComplexWidget(param.Parameterized):
     enabled = param.Boolean(default=True, doc="Enable feature")
 """
 
-        from src.param_lsp._analyzer import ts_parser
+        from src.param_lsp._treesitter import parser
 
-        tree = ts_parser.parse(test_code)
+        tree = parser.parse(test_code)
         file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_code)
 
         assert "ComplexWidget" in file_analysis
@@ -202,9 +202,9 @@ class Widget3(param.Parameterized):
     choice = ParamSelector(default="a", objects=["a", "b"])
 """
 
-        from src.param_lsp._analyzer import ts_parser
+        from src.param_lsp._treesitter import parser
 
-        tree = ts_parser.parse(test_code)
+        tree = parser.parse(test_code)
         file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_code)
 
         # All three widgets should be found
@@ -289,9 +289,9 @@ class TestWidget(param.Parameterized):
     )
     def test_parameter_type_detection(self, test_class_code: str, expected_params: dict[str, str]):
         """Test detection of various parameter types."""
-        from src.param_lsp._analyzer import ts_parser
+        from src.param_lsp._treesitter import parser
 
-        tree = ts_parser.parse(test_class_code)
+        tree = parser.parse(test_class_code)
         file_analysis = self.static_analyzer._analyze_file_ast(tree.root_node, test_class_code)
 
         assert "TestWidget" in file_analysis

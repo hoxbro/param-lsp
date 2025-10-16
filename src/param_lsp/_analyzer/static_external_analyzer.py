@@ -12,12 +12,12 @@ import sys
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
+from param_lsp import _treesitter
 from param_lsp._logging import get_logger
 from param_lsp.cache import external_library_cache
 from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 
-from . import ts_parser, ts_utils
 from .ast_navigator import ImportHandler, ParameterDetector
 from .parameter_extractor import extract_parameter_info_from_assignment
 
@@ -169,7 +169,7 @@ class ExternalClassInspector:
                     continue
 
                 # Parse import statements from already-parsed tree
-                for node in ts_utils.walk_tree(tree.root_node):
+                for node in _treesitter.walk_tree(tree.root_node):
                     if node.type == "import_from_statement":
                         # Extract "from .module import Name1, Name2"
                         self._process_import_from_for_reexport(
@@ -207,7 +207,7 @@ class ExternalClassInspector:
         module_name_node = import_node.child_by_field_name("module_name")
         if not module_name_node:
             # Check for dotted_name or relative_import nodes
-            for child in ts_utils.get_children(import_node):
+            for child in _treesitter.get_children(import_node):
                 if child.type in ("dotted_name", "relative_import", "identifier"):
                     module_name_node = child
                     break
@@ -215,16 +215,16 @@ class ExternalClassInspector:
         if not module_name_node:
             return
 
-        source_module = ts_utils.get_value(module_name_node)
+        source_module = _treesitter.get_value(module_name_node)
         if not source_module:
             return
 
         # Get the imported names
         imported_names = []
-        for child in ts_utils.get_children(import_node):
+        for child in _treesitter.get_children(import_node):
             if child.type == "identifier":
                 # Single import: from .input import TextInput
-                name = ts_utils.get_value(child)
+                name = _treesitter.get_value(child)
                 if name and name not in ("from", "import"):
                     imported_names.append(name)
             elif child.type == "aliased_import":
@@ -232,7 +232,7 @@ class ExternalClassInspector:
                 # Get the original name (before "as")
                 name_node = child.child_by_field_name("name")
                 if name_node:
-                    name = ts_utils.get_value(name_node)
+                    name = _treesitter.get_value(name_node)
                     if name:
                         imported_names.append(name)
             elif child.type == "dotted_name":
@@ -385,7 +385,7 @@ class ExternalClassInspector:
         for source_path in source_paths:
             try:
                 source_code = source_path.read_text(encoding="utf-8")
-                tree = ts_parser.parse(source_code)
+                tree = _treesitter.parser.parse(source_code)
                 source_lines = source_code.split("\n")
 
                 # Extract imports, classes, and re-exports in a single tree walk
@@ -401,7 +401,7 @@ class ExternalClassInspector:
                     parts = list(relative_path.parts[:-1])  # Exclude __init__.py
                     module_path = ".".join([library_name, *parts]) if parts else library_name
 
-                for node in ts_utils.walk_tree(tree.root_node):
+                for node in _treesitter.walk_tree(tree.root_node):
                     # Extract imports
                     if node.type == "import_statement":
                         import_handler.handle_import(node)
@@ -414,7 +414,7 @@ class ExternalClassInspector:
                             )
                     # Extract class definitions
                     elif node.type == "class_definition":
-                        class_name = ts_utils.get_class_name(node)
+                        class_name = _treesitter.get_class_name(node)
                         if class_name:
                             # Construct full class path using cached library root
                             full_class_path = self._get_full_class_path_cached(
@@ -815,7 +815,7 @@ class ExternalClassInspector:
                 self.class_ast_cache[class_name] = (node, imports.copy())
 
         # Recursively cache children
-        for child in ts_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             self._cache_all_class_nodes(child, imports)
 
     def _walk_ast_for_imports(self, node: Node, import_handler: ImportHandler) -> None:
@@ -832,7 +832,7 @@ class ExternalClassInspector:
                 import_handler.handle_import_from(node)
 
         # Recursively walk children
-        for child in ts_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             self._walk_ast_for_imports(child, import_handler)
 
     def _walk_ast_for_classes(
@@ -856,7 +856,7 @@ class ExternalClassInspector:
                 classes[class_info.name] = class_info
 
         # Recursively walk children
-        for child in ts_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             self._walk_ast_for_classes(child, imports, classes, source_lines)
 
     def _analyze_class_definition(
@@ -902,7 +902,7 @@ class ExternalClassInspector:
             Class name or None if not found
         """
         # Use ts_utils helper function
-        return ts_utils.get_class_name(class_node)
+        return _treesitter.get_class_name(class_node)
 
     def _inherits_from_parameterized(self, class_node: Node, imports: dict[str, str]) -> bool:
         """Check if a class inherits from param.Parameterized.
@@ -939,7 +939,7 @@ class ExternalClassInspector:
             List of base class names
         """
         # Use ts_utils helper to get base nodes
-        base_nodes = ts_utils.get_class_bases(class_node)
+        base_nodes = _treesitter.get_class_bases(class_node)
         base_classes = []
 
         for base_node in base_nodes:
@@ -1155,7 +1155,7 @@ class ExternalClassInspector:
                 # Read and parse the file
                 source_code = file_path.read_text(encoding="utf-8")
                 source_lines = source_code.split("\n")
-                tree = ts_parser.parse(source_code)
+                tree = _treesitter.parser.parse(source_code)
 
                 # Store source lines for parameter extraction
                 self.file_source_cache[file_path] = source_lines
@@ -1486,7 +1486,7 @@ class ExternalClassInspector:
                 return node
 
         # Recursively search children
-        for child in ts_utils.get_children(node):
+        for child in _treesitter.get_children(node):
             result = self._search_for_class_in_ast(child, target_class_name)
             if result:
                 return result
@@ -1527,10 +1527,10 @@ class ExternalClassInspector:
             Resolved base class name
         """
         if node.type == "identifier":
-            return ts_utils.get_value(node)
+            return _treesitter.get_value(node)
         elif node.type == "attribute":
             # Handle dotted names like param.Parameterized
-            return ts_utils.get_value(node)
+            return _treesitter.get_value(node)
         return None
 
     def _extract_class_parameters(
@@ -1575,13 +1575,13 @@ class ExternalClassInspector:
             source_lines: Source code lines
             imports: Import mappings
         """
-        for child in ts_utils.get_children(block_node):
+        for child in _treesitter.get_children(block_node):
             # In tree-sitter, assignments can be:
             # - "expression_statement" containing an "assignment"
             # - Direct "assignment" nodes
             if child.type == "expression_statement":
                 # Check for assignment statements inside expression_statement
-                for stmt_child in ts_utils.get_children(child):
+                for stmt_child in _treesitter.get_children(child):
                     if (
                         stmt_child.type == "assignment"
                         and parameter_detector.is_parameter_assignment(stmt_child)
@@ -1641,7 +1641,7 @@ class ExternalClassInspector:
             Parameter name or None
         """
         # Use ts_utils helper function
-        return ts_utils.get_assignment_target_name(assignment_node)
+        return _treesitter.get_assignment_target_name(assignment_node)
 
     def _resolve_base_class_paths(
         self,

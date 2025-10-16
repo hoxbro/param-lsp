@@ -21,9 +21,6 @@ if TYPE_CHECKING:
 # Re-export tree-sitter types for convenience
 TSNode: TypeAlias = "Node"
 
-# Legacy alias for backward compatibility during migration
-ParsoNode: TypeAlias = "Node"
-
 
 # =============================================================================
 # COMMON TYPE ALIASES

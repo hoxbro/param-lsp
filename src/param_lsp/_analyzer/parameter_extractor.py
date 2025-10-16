@@ -12,13 +12,14 @@ from param_lsp.constants import PARAM_TYPES
 
 logger = logging.getLogger(__name__)
 
-from .ast_navigator import SourceAnalyzer
-from .ts_utils import (
+from param_lsp._treesitter import (
     find_arguments_in_trailer,
     find_function_call_trailers,
     get_children,
     get_value,
 )
+
+from .ast_navigator import SourceAnalyzer
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -124,7 +125,7 @@ def extract_parameters(
     """Extract parameter definitions from a Parameterized class node.
 
     Args:
-        node: A parso node representing a class definition
+        node: A tree-sitter node representing a class definition
         find_assignments_func: Function to find parameter assignments in the class
         extract_info_func: Function to extract parameter info from assignments
         is_parameter_assignment_func: Function to check if an assignment is a parameter

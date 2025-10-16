@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.param_lsp._analyzer import ts_parser
 from src.param_lsp._analyzer.inheritance_resolver import InheritanceResolver
-from src.param_lsp._analyzer.ts_utils import get_class_bases, walk_tree
+from src.param_lsp._treesitter import get_class_bases, parser, walk_tree
 from src.param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
@@ -113,7 +112,7 @@ class TestInheritanceResolver:
     def test_is_param_base_direct_parameterized(self, resolver):
         """Test is_param_base with direct param.Parameterized."""
         code = "class Test(param.Parameterized): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -127,7 +126,7 @@ class TestInheritanceResolver:
     def test_is_param_base_imported_parameterized(self, resolver):
         """Test is_param_base with imported Parameterized."""
         code = "class Test(Parameterized): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -141,7 +140,7 @@ class TestInheritanceResolver:
     def test_is_param_base_local_param_class(self, resolver):
         """Test is_param_base with local param class."""
         code = "class Test(Parent): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -155,7 +154,7 @@ class TestInheritanceResolver:
     def test_is_param_base_non_param_class(self, resolver):
         """Test is_param_base with non-param class."""
         code = "class Test(object): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -169,7 +168,7 @@ class TestInheritanceResolver:
     def test_is_param_base_external_class(self, resolver):
         """Test is_param_base with external param class."""
         code = "class Test(pn.widgets.Button): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -183,7 +182,7 @@ class TestInheritanceResolver:
     def test_collect_inherited_parameters_local_parent(self, resolver):
         """Test collecting parameters from local parent class."""
         code = "class Child(Parent): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -199,7 +198,7 @@ class TestInheritanceResolver:
     def test_collect_inherited_parameters_external_parent(self, resolver):
         """Test collecting parameters from external parent class."""
         code = "class Child(Button): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -214,7 +213,7 @@ class TestInheritanceResolver:
     def test_collect_inherited_parameters_multiple_parents(self, resolver):
         """Test collecting parameters from multiple parent classes."""
         code = "class Child(Parent, LocalParam): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -231,7 +230,7 @@ class TestInheritanceResolver:
     def test_collect_inherited_parameters_no_parents(self, resolver):
         """Test collecting parameters when no param parents exist."""
         code = "class Child(object): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -244,7 +243,7 @@ class TestInheritanceResolver:
     def test_collect_inherited_parameters_complex_inheritance(self, resolver):
         """Test collecting parameters with complex attribute access."""
         code = "class Child(pn.widgets.Button): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -258,7 +257,7 @@ class TestInheritanceResolver:
     def test_collect_inherited_parameters_unknown_parent(self, resolver):
         """Test collecting parameters from unknown parent class."""
         code = "class Child(UnknownClass): pass"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]

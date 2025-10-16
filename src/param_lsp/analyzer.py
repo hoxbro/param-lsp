@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ._analyzer import ts_parser, ts_utils
+from . import _treesitter
 from ._analyzer.ast_navigator import ImportHandler, ParameterDetector, SourceAnalyzer
 from ._analyzer.import_resolver import ImportResolver
 from ._analyzer.inheritance_resolver import InheritanceResolver
@@ -148,7 +148,7 @@ class ParamAnalyzer:
         """Analyze a Python file for Param usage."""
         try:
             # Use tree-sitter with error recovery (always enabled)
-            tree = ts_parser.parse(content, error_recovery=True)
+            tree = _treesitter.parser.parse(content, error_recovery=True)
             self._reset_analysis()
             self._current_file_path = file_path
             self._current_file_content = content
@@ -156,7 +156,7 @@ class ParamAnalyzer:
             # Note: tree-sitter handles syntax errors internally with error recovery
 
             # Cache the tree walk to avoid multiple expensive traversals
-            all_nodes = list(ts_utils.walk_tree(tree.root_node))
+            all_nodes = list(_treesitter.walk_tree(tree.root_node))
         except Exception as e:
             # If tree-sitter completely fails, log and return empty result
             logger.error(f"Failed to parse file: {e}")
@@ -177,19 +177,21 @@ class ParamAnalyzer:
         while len(processed_classes) < len(class_nodes):
             progress_made = False
             for node in class_nodes:
-                class_name = ts_utils.get_class_name(node)
+                class_name = _treesitter.get_class_name(node)
                 if not class_name or class_name in processed_classes:
                     continue
 
                 # Check if all parent classes are processed or are external param classes
                 can_process = True
-                bases = ts_utils.get_class_bases(node)
+                bases = _treesitter.get_class_bases(node)
                 for base in bases:
                     if base.type == "identifier":
-                        parent_name = ts_utils.get_value(base)
+                        parent_name = _treesitter.get_value(base)
                         # If it's a class defined in this file and not processed yet, wait
                         if (
-                            any(ts_utils.get_class_name(cn) == parent_name for cn in class_nodes)
+                            any(
+                                _treesitter.get_class_name(cn) == parent_name for cn in class_nodes
+                            )
                             and parent_name not in processed_classes
                         ):
                             can_process = False
@@ -204,7 +206,7 @@ class ParamAnalyzer:
             if not progress_made:
                 # Process remaining classes anyway
                 for node in class_nodes:
-                    class_name = ts_utils.get_class_name(node)
+                    class_name = _treesitter.get_class_name(node)
                     if class_name and class_name not in processed_classes:
                         self._handle_class_def(node)
                         processed_classes.add(class_name)
@@ -238,7 +240,7 @@ class ParamAnalyzer:
         """Handle class definitions that might inherit from param.Parameterized (tree-sitter node)."""
         # Check if class inherits from param.Parameterized (directly or indirectly)
         is_param_class = False
-        bases = ts_utils.get_class_bases(node)
+        bases = _treesitter.get_class_bases(node)
         for base in bases:
             if self.inheritance_resolver.is_param_base(
                 base, getattr(self, "_current_file_path", None)
@@ -247,7 +249,7 @@ class ParamAnalyzer:
                 break
 
         if is_param_class:
-            class_name = ts_utils.get_class_name(node)
+            class_name = _treesitter.get_class_name(node)
             if class_name is None:
                 return  # Skip if we can't get the class name
             class_info = ParameterizedInfo(name=class_name)
@@ -270,7 +272,7 @@ class ParamAnalyzer:
         """Extract parameter definitions from a Param class (tree-sitter node)."""
         parameters = []
 
-        for assignment_node, target_name in ts_utils.find_all_parameter_assignments(
+        for assignment_node, target_name in _treesitter.find_all_parameter_assignments(
             node, self._is_parameter_assignment
         ):
             param_info = extract_parameter_info_from_assignment(
@@ -369,9 +371,9 @@ class ParamAnalyzer:
         self, tree: Node, cached_nodes: list[Node] | None = None
     ) -> None:
         """Pre-pass to discover all external Parameterized classes using tree-sitter analysis."""
-        nodes_to_check = cached_nodes if cached_nodes is not None else ts_utils.walk_tree(tree)
+        nodes_to_check = cached_nodes if cached_nodes is not None else _treesitter.walk_tree(tree)
         for node in nodes_to_check:
-            if node.type == "call" and ts_utils.is_function_call(node):
+            if node.type == "call" and _treesitter.is_function_call(node):
                 full_class_path = self.import_resolver.resolve_full_class_path(node)
                 self._analyze_external_class_ast(full_class_path)
 

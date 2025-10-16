@@ -10,9 +10,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from param_lsp._treesitter import get_children, get_value
 from param_lsp._types import AnalysisResult, ImportDict
-
-from .ts_utils import get_children, get_value
 
 if TYPE_CHECKING:
     from tree_sitter import Node

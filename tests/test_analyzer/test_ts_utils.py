@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from param_lsp._analyzer import ts_parser
-from param_lsp._analyzer.ts_utils import (
+from param_lsp._treesitter import (
     find_all_parameter_assignments,
     find_arguments_in_trailer,
     find_class_suites,
@@ -18,6 +17,7 @@ from param_lsp._analyzer.ts_utils import (
     is_function_call,
     walk_tree,
 )
+from param_lsp._treesitter.parser import parse
 
 
 class TestBasicUtils:
@@ -26,7 +26,7 @@ class TestBasicUtils:
     def test_get_value(self):
         """Test get_value function."""
         code = "x = 42"
-        tree = ts_parser.parse(code)
+        tree = parse(code)
         nodes = list(walk_tree(tree.root_node))
 
         # Find specific values we expect
@@ -44,7 +44,7 @@ class TestBasicUtils:
     def test_get_children(self):
         """Test get_children function."""
         code = "x = 42"
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         children = get_children(tree.root_node)
         assert len(children) > 0  # Module should have children
@@ -52,7 +52,7 @@ class TestBasicUtils:
     def test_walk_tree(self):
         """Test walk_tree function."""
         code = "x = 42"
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         nodes = list(walk_tree(tree.root_node))
         assert len(nodes) > 0
@@ -76,7 +76,7 @@ class TestClassUtils:
 class MyClass:
     pass
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -91,7 +91,7 @@ class MyClass:
 class MyClass(BaseClass):
     pass
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -108,7 +108,7 @@ class MyClass(BaseClass):
 class MyClass(Base1, Base2):
     pass
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -124,7 +124,7 @@ class MyClass:
     x = 42
     y = "hello"
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
         class_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "class_definition"
         ]
@@ -145,7 +145,7 @@ x = 42
 y = "hello"
 z
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         assignment_count = 0
         for node in walk_tree(tree.root_node):
@@ -157,7 +157,7 @@ z
     def test_get_assignment_target_name(self):
         """Test get_assignment_target_name function."""
         code = "x = 42"
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         for node in walk_tree(tree.root_node):
             if node.type == "assignment" or (
@@ -186,7 +186,7 @@ func()
 obj.method()
 x = 42
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         function_calls = [node for node in walk_tree(tree.root_node) if is_function_call(node)]
 
@@ -195,7 +195,7 @@ x = 42
     def test_find_function_call_trailers(self):
         """Test find_function_call_trailers function."""
         code = "func(arg1, arg2)"
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         for node in walk_tree(tree.root_node):
             if node.type == "call" and is_function_call(node):
@@ -206,7 +206,7 @@ x = 42
     def test_find_arguments_in_trailer(self):
         """Test find_arguments_in_trailer function."""
         code = "func(arg1=42, arg2='hello')"
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         for node in walk_tree(tree.root_node):
             if node.type == "call" and is_function_call(node):
@@ -227,7 +227,7 @@ class MyClass:
     y = param.String(default="hello")
     z = 42  # Not a parameter
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         # Simple mock parameter assignment checker
         def is_param_assignment(node):
@@ -260,7 +260,7 @@ class MyClass:
     def method(self):
         pass
 """
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         # Simple mock parameter assignment checker
         def is_param_assignment(node):
@@ -284,7 +284,7 @@ class TestEdgeCases:
     def test_empty_code(self):
         """Test functions with empty code."""
         code = ""
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         nodes = list(walk_tree(tree.root_node))
         assert len(nodes) >= 1  # Should at least have the root module
@@ -295,7 +295,7 @@ class TestEdgeCases:
     def test_malformed_class(self):
         """Test with malformed class definition."""
         code = "class"  # Incomplete class definition
-        tree = ts_parser.parse(code)
+        tree = parse(code)
 
         # Should not crash - tree-sitter handles errors gracefully
         nodes = list(walk_tree(tree.root_node))

@@ -11,6 +11,15 @@ from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
+from param_lsp._treesitter import (
+    find_all_parameter_assignments,
+    get_children,
+    get_class_name,
+    get_value,
+    is_assignment_stmt,
+    is_function_call,
+    walk_tree,
+)
 from param_lsp.constants import DEPRECATED_PARAMETER_TYPES, PARAM_TYPE_MAP
 
 from .parameter_extractor import (
@@ -19,15 +28,6 @@ from .parameter_extractor import (
     get_keyword_arguments,
     is_none_value,
     resolve_parameter_class,
-)
-from .ts_utils import (
-    find_all_parameter_assignments,
-    get_children,
-    get_class_name,
-    get_value,
-    is_assignment_stmt,
-    is_function_call,
-    walk_tree,
 )
 
 if TYPE_CHECKING:
@@ -553,26 +553,11 @@ class ParameterValidator:
             if obj_node and obj_node.type == "call":
                 has_call = True
                 call_node = obj_node
-        else:
-            # Legacy parso check
-            for child in get_children(target):
-                if (
-                    child.type == "trailer"
-                    and len(get_children(child)) >= 2
-                    and get_value(get_children(child)[0]) == "("
-                    and get_value(get_children(child)[-1]) == ")"
-                ):
-                    has_call = True
-                    break
-
         if has_call:
             # Case: MyClass().param = value (direct instantiation)
             if call_node:
-                # For tree-sitter, extract class name from the call node
+                # Extract class name from the call node
                 instance_class = self._get_instance_class(call_node)
-            else:
-                # For parso, use the target node
-                instance_class = self._get_instance_class(target)
         else:
             # Case: instance_var.param = value
             # Try to find which param class has this parameter
@@ -732,40 +717,6 @@ class ParameterValidator:
                 attr_node = function_node.child_by_field_name("attribute")
                 if attr_node:
                     return get_value(attr_node)
-
-        # Legacy support for parso node types (power, atom_expr) - may be removed once migration complete
-        elif call_node.type in ("power", "atom_expr"):
-            # First try to resolve the full class path for external classes
-            full_class_path = self._resolve_full_class_path(call_node)
-            # Check if this is an external Parameterized class
-            class_info = self._analyze_external_class_ast(full_class_path)
-            if class_info:
-                # Return the full path as the class identifier for external classes
-                return full_class_path
-
-            # If not an external class, look for local class names
-            # We need to find the class name that's actually being called
-            # For Outer.Inner(), we want "Inner", not "Outer"
-
-            # Find the last name before a function call (parentheses trailer)
-            last_name = None
-            for child in get_children(call_node):
-                if child.type == "name":
-                    last_name = get_value(child)
-                elif child.type == "trailer":
-                    if len(get_children(child)) >= 2 and get_children(child)[1].type == "name":
-                        # This is a dot access like .Inner
-                        last_name = get_value(get_children(child)[1])
-                    elif (
-                        len(get_children(child)) >= 1
-                        and get_children(child)[0].type == "operator"
-                        and get_value(get_children(child)[0]) == "("
-                    ):
-                        # This is the function call parentheses - return the last name we found
-                        return last_name
-
-            # If we found a name but no explicit function call, return the last name
-            return last_name
         return None
 
     def _resolve_full_class_path_from_attribute(self, attribute_node: Node) -> str | None:

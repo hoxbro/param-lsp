@@ -6,9 +6,8 @@ import os
 
 import pytest
 
-from src.param_lsp._analyzer import ts_parser
 from src.param_lsp._analyzer.import_resolver import ImportResolver
-from src.param_lsp._analyzer.ts_utils import walk_tree
+from src.param_lsp._treesitter import parser, walk_tree
 
 
 class TestImportResolver:
@@ -81,7 +80,7 @@ class TestImportResolver:
     def test_handle_import_simple(self, resolver):
         """Test handle_import with simple import statement."""
         code = "import os"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_statement"
         ]
@@ -96,7 +95,7 @@ class TestImportResolver:
     def test_handle_import_as_alias(self, resolver):
         """Test handle_import with import as alias."""
         code = "import numpy as np"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_statement"
         ]
@@ -111,7 +110,7 @@ class TestImportResolver:
     def test_handle_import_from_simple(self, resolver):
         """Test handle_import_from with simple from import."""
         code = "from os import path"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
         ]
@@ -126,7 +125,7 @@ class TestImportResolver:
     def test_handle_import_from_multiple(self, resolver):
         """Test handle_import_from with multiple imports."""
         code = "from os import path, environ"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
         ]
@@ -143,7 +142,7 @@ class TestImportResolver:
     def test_handle_import_from_alias(self, resolver):
         """Test handle_import_from with alias."""
         code = "from param import Parameterized as P"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
         ]
@@ -171,7 +170,7 @@ class TestImportResolver:
     def test_resolve_full_class_path_simple(self, resolver):
         """Test resolve_full_class_path with simple class path."""
         code = "pn.widgets.Button"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the attribute node (dotted name like pn.widgets.Button)
         attr_nodes = [node for node in walk_tree(tree.root_node) if node.type == "attribute"]
         assert len(attr_nodes) > 0
@@ -182,7 +181,7 @@ class TestImportResolver:
     def test_resolve_full_class_path_unknown_alias(self, resolver):
         """Test resolve_full_class_path with unknown alias."""
         code = "unknown.widgets.Button"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find the attribute node
         attr_nodes = [node for node in walk_tree(tree.root_node) if node.type == "attribute"]
         assert len(attr_nodes) > 0
@@ -193,7 +192,7 @@ class TestImportResolver:
     def test_resolve_full_class_path_no_parts(self, resolver):
         """Test resolve_full_class_path with empty node."""
         code = "x"  # Simple name, not a complex path
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         # Find a simple identifier node
         id_nodes = [node for node in walk_tree(tree.root_node) if node.type == "identifier"]
         assert len(id_nodes) == 1
@@ -294,7 +293,7 @@ class TestImportResolver:
 
         # Add an import
         code = "import test_module"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_statement"
         ]
@@ -308,7 +307,7 @@ class TestImportResolver:
         """Test handle_import_from with edge cases."""
         # Test with relative import (from . import something)
         code = "from . import local_module"
-        tree = ts_parser.parse(code)
+        tree = parser.parse(code)
         import_nodes = [
             node for node in walk_tree(tree.root_node) if node.type == "import_from_statement"
         ]

@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from param_lsp._analyzer import ts_parser
 from param_lsp._analyzer.ast_navigator import (
     ImportHandler,
     ParameterDetector,
     SourceAnalyzer,
 )
+from param_lsp._treesitter import parser
 
 
 def _get_first_statement(code: str):
     """Helper to parse code and get the first statement node."""
-    tree = ts_parser.parse(code)
+    tree = parser.parse(code)
     # For tree-sitter, we need to find the first meaningful node
     # The root is a module node, first child is usually the statement
     for child in tree.root_node.children:
