@@ -716,26 +716,26 @@ class ExternalClassInspector:
 
         source_paths = []
 
-        logger.info(f"Searching for {library_name} in environment: {self.python_env.python}")
-        logger.info(f"Site-packages: {self.python_env.site_packages}")
-        logger.info(f"User site: {self.python_env.user_site}")
+        logger.debug(f"Searching for {library_name} in environment: {self.python_env.python}")
+        logger.debug(f"Site-packages: {self.python_env.site_packages}")
+        logger.debug(f"User site: {self.python_env.user_site}")
 
         # Search in Python environment's site-packages directories
         for site_dir in self.python_env.site_packages:
             library_path = site_dir / library_name
-            logger.info(f"Checking: {library_path} (exists={library_path.exists()})")
+            logger.debug(f"Checking: {library_path} (exists={library_path.exists()})")
             if library_path.exists():
                 files = self._collect_python_files(library_path)
-                logger.info(f"Found {len(files)} Python files in {library_path}")
+                logger.debug(f"Found {len(files)} Python files in {library_path}")
                 source_paths.extend(files)
 
         # Search in user site-packages if available
         if self.python_env.user_site:
             library_path = self.python_env.user_site / library_name
-            logger.info(f"Checking user site: {library_path} (exists={library_path.exists()})")
+            logger.debug(f"Checking user site: {library_path} (exists={library_path.exists()})")
             if library_path.exists():
                 files = self._collect_python_files(library_path)
-                logger.info(f"Found {len(files)} Python files in user site {library_path}")
+                logger.debug(f"Found {len(files)} Python files in user site {library_path}")
                 source_paths.extend(files)
 
         # Remove duplicates while preserving order, and cache
@@ -748,7 +748,7 @@ class ExternalClassInspector:
         self.library_source_paths[library_name] = unique_paths
 
         logger.info(
-            f"Total: Found {len(unique_paths)} source files for {library_name} in {self.python_env}"
+            f"Total: Found {len(unique_paths)} source files for {library_name!r} in {str(self.python_env.python)!r}"
         )
         return unique_paths
 
