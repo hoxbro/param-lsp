@@ -278,12 +278,16 @@ if node.type == "assignment" or (
 - [x] Update test_static_external_analyzer.py (17 tests passing)
 - [x] Fix validation.py helper methods (\_infer_value_type, \_is_boolean_literal, etc.)
 - [x] Fix import_resolver.py to handle dotted_name nodes in from imports
-- [ ] Update integration tests (48 failures remaining in test_server/\*)
-- [ ] Fix remaining 4 test_analyzer failures (container_validation, inheritance)
+- [x] Update integration tests (all 51 test_server/test_validation/\* passing)
+- [x] Fix test_analyzer failures (container_validation: 6/6, inheritance: 7/7)
+- [x] Fix container validation (\_extract_list_items, \_extract_tuple_items)
+- [x] Fix runtime assignment validation (\_check_runtime_parameter_assignment)
+- [x] Fix constructor call detection (\_get_instance_class)
 - [ ] Remove parso_utils.py
 - [ ] Remove parso dependency
 - [ ] Update documentation
 - [ ] Performance benchmarking
+- [ ] Address 2 edge case failures in incomplete syntax completion (optional)
 
 ## Lessons Learned
 
@@ -300,17 +304,18 @@ if node.type == "assignment" or (
 - [Tree-sitter API Docs](https://tree-sitter.github.io/tree-sitter/)
 - [Parso Documentation](https://parso.readthedocs.io/)
 
-## Detailed Test Results (Updated After Phase 2)
+## Detailed Test Results (Updated After Phase 3)
 
 ### Overall Statistics
 
-- **398 tests passing** (88% success rate)
-- **52 tests failing** (12%)
-- **Net improvement from Phase 1: +38 tests fixed**
+- **448 tests passing** (99.6% success rate) ✅
+- **2 tests failing** (0.4%)
+- **Net improvement from Phase 1: +88 tests fixed**
+- **Net improvement from Phase 2: +50 tests fixed**
 
-### test_analyzer: 247/251 passing (98% ✅)
+### test_analyzer: 251/251 passing (100% ✅)
 
-#### Fully Passing (14 files)
+#### Fully Passing (16 files)
 
 - test_validation.py: 31/31 ✅
 - test_import_resolver.py: 21/21 ✅
@@ -326,30 +331,43 @@ if node.type == "assignment" or (
 - test_doc_extraction.py: 10/10 ✅
 - test_deprecation_warnings.py: 4/4 ✅
 - test_runtime_assignment.py: 10/10 ✅
-
-#### Minor Edge Case Failures (2 files, 4 failures)
-
-- test_container_validation.py: 3/6 (3 edge cases)
-- test_inheritance.py: 6/7 (1 edge case)
+- **test_container_validation.py: 6/6** ✅ _(fixed!)_
+- **test_inheritance.py: 7/7** ✅ _(fixed!)_
 
 ### test_integration: 7/7 passing (100% ✅)
 
 ### test_cache: 14/14 passing (100% ✅)
 
-### test_server: 130/178 passing (73%)
+### test_server: 176/178 passing (99% ✅)
 
-**48 failures** concentrated in constructor validation integration:
+**2 failures** in edge case completion with invalid syntax:
 
-- test_constructor_type_checking.py: 18 failures
-- test_constructor_edge_cases.py: 10 failures
-- test_constructor_integration.py: 7 failures
-- test_constructor_complex_scenarios.py: 11 failures
-- test_param_depends_completion.py: 2 failures
+- test_param_depends_completion.py: 6/8 (2 edge cases with incomplete decorators)
 
-**Analysis**: These failures are integration-level issues where the constructor validation pipeline needs investigation, not core tree-sitter migration issues.
+**Analysis**: These 2 failures are related to tree-sitter's error recovery behavior when handling syntactically invalid code (missing closing parentheses in decorators). The tests intentionally use incomplete syntax to test code completion, and tree-sitter's error recovery behaves differently than parso in these edge cases.
 
 ### Success Metrics
 
-- **Core analyzer migration: 98% complete** ✅
+- **Core analyzer migration: 100% complete** ✅
 - **All major test files migrated to tree-sitter** ✅
+- **All constructor validation tests passing** ✅
 - **Phase 2 objectives achieved** ✅
+- **Phase 3 validation fixes complete** ✅
+- **99.6% test success rate** ✅
+
+### Key Fixes in Phase 3
+
+1. **Container Validation** (validation.py:1034-1054)
+   - Fixed `_extract_list_items()` to use tree-sitter "list" node type
+   - Fixed `_extract_tuple_items()` to use tree-sitter "tuple" node type
+   - Updated to filter punctuation ("[", "]", ",", "(", ")") from children
+
+2. **Constructor Call Detection** (validation.py:187-250)
+   - Updated `_get_instance_class()` to handle tree-sitter "call" nodes
+   - Added `_resolve_full_class_path_from_attribute()` for attribute nodes
+   - Fixed detection of class names from constructor calls
+
+3. **Runtime Assignment Validation** (validation.py:542-575)
+   - Fixed `_check_runtime_parameter_assignment()` to detect call nodes in attribute objects
+   - Updated to handle tree-sitter attribute structure with "object" and "attribute" fields
+   - Properly extracts class name from patterns like `S().value = 123`
