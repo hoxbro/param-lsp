@@ -17,6 +17,7 @@ The server analyzes Python AST to understand Param usage patterns and provides i
 - If you are on a branch except `main`. Add and commit after each step is completed. Do add file with filename only.
 - If you are on a branch which is not `main`. Take a look at the commits since main, to understand what has happened. Ignore gpg signing.
 - If you want to run a temporiry python file use `python -c`
+- We don't care about backward compatibility, so never keep or mention old code
 
 # New Feature
 
