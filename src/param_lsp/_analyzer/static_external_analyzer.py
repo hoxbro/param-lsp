@@ -68,6 +68,40 @@ class ExternalClassInspector:
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
 
+    def _get_library_version(self, library_name: str) -> str | None:
+        """Query library version from the external Python environment.
+
+        Args:
+            library_name: Name of the library
+
+        Returns:
+            Version string or None if unable to determine
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(  # noqa: S603
+                [
+                    str(self.python_env.python),
+                    "-c",
+                    f"import importlib.metadata; print(importlib.metadata.version('{library_name}'))",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                logger.debug(f"Got version {version} for {library_name}")
+                return version
+            else:
+                logger.debug(f"Failed to get version for {library_name}: {result.stderr}")
+                return None
+        except Exception as e:
+            logger.debug(f"Error getting version for {library_name}: {e}")
+            return None
+
     def _get_library_dependencies(self, library_name: str) -> list[str]:
         """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
 
@@ -218,24 +252,34 @@ class ExternalClassInspector:
             return
 
         # Get the imported names
+        # Track if we've seen the 'import' keyword to distinguish module name from imported names
+        seen_import_keyword = False
         imported_names = []
         for child in _treesitter.get_children(import_node):
-            if child.type == "identifier":
-                # Single import: from .input import TextInput
-                name = _treesitter.get_value(child)
-                if name and name not in ("from", "import"):
-                    imported_names.append(name)
-            elif child.type == "aliased_import":
-                # Import with alias: from .input import TextInput as TI
-                # Get the original name (before "as")
-                name_node = child.child_by_field_name("name")
-                if name_node:
-                    name = _treesitter.get_value(name_node)
+            if child.type == "import":
+                seen_import_keyword = True
+                continue
+
+            # After the 'import' keyword, these are imported names
+            if seen_import_keyword:
+                if child.type == "identifier":
+                    # Single import: from .input import TextInput
+                    name = _treesitter.get_value(child)
+                    if name and name not in ("from", "import"):
+                        imported_names.append(name)
+                elif child.type == "dotted_name":
+                    # Multi-line import names: from .parameterized import (Parameterized, ParameterizedFunction, ...)
+                    name = _treesitter.get_value(child)
                     if name:
                         imported_names.append(name)
-            elif child.type == "dotted_name":
-                # Skip - this is the module name
-                pass
+                elif child.type == "aliased_import":
+                    # Import with alias: from .input import TextInput as TI
+                    # Get the original name (before "as")
+                    name_node = child.child_by_field_name("name")
+                    if name_node:
+                        name = _treesitter.get_value(name_node)
+                        if name:
+                            imported_names.append(name)
 
         if not imported_names:
             return
@@ -331,9 +375,14 @@ class ExternalClassInspector:
         # Mark as populated to avoid re-running
         self.populated_libraries.add(library_name)
 
+        # Query library version from external environment
+        version = self._get_library_version(library_name)
+        if not version:
+            return 0
+
         # Check if cache already has content for this library
-        if external_library_cache.has_library_cache(library_name):
-            logger.debug(f"Cache already exists for {library_name}")
+        if external_library_cache.has_library_cache(library_name, version):
+            logger.debug(f"Cache already exists for {library_name} version {version}")
             return 0
 
         # Populate dependencies first to ensure we can resolve inheritance
@@ -341,10 +390,10 @@ class ExternalClassInspector:
         dependencies = self._get_library_dependencies(library_name)
         for dep in dependencies:
             if dep not in self.populated_libraries:
-                logger.info(f"Pre-populating dependency {dep} for {library_name}")
+                logger.debug(f"Pre-populating dependency {dep} for {library_name}")
                 self.populate_library_cache(dep)
 
-        logger.info(f"Pre-populating cache for {library_name} using iterative resolution")
+        logger.debug(f"Pre-populating cache for {library_name} using iterative resolution")
 
         # Discover all source files for the library
         source_paths = self._discover_library_sources(library_name)
@@ -448,9 +497,18 @@ class ExternalClassInspector:
         logger.debug("Phase 1: Iterative Parameterized detection")
         parameterized_classes: set[str] = set()
 
+        # Round 0: Add known Parameterized root classes (classes that ARE Parameterized itself)
+        # These are classes named "Parameterized" with no base classes or only metaclass/object as base
+        for class_path in inheritance_map:
+            # Check if this is the Parameterized class itself
+            if self._is_parameterized_base(class_path, library_name):
+                parameterized_classes.add(class_path)
+
+        logger.debug(f"Round 0: Found {len(parameterized_classes)} Parameterized root classes")
+
         # Round 1: Find direct Parameterized subclasses
         for class_path, bases in inheritance_map.items():
-            if any(self._is_parameterized_base(base) for base in bases):
+            if any(self._is_parameterized_base(base, library_name) for base in bases):
                 parameterized_classes.add(class_path)
 
         logger.debug(
@@ -495,7 +553,7 @@ class ExternalClassInspector:
                 )
                 if class_info:
                     # Cache under the full path
-                    external_library_cache.set(library_name, class_path, class_info)
+                    external_library_cache.set(library_name, class_path, class_info, version)
                     count += 1
 
                     # Register any re-export aliases for this class
@@ -503,7 +561,7 @@ class ExternalClassInspector:
                         if full_path == class_path:
                             try:
                                 external_library_cache.set_alias(
-                                    library_name, short_path, full_path
+                                    library_name, short_path, full_path, version
                                 )
                                 logger.debug(
                                     f"Registered re-export alias: {short_path} -> {full_path}"
@@ -515,9 +573,9 @@ class ExternalClassInspector:
             except Exception as e:
                 logger.debug(f"Failed to cache {class_path}: {e}")
 
-        logger.info(f"Pre-populated {count} classes for {library_name}")
+        logger.info(f"Populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
-        external_library_cache.flush(library_name)
+        external_library_cache.flush(library_name, version)
         # Clean up AST caches after population
         self._cleanup_ast_caches()
         return count
@@ -550,9 +608,16 @@ class ExternalClassInspector:
         # Try to populate cache if not already done
         self.populate_library_cache(root_module)
 
+        # Query library version from external environment
+        version = self._get_library_version(root_module)
+        if not version:
+            logger.debug(f"Could not determine version for {root_module}")
+            self.parsed_classes[full_class_path] = None
+            return None
+
         try:
             # Try to get from cache (which may contain pre-populated data including re-export aliases)
-            class_info = external_library_cache.get(root_module, full_class_path)
+            class_info = external_library_cache.get(root_module, full_class_path, version)
             if class_info:
                 logger.debug(f"Found cached metadata for {full_class_path}")
                 self.parsed_classes[full_class_path] = class_info
@@ -566,8 +631,8 @@ class ExternalClassInspector:
             # Store successful analysis in global cache for persistence
             if class_info:
                 try:
-                    external_library_cache.set(root_module, full_class_path, class_info)
-                    external_library_cache.flush(root_module)
+                    external_library_cache.set(root_module, full_class_path, class_info, version)
+                    external_library_cache.flush(root_module, version)
                     logger.debug(f"Stored {full_class_path} in cache")
                 except Exception as e:
                     logger.debug(f"Failed to store {full_class_path} in cache: {e}")
@@ -716,26 +781,26 @@ class ExternalClassInspector:
 
         source_paths = []
 
-        logger.info(f"Searching for {library_name} in environment: {self.python_env.python}")
-        logger.info(f"Site-packages: {self.python_env.site_packages}")
-        logger.info(f"User site: {self.python_env.user_site}")
+        logger.debug(f"Searching for {library_name} in environment: {self.python_env.python}")
+        logger.debug(f"Site-packages: {self.python_env.site_packages}")
+        logger.debug(f"User site: {self.python_env.user_site}")
 
         # Search in Python environment's site-packages directories
         for site_dir in self.python_env.site_packages:
             library_path = site_dir / library_name
-            logger.info(f"Checking: {library_path} (exists={library_path.exists()})")
+            logger.debug(f"Checking: {library_path} (exists={library_path.exists()})")
             if library_path.exists():
                 files = self._collect_python_files(library_path)
-                logger.info(f"Found {len(files)} Python files in {library_path}")
+                logger.debug(f"Found {len(files)} Python files in {library_path}")
                 source_paths.extend(files)
 
         # Search in user site-packages if available
         if self.python_env.user_site:
             library_path = self.python_env.user_site / library_name
-            logger.info(f"Checking user site: {library_path} (exists={library_path.exists()})")
+            logger.debug(f"Checking user site: {library_path} (exists={library_path.exists()})")
             if library_path.exists():
                 files = self._collect_python_files(library_path)
-                logger.info(f"Found {len(files)} Python files in user site {library_path}")
+                logger.debug(f"Found {len(files)} Python files in user site {library_path}")
                 source_paths.extend(files)
 
         # Remove duplicates while preserving order, and cache
@@ -748,7 +813,7 @@ class ExternalClassInspector:
         self.library_source_paths[library_name] = unique_paths
 
         logger.info(
-            f"Total: Found {len(unique_paths)} source files for {library_name} in {self.python_env}"
+            f"Total: Found {len(unique_paths)} source files for {library_name!r} in {str(self.python_env.python)!r}"
         )
         return unique_paths
 
@@ -766,7 +831,11 @@ class ExternalClassInspector:
             if directory.is_file() and directory.suffix == ".py":
                 python_files.append(directory)
             elif directory.is_dir():
-                python_files.extend(path for path in directory.rglob("*.py") if path.is_file())
+                python_files.extend(
+                    path
+                    for path in directory.rglob("*.py")
+                    if path.is_file() and not any(part in ("test", "tests") for part in path.parts)
+                )
         except (OSError, PermissionError) as e:
             logger.debug(f"Error accessing {directory}: {e}")
 
@@ -1347,7 +1416,9 @@ class ExternalClassInspector:
 
             for base_class_path in base_classes:
                 # Skip param.Parameterized itself
-                if self._is_parameterized_base(base_class_path):
+                # Extract library name from full_class_path for context-aware checking
+                library_name = full_class_path.split(".")[0]
+                if self._is_parameterized_base(base_class_path, library_name):
                     continue
 
                 # Try to find the base class in our AST nodes
@@ -1684,19 +1755,28 @@ class ExternalClassInspector:
 
         return full_bases
 
-    def _is_parameterized_base(self, base_path: str) -> bool:
+    def _is_parameterized_base(self, base_path: str, library_name: str | None = None) -> bool:
         """Check if a base class path is param.Parameterized.
 
         Args:
             base_path: Base class path to check
+            library_name: Name of library being analyzed (for context-aware matching)
 
         Returns:
             True if base class is param.Parameterized
         """
-        return base_path in (
+        # Common forms that work across all libraries
+        if base_path in (
             "param.Parameterized",
-            "Parameterized",  # if imported as "from param import Parameterized"
-        )
+            "param.parameterized.Parameterized",
+        ):
+            return True
+
+        # Relative import form only valid within param library's own source
+        if base_path == ".parameterized.Parameterized":
+            return library_name == "param"
+
+        return False
 
     def _base_matches_parameterized_class(
         self, base_name: str, parameterized_classes: set[str]
@@ -1704,7 +1784,8 @@ class ExternalClassInspector:
         """Check if a base class name matches any known Parameterized class.
 
         Handles matching both simple names (e.g., 'ListPanel') and full paths
-        (e.g., 'panel.layout.base.ListPanel').
+        (e.g., 'panel.layout.base.ListPanel'), as well as relative imports and
+        partial qualified paths.
 
         Args:
             base_name: Base class name to check (may be simple or fully qualified)
@@ -1713,15 +1794,71 @@ class ExternalClassInspector:
         Returns:
             True if base_name matches a known Parameterized class
         """
-        # Direct match: base_name is a full path
+        # Direct/exact match: base_name is a full path
         if base_name in parameterized_classes:
             return True
 
-        # Partial match: base_name is a simple name that matches the last component
-        # of a full path (e.g., 'ListPanel' matches 'panel.layout.base.ListPanel')
+        # Simple name match: base_name has no dots (e.g., 'ListPanel')
+        # This handles cases where a class is defined in the same file or imported without qualification
+        # Match: 'ListPanel' matches 'panel.layout.base.ListPanel'
         if "." not in base_name:
-            for full_path in parameterized_classes:
-                if full_path.endswith(f".{base_name}"):
+            return any(full_path.endswith(f".{base_name}") for full_path in parameterized_classes)
+
+        # Handle relative imports (starting with dots)
+        if base_name.startswith("."):
+            # Extract the class name from the relative import
+            # e.g., '..layout.Feed' -> 'Feed'
+            # e.g., '.parameterized.Parameterized' -> 'Parameterized'
+            parts = base_name.lstrip(".").split(".")
+            if parts:
+                class_name = parts[-1]
+                # Try to match by class name and partial path
+                for full_path in parameterized_classes:
+                    if full_path.endswith(f".{class_name}"):
+                        # Also check if the relative path components match
+                        # e.g., '..layout.Feed' should match paths ending with 'layout.feed.Feed'
+                        if len(parts) > 1:
+                            # Check if the module path components match
+                            rel_module_parts = parts[:-1]  # Exclude class name
+                            full_parts = full_path.split(".")
+                            # Try to find matching suffix
+                            for i in range(len(full_parts) - len(parts) + 1):
+                                if full_parts[i : i + len(rel_module_parts)] == rel_module_parts:
+                                    return True
+                        else:
+                            # Just class name, already matched
+                            return True
+            return False
+
+        # Partial qualified path match (e.g., 'layout.Feed' or 'panel.layout.Feed')
+        # This handles cases where imports create partial paths like "from panel import layout; layout.Feed"
+        base_parts = base_name.split(".")
+        base_class = base_parts[-1]
+
+        for full_path in parameterized_classes:
+            full_parts = full_path.split(".")
+
+            # Check if the class names match
+            if full_parts[-1] != base_class:
+                continue
+
+            # Check if base_name components are a suffix of full_path
+            # e.g., 'panel.layout.Feed' matches 'panel.layout.feed.Feed'
+            if len(base_parts) <= len(full_parts):
+                # Try matching from the end (suffix match)
+                matches = True
+                j = len(full_parts) - 1
+                for i in range(len(base_parts) - 1, -1, -1):
+                    if base_parts[i] != full_parts[j]:
+                        matches = False
+                        break
+                    j -= 1
+                if matches:
                     return True
+
+                # Also try matching as a contiguous substring (for complex import patterns)
+                for offset in range(len(full_parts) - len(base_parts) + 1):
+                    if full_parts[offset : offset + len(base_parts)] == base_parts:
+                        return True
 
         return False
