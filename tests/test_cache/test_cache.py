@@ -450,9 +450,9 @@ w = pn.widgets.IntSlider()
         # param 2.2.1 - Update these values when param version changes
         ("param", 11, 5),
         # panel 1.8.2 - Update these values when panel version changes
-        ("panel", 379, 188),
+        ("panel", 273, 188),
         # holoviews 1.21.0 - Update these values when holoviews version changes
-        ("holoviews", 360, 112),
+        ("holoviews", 348, 112),
     ],
 )
 def test_cache_population_levels(

@@ -785,7 +785,11 @@ class ExternalClassInspector:
             if directory.is_file() and directory.suffix == ".py":
                 python_files.append(directory)
             elif directory.is_dir():
-                python_files.extend(path for path in directory.rglob("*.py") if path.is_file())
+                python_files.extend(
+                    path
+                    for path in directory.rglob("*.py")
+                    if path.is_file() and not any(part in ("test", "tests") for part in path.parts)
+                )
         except (OSError, PermissionError) as e:
             logger.debug(f"Error accessing {directory}: {e}")
 
