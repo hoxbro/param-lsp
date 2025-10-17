@@ -1713,10 +1713,9 @@ class ExternalClassInspector:
             True if base class is param.Parameterized
         """
         return base_path in (
-            "param.Parameterized",
-            "Parameterized",  # if imported as "from param import Parameterized"
-            "param.parameterized.Parameterized",  # full module path within param library
-            ".parameterized.Parameterized",  # relative import within param library
+            "param.Parameterized",  # Common: import param; class Foo(param.Parameterized)
+            "param.parameterized.Parameterized",  # Full module path after import resolution
+            ".parameterized.Parameterized",  # Relative import within param library's own source
         )
 
     def _base_matches_parameterized_class(
