@@ -416,7 +416,7 @@ w = pn.widgets.IntSlider()
     ("library_name", "library_version", "expected_classes", "expected_aliases"),
     [
         ("param", "2.2.1", 11, 5),
-        ("panel", "1.8.2", 273, 188),
+        ("panel", "1.8.2", 275, 190),
         ("holoviews", "1.21.0", 348, 112),
     ],
 )

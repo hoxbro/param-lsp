@@ -39,6 +39,7 @@ from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
 from ._analyzer.static_external_analyzer import ExternalClassInspector
 from ._analyzer.validation import ParameterValidator
+from ._treesitter.queries import find_calls, find_classes, find_imports
 from ._types import AnalysisResult
 from .models import ParameterInfo, ParameterizedInfo
 
@@ -155,22 +156,21 @@ class ParamAnalyzer:
 
             # Note: tree-sitter handles syntax errors internally with error recovery
 
-            # Cache the tree walk to avoid multiple expensive traversals
-            all_nodes = list(_treesitter.walk_tree(tree.root_node))
         except Exception as e:
             # If tree-sitter completely fails, log and return empty result
             logger.error(f"Failed to parse file: {e}")
             return AnalysisResult(param_classes={}, imports={}, type_errors=[])
 
-        # First pass: collect imports using cached nodes
-        for node in all_nodes:
-            if node.type == "import_statement":
-                self.import_handler.handle_import(node)
-            elif node.type == "import_from_statement":
-                self.import_handler.handle_import_from(node)
+        # First pass: collect imports using optimized queries
+        for import_node, _captures in find_imports(tree.root_node):
+            if import_node.type == "import_statement":
+                self.import_handler.handle_import(import_node)
+            elif import_node.type == "import_from_statement":
+                self.import_handler.handle_import_from(import_node)
 
-        # Second pass: collect class definitions in order, respecting inheritance
-        class_nodes: list[TSNode] = [node for node in all_nodes if node.type == "class_definition"]
+        # Second pass: collect class definitions using optimized queries
+        class_matches = find_classes(tree.root_node)
+        class_nodes: list[TSNode] = [class_node for class_node, _captures in class_matches]
 
         # Process classes in dependency order (parents before children)
         processed_classes = set()
@@ -212,12 +212,12 @@ class ParamAnalyzer:
                         processed_classes.add(class_name)
                 break
 
-        # Pre-pass: discover all external Parameterized classes using cached nodes
-        self._discover_external_param_classes(tree.root_node, all_nodes)
+        # Pre-pass: discover all external Parameterized classes using optimized queries
+        self._discover_external_param_classes(tree.root_node)
 
-        # Perform parameter validation after parsing using modular validator with cached nodes
+        # Perform parameter validation after parsing using modular validator
         self.type_errors = self.validator.check_parameter_types(
-            tree.root_node, content.split("\n"), all_nodes
+            tree.root_node, content.split("\n")
         )
 
         return {
@@ -367,14 +367,12 @@ class ParamAnalyzer:
         # Fallback: just use the filename with module info
         return f"{library_name}/{path.name}"
 
-    def _discover_external_param_classes(
-        self, tree: Node, cached_nodes: list[Node] | None = None
-    ) -> None:
-        """Pre-pass to discover all external Parameterized classes using tree-sitter analysis."""
-        nodes_to_check = cached_nodes if cached_nodes is not None else _treesitter.walk_tree(tree)
-        for node in nodes_to_check:
-            if node.type == "call" and _treesitter.is_function_call(node):
-                full_class_path = self.import_resolver.resolve_full_class_path(node)
+    def _discover_external_param_classes(self, tree: Node) -> None:
+        """Pre-pass to discover all external Parameterized classes using tree-sitter queries."""
+        # Use optimized query to find all function calls
+        for call_node, _captures in find_calls(tree):
+            if _treesitter.is_function_call(call_node):
+                full_class_path = self.import_resolver.resolve_full_class_path(call_node)
                 self._analyze_external_class_ast(full_class_path)
 
     def resolve_class_name_from_context(

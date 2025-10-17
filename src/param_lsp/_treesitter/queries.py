@@ -115,6 +115,29 @@ _QUERIES = {
             object: (_) @object
             attribute: (identifier) @attribute) @attr_access
     """,
+    # Find attribute assignments (runtime parameter assignments like obj.param = value)
+    "attribute_assignments": """
+        (assignment
+            left: (attribute
+                object: (_) @object
+                attribute: (identifier) @attr_name) @attr
+            right: (_) @value) @attr_assignment
+    """,
+    # Find keyword arguments in function calls
+    "keyword_arguments": """
+        (keyword_argument
+            name: (identifier) @arg_name
+            value: (_) @arg_value) @keyword_arg
+    """,
+    # Find param.depends decorators specifically
+    "param_depends_decorators": """
+        (decorator
+            (call
+                function: (attribute
+                    object: (identifier) @module
+                    attribute: (identifier) @depends_name)
+                arguments: (argument_list) @depends_args) @depends_call) @decorator
+    """,
 }
 
 
@@ -296,6 +319,139 @@ def find_attributes(tree: Tree | Node) -> list[tuple[Node, dict[str, Node]]]:
                 "attribute": captures_dict.get("attribute", [None])[0],
             }
             results.append((attr_node, result_captures))
+
+    return results
+
+
+def find_parameter_assignments(tree: Tree | Node) -> list[tuple[Node, dict[str, Node]]]:
+    """Find parameter assignments within classes using query.
+
+    This finds class-level assignments where the right side is a function call,
+    which is the typical pattern for Param parameter definitions.
+
+    Args:
+        tree: Tree or Node to search
+
+    Returns:
+        List of (assignment_node, captures_dict) tuples where captures_dict contains:
+            - "param_assignment": the full assignment node
+            - "param_name": the parameter name identifier
+            - "param_type": the parameter type being called
+    """
+    root_node: Node = tree.root_node if isinstance(tree, Tree) else tree
+    query = _get_query(_QUERIES["parameter_assignments"])
+    matches = _execute_query(query, root_node)
+
+    results = []
+    for _, captures_dict in matches:
+        if captures_dict.get("param_assignment"):
+            assignment_node = captures_dict["param_assignment"][0]
+            result_captures = {
+                "param_assignment": assignment_node,
+                "param_name": captures_dict.get("param_name", [None])[0],
+                "param_type": captures_dict.get("param_type", [None])[0],
+            }
+            results.append((assignment_node, result_captures))
+
+    return results
+
+
+def find_attribute_assignments(tree: Tree | Node) -> list[tuple[Node, dict[str, Node]]]:
+    """Find attribute assignments (obj.attr = value) using query.
+
+    This is useful for finding runtime parameter assignments like obj.param = value.
+
+    Args:
+        tree: Tree or Node to search
+
+    Returns:
+        List of (assignment_node, captures_dict) tuples where captures_dict contains:
+            - "attr_assignment": the full assignment node
+            - "attr": the attribute access node
+            - "object": the object being assigned to
+            - "attr_name": the attribute name identifier
+            - "value": the value being assigned
+    """
+    root_node: Node = tree.root_node if isinstance(tree, Tree) else tree
+    query = _get_query(_QUERIES["attribute_assignments"])
+    matches = _execute_query(query, root_node)
+
+    results = []
+    for _, captures_dict in matches:
+        if captures_dict.get("attr_assignment"):
+            assignment_node = captures_dict["attr_assignment"][0]
+            result_captures = {
+                "attr_assignment": assignment_node,
+                "attr": captures_dict.get("attr", [None])[0],
+                "object": captures_dict.get("object", [None])[0],
+                "attr_name": captures_dict.get("attr_name", [None])[0],
+                "value": captures_dict.get("value", [None])[0],
+            }
+            results.append((assignment_node, result_captures))
+
+    return results
+
+
+def find_keyword_arguments(tree: Tree | Node) -> list[tuple[Node, dict[str, Node]]]:
+    """Find keyword arguments in function calls using query.
+
+    Args:
+        tree: Tree or Node to search
+
+    Returns:
+        List of (keyword_arg_node, captures_dict) tuples where captures_dict contains:
+            - "keyword_arg": the full keyword argument node
+            - "arg_name": the argument name identifier
+            - "arg_value": the argument value
+    """
+    root_node: Node = tree.root_node if isinstance(tree, Tree) else tree
+    query = _get_query(_QUERIES["keyword_arguments"])
+    matches = _execute_query(query, root_node)
+
+    results = []
+    for _, captures_dict in matches:
+        if captures_dict.get("keyword_arg"):
+            keyword_node = captures_dict["keyword_arg"][0]
+            result_captures = {
+                "keyword_arg": keyword_node,
+                "arg_name": captures_dict.get("arg_name", [None])[0],
+                "arg_value": captures_dict.get("arg_value", [None])[0],
+            }
+            results.append((keyword_node, result_captures))
+
+    return results
+
+
+def find_param_depends_decorators(tree: Tree | Node) -> list[tuple[Node, dict[str, Node]]]:
+    """Find @param.depends decorators specifically using query.
+
+    Args:
+        tree: Tree or Node to search
+
+    Returns:
+        List of (decorator_node, captures_dict) tuples where captures_dict contains:
+            - "decorator": the decorator node
+            - "depends_call": the call node
+            - "module": the module identifier (should be 'param')
+            - "depends_name": the method name (should be 'depends')
+            - "depends_args": the arguments to param.depends
+    """
+    root_node: Node = tree.root_node if isinstance(tree, Tree) else tree
+    query = _get_query(_QUERIES["param_depends_decorators"])
+    matches = _execute_query(query, root_node)
+
+    results = []
+    for _, captures_dict in matches:
+        if captures_dict.get("decorator"):
+            decorator_node = captures_dict["decorator"][0]
+            result_captures = {
+                "decorator": decorator_node,
+                "depends_call": captures_dict.get("depends_call", [None])[0],
+                "module": captures_dict.get("module", [None])[0],
+                "depends_name": captures_dict.get("depends_name", [None])[0],
+                "depends_args": captures_dict.get("depends_args", [None])[0],
+            }
+            results.append((decorator_node, result_captures))
 
     return results
 

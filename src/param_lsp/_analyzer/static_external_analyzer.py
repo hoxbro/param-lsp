@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from param_lsp import _treesitter
 from param_lsp._logging import get_logger
+from param_lsp._treesitter.queries import find_classes, find_imports
 from param_lsp.cache import external_library_cache
 from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
 from param_lsp.models import ParameterInfo, ParameterizedInfo
@@ -200,8 +201,8 @@ class ExternalClassInspector:
                     logger.debug(f"Could not determine module path for {init_file}")
                     continue
 
-                # Parse import statements from already-parsed tree
-                for node in _treesitter.walk_tree(tree.root_node):
+                # Parse import statements from already-parsed tree using optimized queries
+                for node, _captures in find_imports(tree.root_node):
                     if node.type == "import_from_statement":
                         # Extract "from .module import Name1, Name2"
                         self._process_import_from_for_reexport(
@@ -435,7 +436,7 @@ class ExternalClassInspector:
                 tree = _treesitter.parser.parse(source_code)
                 source_lines = source_code.split("\n")
 
-                # Extract imports, classes, and re-exports in a single tree walk
+                # Extract imports, classes, and re-exports using optimized queries
                 file_imports: dict[str, str] = {}
                 import_handler = ImportHandler(file_imports)
 
@@ -448,37 +449,45 @@ class ExternalClassInspector:
                     parts = list(relative_path.parts[:-1])  # Exclude __init__.py
                     module_path = ".".join([library_name, *parts]) if parts else library_name
 
-                for node in _treesitter.walk_tree(tree.root_node):
-                    # Extract imports
-                    if node.type == "import_statement":
-                        import_handler.handle_import(node)
-                    elif node.type == "import_from_statement":
-                        import_handler.handle_import_from(node)
+                # Extract imports using optimized query
+                for import_node, _captures in find_imports(tree.root_node):
+                    if import_node.type == "import_statement":
+                        import_handler.handle_import(import_node)
+                    elif import_node.type == "import_from_statement":
+                        import_handler.handle_import_from(import_node)
                         # Also process re-exports if this is an __init__.py
                         if is_init_file and module_path:
                             self._process_import_from_for_reexport(
-                                node, module_path, library_name, reexport_map
+                                import_node, module_path, library_name, reexport_map
                             )
-                    # Extract class definitions
-                    elif node.type == "class_definition":
-                        class_name = _treesitter.get_class_name(node)
-                        if class_name:
-                            # Construct full class path using cached library root
-                            full_class_path = self._get_full_class_path_cached(
-                                source_path, class_name, library_name, library_root_path
-                            )
-                            if full_class_path:
-                                # Get base classes as full paths
-                                bases = self._resolve_base_class_paths(
-                                    node, file_imports, library_name, source_path
-                                )
-                                # Store in inheritance map
-                                inheritance_map[full_class_path] = bases
-                                class_ast_nodes[full_class_path] = (
-                                    node,
-                                    file_imports,
-                                    source_path,
-                                )
+
+                # First pass: collect all class names in this file
+                file_classes: set[str] = set()
+                class_data: list[tuple[Node, str, str]] = []  # (node, class_name, full_path)
+                for class_node, _captures in find_classes(tree.root_node):
+                    class_name = _treesitter.get_class_name(class_node)
+                    if class_name:
+                        file_classes.add(class_name)
+                        # Construct full class path using cached library root
+                        full_class_path = self._get_full_class_path_cached(
+                            source_path, class_name, library_name, library_root_path
+                        )
+                        if full_class_path:
+                            class_data.append((class_node, class_name, full_class_path))
+
+                # Second pass: resolve base classes with knowledge of local classes
+                for class_node, _class_name, full_class_path in class_data:
+                    # Get base classes as full paths
+                    bases = self._resolve_base_class_paths(
+                        class_node, file_imports, library_name, source_path, file_classes
+                    )
+                    # Store in inheritance map
+                    inheritance_map[full_class_path] = bases
+                    class_ast_nodes[full_class_path] = (
+                        class_node,
+                        file_imports,
+                        source_path,
+                    )
 
                 # Store parsed data
                 file_data[source_path] = (tree, file_imports, source_lines)
@@ -1718,6 +1727,7 @@ class ExternalClassInspector:
         file_imports: dict[str, str],
         library_name: str,
         source_path: Path | None = None,
+        file_classes: set[str] | None = None,
     ) -> list[str]:
         """Resolve base class names to full paths using imports.
 
@@ -1726,6 +1736,7 @@ class ExternalClassInspector:
             file_imports: Import mappings for this file
             library_name: Name of the library (e.g., "panel")
             source_path: Path to the source file (optional, for resolving same-file classes)
+            file_classes: Set of class names defined in the same file (optional)
 
         Returns:
             List of full base class paths
@@ -1737,12 +1748,25 @@ class ExternalClassInspector:
             if "." in base:
                 # Already qualified: "panel.layout.ListPanel"
                 full_bases.append(base)
+            # Check same-file classes BEFORE imports to avoid shadowing
+            # (e.g., holoviews.element.raster defines Image class but also imports PIL.Image)
+            elif file_classes and base in file_classes:
+                # Base class is defined in the same file
+                if source_path:
+                    full_class_path = self._get_full_class_path(source_path, base, library_name)
+                    if full_class_path:
+                        full_bases.append(full_class_path)
+                    else:
+                        # Shouldn't happen, but fall back to simple name
+                        full_bases.append(base)
+                else:
+                    # No source path, use simple name
+                    full_bases.append(base)
             elif base in file_imports:
-                # Resolve via imports: ListPanel -> panel.layout.base.ListPanel
+                # Resolve via imports
                 full_bases.append(file_imports[base])
-            # Base class might be defined in the same file
-            # Try to construct full path using source file path
             elif source_path:
+                # Last resort: try to construct path from source file
                 full_class_path = self._get_full_class_path(source_path, base, library_name)
                 if full_class_path:
                     full_bases.append(full_class_path)

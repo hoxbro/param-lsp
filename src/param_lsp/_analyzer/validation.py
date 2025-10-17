@@ -13,13 +13,17 @@ logger = logging.getLogger(__name__)
 
 from param_lsp._treesitter import (
     find_all_parameter_assignments,
-    find_decorators,
     get_children,
     get_class_name,
     get_value,
     is_assignment_stmt,
     is_function_call,
-    walk_tree,
+)
+from param_lsp._treesitter.queries import (
+    find_assignments,
+    find_calls,
+    find_classes,
+    find_param_depends_decorators,
 )
 from param_lsp.constants import DEPRECATED_PARAMETER_TYPES, PARAM_TYPE_MAP
 
@@ -80,15 +84,12 @@ class ParameterValidator:
         self.external_inspector = external_inspector
         self.type_errors: list[TypeErrorDict] = []
 
-    def check_parameter_types(
-        self, tree: Node, lines: list[str], cached_nodes: list[Node] | None = None
-    ) -> list[TypeErrorDict]:
+    def check_parameter_types(self, tree: Node, lines: list[str]) -> list[TypeErrorDict]:
         """Perform comprehensive parameter type validation on a parsed AST.
 
         Args:
             tree: The root tree-sitter AST node to validate
             lines: Source code lines for error reporting
-            cached_nodes: Optional pre-computed list of all nodes for performance optimization
 
         Returns:
             List of type error dictionaries containing validation errors found
@@ -103,21 +104,22 @@ class ParameterValidator:
         """
         self.type_errors.clear()
 
-        # Use cached nodes if provided for performance optimization
-        nodes_to_check = cached_nodes if cached_nodes is not None else walk_tree(tree)
+        # Use optimized tree-sitter queries instead of walking entire tree
+        # This is significantly faster, especially for large files
 
-        for node in nodes_to_check:
-            if node.type == "class_definition":
-                self._check_class_parameter_defaults(node, lines)
+        # Check class parameter defaults
+        for class_node, _captures in find_classes(tree):
+            self._check_class_parameter_defaults(class_node, lines)
 
-            # Check runtime parameter assignments like obj.param = value
-            elif node.type in ("assignment", "expression_statement") and is_assignment_stmt(node):
-                if self._has_attribute_target(node):
-                    self._check_runtime_parameter_assignment(node, lines)
+        # Check runtime parameter assignments like obj.param = value
+        for assignment_node, _captures in find_assignments(tree):
+            if is_assignment_stmt(assignment_node) and self._has_attribute_target(assignment_node):
+                self._check_runtime_parameter_assignment(assignment_node, lines)
 
-            # Check constructor calls like MyClass(x="A")
-            elif node.type == "call" and is_function_call(node):
-                self._check_constructor_parameter_types(node, lines)
+        # Check constructor calls like MyClass(x="A")
+        for call_node, _captures in find_calls(tree):
+            if is_function_call(call_node):
+                self._check_constructor_parameter_types(call_node, lines)
 
         # Check @param.depends decorators for invalid parameter references
         self._check_param_depends_decorators(tree)
@@ -1031,14 +1033,10 @@ class ParameterValidator:
         Args:
             tree: The root tree-sitter AST node to validate
         """
-        # Find all decorators in the tree
-        decorators = find_decorators(tree)
+        # Find all param.depends decorators in the tree
+        decorators = find_param_depends_decorators(tree)
 
         for decorator_node, _captures in decorators:
-            # Check if this is a param.depends decorator
-            if not self._is_param_depends_decorator(decorator_node):
-                continue
-
             # Find the containing class for this decorator
             containing_class = self._find_containing_class_for_decorator(decorator_node)
             if not containing_class:
@@ -1061,44 +1059,6 @@ class ParameterValidator:
                     self._create_type_error(
                         param_node, message, "invalid-depends-parameter", "error"
                     )
-
-    def _is_param_depends_decorator(self, decorator_node: Node) -> bool:
-        """Check if a decorator node is a @param.depends decorator.
-
-        Args:
-            decorator_node: A tree-sitter decorator node
-
-        Returns:
-            True if this is a @param.depends decorator, False otherwise
-        """
-        # Decorator node structure:
-        # decorator: @ + (identifier|attribute) + optional call
-        # We're looking for param.depends or just depends (if param is imported as *)
-
-        for child in get_children(decorator_node):
-            if child.type == "attribute":
-                # Check for param.depends pattern
-                obj_node = child.child_by_field_name("object")
-                attr_node = child.child_by_field_name("attribute")
-                if obj_node and attr_node:
-                    obj_name = get_value(obj_node)
-                    attr_name = get_value(attr_node)
-                    if obj_name == "param" and attr_name == "depends":
-                        return True
-            elif child.type == "call":
-                # The decorator might be @param.depends(...)
-                # Check the function being called
-                func_node = child.child_by_field_name("function")
-                if func_node and func_node.type == "attribute":
-                    obj_node = func_node.child_by_field_name("object")
-                    attr_node = func_node.child_by_field_name("attribute")
-                    if obj_node and attr_node:
-                        obj_name = get_value(obj_node)
-                        attr_name = get_value(attr_node)
-                        if obj_name == "param" and attr_name == "depends":
-                            return True
-
-        return False
 
     def _find_containing_class_for_decorator(self, decorator_node: Node) -> str | None:
         """Find the class containing a decorator.
