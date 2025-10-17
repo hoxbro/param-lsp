@@ -555,31 +555,6 @@ class RegularClass:
         depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
         assert len(depends_errors) == 0
 
-    def test_is_param_depends_decorator(self, validator):
-        """Test _is_param_depends_decorator method."""
-        code = """
-import param
-
-class TestClass(param.Parameterized):
-    @param.depends("x")
-    def method1(self):
-        pass
-
-    @other_decorator
-    def method2(self):
-        pass
-"""
-        tree = parser.parse(code)
-        from param_lsp._treesitter import find_decorators
-
-        decorators = find_decorators(tree.root_node)
-
-        # Find the param.depends decorator
-        param_depends_decorators = [
-            d for d, _ in decorators if validator._is_param_depends_decorator(d)
-        ]
-        assert len(param_depends_decorators) == 1
-
     def test_extract_depends_parameters(self, validator):
         """Test _extract_depends_parameters method."""
         code = """
@@ -591,9 +566,9 @@ class TestClass(param.Parameterized):
         pass
 """
         tree = parser.parse(code)
-        from param_lsp._treesitter import find_decorators
+        from param_lsp._treesitter.queries import find_param_depends_decorators
 
-        decorators = find_decorators(tree.root_node)
+        decorators = find_param_depends_decorators(tree.root_node)
         decorator_node = decorators[0][0]
 
         params = validator._extract_depends_parameters(decorator_node)

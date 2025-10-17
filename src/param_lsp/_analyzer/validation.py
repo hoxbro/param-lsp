@@ -23,7 +23,7 @@ from param_lsp._treesitter.queries import (
     find_assignments,
     find_calls,
     find_classes,
-    find_decorators,
+    find_param_depends_decorators,
 )
 from param_lsp.constants import DEPRECATED_PARAMETER_TYPES, PARAM_TYPE_MAP
 
@@ -1033,14 +1033,10 @@ class ParameterValidator:
         Args:
             tree: The root tree-sitter AST node to validate
         """
-        # Find all decorators in the tree
-        decorators = find_decorators(tree)
+        # Find all param.depends decorators in the tree
+        decorators = find_param_depends_decorators(tree)
 
         for decorator_node, _captures in decorators:
-            # Check if this is a param.depends decorator
-            if not self._is_param_depends_decorator(decorator_node):
-                continue
-
             # Find the containing class for this decorator
             containing_class = self._find_containing_class_for_decorator(decorator_node)
             if not containing_class:
@@ -1063,44 +1059,6 @@ class ParameterValidator:
                     self._create_type_error(
                         param_node, message, "invalid-depends-parameter", "error"
                     )
-
-    def _is_param_depends_decorator(self, decorator_node: Node) -> bool:
-        """Check if a decorator node is a @param.depends decorator.
-
-        Args:
-            decorator_node: A tree-sitter decorator node
-
-        Returns:
-            True if this is a @param.depends decorator, False otherwise
-        """
-        # Decorator node structure:
-        # decorator: @ + (identifier|attribute) + optional call
-        # We're looking for param.depends or just depends (if param is imported as *)
-
-        for child in get_children(decorator_node):
-            if child.type == "attribute":
-                # Check for param.depends pattern
-                obj_node = child.child_by_field_name("object")
-                attr_node = child.child_by_field_name("attribute")
-                if obj_node and attr_node:
-                    obj_name = get_value(obj_node)
-                    attr_name = get_value(attr_node)
-                    if obj_name == "param" and attr_name == "depends":
-                        return True
-            elif child.type == "call":
-                # The decorator might be @param.depends(...)
-                # Check the function being called
-                func_node = child.child_by_field_name("function")
-                if func_node and func_node.type == "attribute":
-                    obj_node = func_node.child_by_field_name("object")
-                    attr_node = func_node.child_by_field_name("attribute")
-                    if obj_node and attr_node:
-                        obj_name = get_value(obj_node)
-                        attr_name = get_value(attr_node)
-                        if obj_name == "param" and attr_name == "depends":
-                            return True
-
-        return False
 
     def _find_containing_class_for_decorator(self, decorator_node: Node) -> str | None:
         """Find the class containing a decorator.
