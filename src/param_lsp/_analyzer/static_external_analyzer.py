@@ -390,10 +390,10 @@ class ExternalClassInspector:
         dependencies = self._get_library_dependencies(library_name)
         for dep in dependencies:
             if dep not in self.populated_libraries:
-                logger.info(f"Pre-populating dependency {dep} for {library_name}")
+                logger.debug(f"Pre-populating dependency {dep} for {library_name}")
                 self.populate_library_cache(dep)
 
-        logger.info(f"Pre-populating cache for {library_name} using iterative resolution")
+        logger.debug(f"Pre-populating cache for {library_name} using iterative resolution")
 
         # Discover all source files for the library
         source_paths = self._discover_library_sources(library_name)
@@ -573,7 +573,7 @@ class ExternalClassInspector:
             except Exception as e:
                 logger.debug(f"Failed to cache {class_path}: {e}")
 
-        logger.info(f"Pre-populated {count} classes for {library_name}")
+        logger.info(f"Populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
         external_library_cache.flush(library_name, version)
         # Clean up AST caches after population

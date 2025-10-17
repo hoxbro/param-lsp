@@ -28,6 +28,10 @@ def parse_version(version_str: str) -> tuple[int, ...]:
     return tuple(map(int, _re_no.findall(version_str)[:3]))
 
 
+def string_version(version_tuple, delimiter):
+    return delimiter.join(map(str, version_tuple))
+
+
 class ExternalLibraryCache:
     """Cache for external library introspection results using platformdirs."""
 
@@ -45,8 +49,8 @@ class ExternalLibraryCache:
     def _get_cache_path(self, library_name: str, version: str) -> Path:
         """Get the cache file path for a library."""
         parsed_version = parse_version(version)
-        version_str = "_".join(map(str, parsed_version))
-        cache_str = "_".join(map(str, CACHE_VERSION))
+        version_str = string_version(parsed_version, "_")
+        cache_str = string_version(CACHE_VERSION, "_")
         filename = f"{library_name}-{version_str}-{cache_str}.json"
         return self.cache_dir / filename
 
@@ -341,6 +345,8 @@ class ExternalLibraryCache:
 
     def clear(self, library_name: str | None = None, version: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
+        cache_str = string_version(CACHE_VERSION, ".")
+        logger.info(f"Clearing existing cache (v{cache_str})")
         if library_name:
             # Clear pending cache for this library (all versions)
             keys_to_delete = [
@@ -359,7 +365,7 @@ class ExternalLibraryCache:
             self._pending_cache.clear()
 
             # Clear all cache files for the current cache version only
-            cache_version_str = "_".join(map(str, CACHE_VERSION))
+            cache_version_str = string_version(CACHE_VERSION, "_")
             pattern = f"*-{cache_version_str}.json"
             for cache_file in self.cache_dir.glob(pattern):
                 cache_file.unlink()
