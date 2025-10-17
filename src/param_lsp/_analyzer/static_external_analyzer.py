@@ -462,14 +462,14 @@ class ExternalClassInspector:
         # These are classes named "Parameterized" with no base classes or only metaclass/object as base
         for class_path in inheritance_map:
             # Check if this is the Parameterized class itself
-            if self._is_parameterized_base(class_path):
+            if self._is_parameterized_base(class_path, library_name):
                 parameterized_classes.add(class_path)
 
         logger.debug(f"Round 0: Found {len(parameterized_classes)} Parameterized root classes")
 
         # Round 1: Find direct Parameterized subclasses
         for class_path, bases in inheritance_map.items():
-            if any(self._is_parameterized_base(base) for base in bases):
+            if any(self._is_parameterized_base(base, library_name) for base in bases):
                 parameterized_classes.add(class_path)
 
         logger.debug(
@@ -1366,7 +1366,9 @@ class ExternalClassInspector:
 
             for base_class_path in base_classes:
                 # Skip param.Parameterized itself
-                if self._is_parameterized_base(base_class_path):
+                # Extract library name from full_class_path for context-aware checking
+                library_name = full_class_path.split(".")[0]
+                if self._is_parameterized_base(base_class_path, library_name):
                     continue
 
                 # Try to find the base class in our AST nodes
@@ -1703,20 +1705,28 @@ class ExternalClassInspector:
 
         return full_bases
 
-    def _is_parameterized_base(self, base_path: str) -> bool:
+    def _is_parameterized_base(self, base_path: str, library_name: str | None = None) -> bool:
         """Check if a base class path is param.Parameterized.
 
         Args:
             base_path: Base class path to check
+            library_name: Name of library being analyzed (for context-aware matching)
 
         Returns:
             True if base class is param.Parameterized
         """
-        return base_path in (
-            "param.Parameterized",  # Common: import param; class Foo(param.Parameterized)
-            "param.parameterized.Parameterized",  # Full module path after import resolution
-            ".parameterized.Parameterized",  # Relative import within param library's own source
-        )
+        # Common forms that work across all libraries
+        if base_path in (
+            "param.Parameterized",
+            "param.parameterized.Parameterized",
+        ):
+            return True
+
+        # Relative import form only valid within param library's own source
+        if base_path == ".parameterized.Parameterized":
+            return library_name == "param"
+
+        return False
 
     def _base_matches_parameterized_class(
         self, base_name: str, parameterized_classes: set[str]
