@@ -458,6 +458,15 @@ class ExternalClassInspector:
         logger.debug("Phase 1: Iterative Parameterized detection")
         parameterized_classes: set[str] = set()
 
+        # Round 0: Add known Parameterized root classes (classes that ARE Parameterized itself)
+        # These are classes named "Parameterized" with no base classes or only metaclass/object as base
+        for class_path in inheritance_map:
+            # Check if this is the Parameterized class itself
+            if self._is_parameterized_base(class_path):
+                parameterized_classes.add(class_path)
+
+        logger.debug(f"Round 0: Found {len(parameterized_classes)} Parameterized root classes")
+
         # Round 1: Find direct Parameterized subclasses
         for class_path, bases in inheritance_map.items():
             if any(self._is_parameterized_base(base) for base in bases):
@@ -1726,12 +1735,13 @@ class ExternalClassInspector:
         Returns:
             True if base_name matches a known Parameterized class
         """
-        # Direct match: base_name is a full path
+        # Direct/exact match: base_name is a full path
         if base_name in parameterized_classes:
             return True
 
-        # Simple name match: base_name has no dots
-        # (e.g., 'ListPanel' matches 'panel.layout.base.ListPanel')
+        # Simple name match: base_name has no dots (e.g., 'ListPanel')
+        # This handles cases where a class is defined in the same file or imported without qualification
+        # Match: 'ListPanel' matches 'panel.layout.base.ListPanel'
         if "." not in base_name:
             return any(full_path.endswith(f".{base_name}") for full_path in parameterized_classes)
 
@@ -1761,8 +1771,8 @@ class ExternalClassInspector:
                             return True
             return False
 
-        # Handle partial qualified paths (e.g., 'panel.layout.Feed')
-        # Try to match against full paths by checking if base_name is a prefix or suffix
+        # Partial qualified path match (e.g., 'layout.Feed' or 'panel.layout.Feed')
+        # This handles cases where imports create partial paths like "from panel import layout; layout.Feed"
         base_parts = base_name.split(".")
         base_class = base_parts[-1]
 
@@ -1776,7 +1786,7 @@ class ExternalClassInspector:
             # Check if base_name components are a suffix of full_path
             # e.g., 'panel.layout.Feed' matches 'panel.layout.feed.Feed'
             if len(base_parts) <= len(full_parts):
-                # Try matching from the end
+                # Try matching from the end (suffix match)
                 matches = True
                 j = len(full_parts) - 1
                 for i in range(len(base_parts) - 1, -1, -1):
@@ -1787,7 +1797,7 @@ class ExternalClassInspector:
                 if matches:
                     return True
 
-                # Also try matching as a contiguous substring
+                # Also try matching as a contiguous substring (for complex import patterns)
                 for offset in range(len(full_parts) - len(base_parts) + 1):
                     if full_parts[offset : offset + len(base_parts)] == base_parts:
                         return True

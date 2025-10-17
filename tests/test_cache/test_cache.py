@@ -448,7 +448,7 @@ w = pn.widgets.IntSlider()
     ("library_name", "expected_classes", "expected_aliases"),
     [
         # param 2.2.1 - Update these values when param version changes
-        ("param", 10, 4),
+        ("param", 11, 5),
         # panel 1.8.2 - Update these values when panel version changes
         ("panel", 379, 188),
         # holoviews 1.21.0 - Update these values when holoviews version changes
