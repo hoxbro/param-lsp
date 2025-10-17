@@ -7,7 +7,6 @@ import os
 import re
 import time
 from functools import cache
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -27,14 +26,6 @@ _re_no = re.compile(r"\d+")
 def parse_version(version_str: str) -> tuple[int, ...]:
     """Parse a version string into a tuple of integers."""
     return tuple(map(int, _re_no.findall(version_str)[:3]))
-
-
-@cache
-def _get_version(library_name):
-    try:
-        return version(library_name)
-    except PackageNotFoundError:
-        return None
 
 
 class ExternalLibraryCache:
@@ -59,16 +50,11 @@ class ExternalLibraryCache:
         filename = f"{library_name}-{version_str}-{cache_str}.json"
         return self.cache_dir / filename
 
-    def _get_library_version(self, library_name: str) -> str | None:
-        """Get the version of an installed library."""
-        return _get_version(library_name)
-
-    def has_library_cache(self, library_name: str) -> bool:
+    def has_library_cache(self, library_name: str, version: str) -> bool:
         """Check if cache exists and has content for a library."""
         if not self._caching_enabled:
             return False
 
-        version = self._get_library_version(library_name)
         if not version:
             return False
 
@@ -90,12 +76,11 @@ class ExternalLibraryCache:
         except (json.JSONDecodeError, OSError):
             return False
 
-    def get(self, library_name: str, class_path: str) -> ParameterizedInfo | None:
+    def get(self, library_name: str, class_path: str, version: str) -> ParameterizedInfo | None:
         """Get cached introspection data for a library class."""
         if not self._caching_enabled:
             return None
 
-        version = self._get_library_version(library_name)
         if not version:
             return None
 
@@ -151,18 +136,20 @@ class ExternalLibraryCache:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
-    def set(self, library_name: str, class_path: str, data: ParameterizedInfo) -> None:
+    def set(
+        self, library_name: str, class_path: str, data: ParameterizedInfo, version: str
+    ) -> None:
         """Cache introspection data for a library class in memory.
 
         Args:
             library_name: Name of the library
             class_path: Full path to the class
             data: Parameter information for the class
+            version: Version of the library
         """
         if not self._caching_enabled:
             return
 
-        version = self._get_library_version(library_name)
         if not version:
             return
 
@@ -197,18 +184,18 @@ class ExternalLibraryCache:
         # Update with new data in memory
         self._pending_cache[cache_key]["classes"][class_path] = serialized_data
 
-    def set_alias(self, library_name: str, alias_path: str, full_path: str) -> None:
+    def set_alias(self, library_name: str, alias_path: str, full_path: str, version: str) -> None:
         """Register an alias (re-export) for a class in memory.
 
         Args:
             library_name: Name of the library
             alias_path: Short/alias path (e.g., panel.widgets.TextInput)
             full_path: Full/canonical path (e.g., panel.widgets.input.TextInput)
+            version: Version of the library
         """
         if not self._caching_enabled:
             return
 
-        version = self._get_library_version(library_name)
         if not version:
             return
 
@@ -237,16 +224,16 @@ class ExternalLibraryCache:
         # Add the alias mapping in memory
         self._pending_cache[cache_key]["aliases"][alias_path] = full_path
 
-    def flush(self, library_name: str) -> None:
+    def flush(self, library_name: str, version: str) -> None:
         """Write all pending cache changes for a library to disk.
 
         Args:
             library_name: Name of the library to flush cache for
+            version: Version of the library
         """
         if not self._caching_enabled:
             return
 
-        version = self._get_library_version(library_name)
         if not version:
             return
 
@@ -352,7 +339,7 @@ class ExternalLibraryCache:
 
             return param_class_info
 
-    def clear(self, library_name: str | None = None) -> None:
+    def clear(self, library_name: str | None = None, version: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
         if library_name:
             # Clear pending cache for this library (all versions)
@@ -363,7 +350,6 @@ class ExternalLibraryCache:
                 del self._pending_cache[key]
 
             # Clear disk cache
-            version = self._get_library_version(library_name)
             if version:
                 cache_path = self._get_cache_path(library_name, version)
                 if cache_path.exists():
