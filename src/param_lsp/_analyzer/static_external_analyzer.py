@@ -68,6 +68,40 @@ class ExternalClassInspector:
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
 
+    def _get_library_version(self, library_name: str) -> str | None:
+        """Query library version from the external Python environment.
+
+        Args:
+            library_name: Name of the library
+
+        Returns:
+            Version string or None if unable to determine
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(  # noqa: S603
+                [
+                    str(self.python_env.python),
+                    "-c",
+                    f"import importlib.metadata; print(importlib.metadata.version('{library_name}'))",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                logger.debug(f"Got version {version} for {library_name}")
+                return version
+            else:
+                logger.debug(f"Failed to get version for {library_name}: {result.stderr}")
+                return None
+        except Exception as e:
+            logger.debug(f"Error getting version for {library_name}: {e}")
+            return None
+
     def _get_library_dependencies(self, library_name: str) -> list[str]:
         """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
 
@@ -341,9 +375,14 @@ class ExternalClassInspector:
         # Mark as populated to avoid re-running
         self.populated_libraries.add(library_name)
 
+        # Query library version from external environment
+        version = self._get_library_version(library_name)
+        if not version:
+            return 0
+
         # Check if cache already has content for this library
-        if external_library_cache.has_library_cache(library_name):
-            logger.debug(f"Cache already exists for {library_name}")
+        if external_library_cache.has_library_cache(library_name, version):
+            logger.debug(f"Cache already exists for {library_name} version {version}")
             return 0
 
         # Populate dependencies first to ensure we can resolve inheritance
@@ -514,7 +553,7 @@ class ExternalClassInspector:
                 )
                 if class_info:
                     # Cache under the full path
-                    external_library_cache.set(library_name, class_path, class_info)
+                    external_library_cache.set(library_name, class_path, class_info, version)
                     count += 1
 
                     # Register any re-export aliases for this class
@@ -522,7 +561,7 @@ class ExternalClassInspector:
                         if full_path == class_path:
                             try:
                                 external_library_cache.set_alias(
-                                    library_name, short_path, full_path
+                                    library_name, short_path, full_path, version
                                 )
                                 logger.debug(
                                     f"Registered re-export alias: {short_path} -> {full_path}"
@@ -536,7 +575,7 @@ class ExternalClassInspector:
 
         logger.info(f"Pre-populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
-        external_library_cache.flush(library_name)
+        external_library_cache.flush(library_name, version)
         # Clean up AST caches after population
         self._cleanup_ast_caches()
         return count
@@ -569,9 +608,16 @@ class ExternalClassInspector:
         # Try to populate cache if not already done
         self.populate_library_cache(root_module)
 
+        # Query library version from external environment
+        version = self._get_library_version(root_module)
+        if not version:
+            logger.debug(f"Could not determine version for {root_module}")
+            self.parsed_classes[full_class_path] = None
+            return None
+
         try:
             # Try to get from cache (which may contain pre-populated data including re-export aliases)
-            class_info = external_library_cache.get(root_module, full_class_path)
+            class_info = external_library_cache.get(root_module, full_class_path, version)
             if class_info:
                 logger.debug(f"Found cached metadata for {full_class_path}")
                 self.parsed_classes[full_class_path] = class_info
@@ -585,8 +631,8 @@ class ExternalClassInspector:
             # Store successful analysis in global cache for persistence
             if class_info:
                 try:
-                    external_library_cache.set(root_module, full_class_path, class_info)
-                    external_library_cache.flush(root_module)
+                    external_library_cache.set(root_module, full_class_path, class_info, version)
+                    external_library_cache.flush(root_module, version)
                     logger.debug(f"Stored {full_class_path} in cache")
                 except Exception as e:
                     logger.debug(f"Failed to store {full_class_path} in cache: {e}")
