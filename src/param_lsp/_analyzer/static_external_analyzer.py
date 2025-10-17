@@ -218,24 +218,34 @@ class ExternalClassInspector:
             return
 
         # Get the imported names
+        # Track if we've seen the 'import' keyword to distinguish module name from imported names
+        seen_import_keyword = False
         imported_names = []
         for child in _treesitter.get_children(import_node):
-            if child.type == "identifier":
-                # Single import: from .input import TextInput
-                name = _treesitter.get_value(child)
-                if name and name not in ("from", "import"):
-                    imported_names.append(name)
-            elif child.type == "aliased_import":
-                # Import with alias: from .input import TextInput as TI
-                # Get the original name (before "as")
-                name_node = child.child_by_field_name("name")
-                if name_node:
-                    name = _treesitter.get_value(name_node)
+            if child.type == "import":
+                seen_import_keyword = True
+                continue
+
+            # After the 'import' keyword, these are imported names
+            if seen_import_keyword:
+                if child.type == "identifier":
+                    # Single import: from .input import TextInput
+                    name = _treesitter.get_value(child)
+                    if name and name not in ("from", "import"):
+                        imported_names.append(name)
+                elif child.type == "dotted_name":
+                    # Multi-line import names: from .parameterized import (Parameterized, ParameterizedFunction, ...)
+                    name = _treesitter.get_value(child)
                     if name:
                         imported_names.append(name)
-            elif child.type == "dotted_name":
-                # Skip - this is the module name
-                pass
+                elif child.type == "aliased_import":
+                    # Import with alias: from .input import TextInput as TI
+                    # Get the original name (before "as")
+                    name_node = child.child_by_field_name("name")
+                    if name_node:
+                        name = _treesitter.get_value(name_node)
+                        if name:
+                            imported_names.append(name)
 
         if not imported_names:
             return
@@ -1696,6 +1706,8 @@ class ExternalClassInspector:
         return base_path in (
             "param.Parameterized",
             "Parameterized",  # if imported as "from param import Parameterized"
+            "param.parameterized.Parameterized",  # full module path within param library
+            ".parameterized.Parameterized",  # relative import within param library
         )
 
     def _base_matches_parameterized_class(
@@ -1704,7 +1716,8 @@ class ExternalClassInspector:
         """Check if a base class name matches any known Parameterized class.
 
         Handles matching both simple names (e.g., 'ListPanel') and full paths
-        (e.g., 'panel.layout.base.ListPanel').
+        (e.g., 'panel.layout.base.ListPanel'), as well as relative imports and
+        partial qualified paths.
 
         Args:
             base_name: Base class name to check (may be simple or fully qualified)
@@ -1717,11 +1730,66 @@ class ExternalClassInspector:
         if base_name in parameterized_classes:
             return True
 
-        # Partial match: base_name is a simple name that matches the last component
-        # of a full path (e.g., 'ListPanel' matches 'panel.layout.base.ListPanel')
+        # Simple name match: base_name has no dots
+        # (e.g., 'ListPanel' matches 'panel.layout.base.ListPanel')
         if "." not in base_name:
-            for full_path in parameterized_classes:
-                if full_path.endswith(f".{base_name}"):
+            return any(full_path.endswith(f".{base_name}") for full_path in parameterized_classes)
+
+        # Handle relative imports (starting with dots)
+        if base_name.startswith("."):
+            # Extract the class name from the relative import
+            # e.g., '..layout.Feed' -> 'Feed'
+            # e.g., '.parameterized.Parameterized' -> 'Parameterized'
+            parts = base_name.lstrip(".").split(".")
+            if parts:
+                class_name = parts[-1]
+                # Try to match by class name and partial path
+                for full_path in parameterized_classes:
+                    if full_path.endswith(f".{class_name}"):
+                        # Also check if the relative path components match
+                        # e.g., '..layout.Feed' should match paths ending with 'layout.feed.Feed'
+                        if len(parts) > 1:
+                            # Check if the module path components match
+                            rel_module_parts = parts[:-1]  # Exclude class name
+                            full_parts = full_path.split(".")
+                            # Try to find matching suffix
+                            for i in range(len(full_parts) - len(parts) + 1):
+                                if full_parts[i : i + len(rel_module_parts)] == rel_module_parts:
+                                    return True
+                        else:
+                            # Just class name, already matched
+                            return True
+            return False
+
+        # Handle partial qualified paths (e.g., 'panel.layout.Feed')
+        # Try to match against full paths by checking if base_name is a prefix or suffix
+        base_parts = base_name.split(".")
+        base_class = base_parts[-1]
+
+        for full_path in parameterized_classes:
+            full_parts = full_path.split(".")
+
+            # Check if the class names match
+            if full_parts[-1] != base_class:
+                continue
+
+            # Check if base_name components are a suffix of full_path
+            # e.g., 'panel.layout.Feed' matches 'panel.layout.feed.Feed'
+            if len(base_parts) <= len(full_parts):
+                # Try matching from the end
+                matches = True
+                j = len(full_parts) - 1
+                for i in range(len(base_parts) - 1, -1, -1):
+                    if base_parts[i] != full_parts[j]:
+                        matches = False
+                        break
+                    j -= 1
+                if matches:
                     return True
+
+                # Also try matching as a contiguous substring
+                for offset in range(len(full_parts) - len(base_parts) + 1):
+                    if full_parts[offset : offset + len(base_parts)] == base_parts:
+                        return True
 
         return False
