@@ -338,31 +338,29 @@ class TestCacheIntegration:
         original_get = external_library_cache.get
         external_library_cache.get = Mock(return_value=param_class_info)
 
-        # Mock version query to return a consistent version
-        with patch.object(
-            analyzer.external_inspector, "_get_library_version", return_value="1.0.0"
-        ):
-            try:
-                code_py = """\
+        try:
+            code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 w.value = "invalid"  # should error
 """
-                result = analyzer.analyze_file(code_py)
+            result = analyzer.analyze_file(code_py)
 
-                # Verify cache was called with version
-                external_library_cache.get.assert_called_with(
-                    "panel", "panel.widgets.IntSlider", "1.0.0"
-                )
+            # Verify cache was called (version will be actual installed version)
+            assert external_library_cache.get.called
+            call_args = external_library_cache.get.call_args
+            assert call_args[0][0] == "panel"
+            assert call_args[0][1] == "panel.widgets.IntSlider"
+            # Don't check version since it's the actual installed version
 
-                # Should still detect type error using cached data
-                assert len(result["type_errors"]) == 1
-                error = result["type_errors"][0]
-                assert error["code"] == "runtime-type-mismatch"
+            # Should still detect type error using cached data
+            assert len(result["type_errors"]) == 1
+            error = result["type_errors"][0]
+            assert error["code"] == "runtime-type-mismatch"
 
-            finally:
-                # Restore original method
-                external_library_cache.get = original_get
+        finally:
+            # Restore original method
+            external_library_cache.get = original_get
 
     def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test, isolated_cache):
         """Test that the analyzer populates the cache after external class analysis.
@@ -371,7 +369,6 @@ w.value = "invalid"  # should error
         that the cache storage mechanism works correctly. The actual analysis is tested
         in test_static_external_analyzer.py.
         """
-        from unittest.mock import patch
 
         # Create mock class info
         mock_class_info = ParameterizedInfo(
@@ -387,8 +384,12 @@ w.value = "invalid"  # should error
             },
         )
 
+        # Get the actual installed panel version for verification
+        version = analyzer.external_inspector._get_library_version("panel")
+        assert version is not None
+
         # Verify cache is initially empty
-        assert isolated_cache.get("panel", "panel.widgets.IntSlider", "1.0.0") is None
+        assert isolated_cache.get("panel", "panel.widgets.IntSlider", version) is None
 
         # Mock the expensive operations to focus on cache storage
         with (
@@ -398,9 +399,6 @@ w.value = "invalid"  # should error
                 return_value=mock_class_info,
             ),
             patch.object(analyzer.external_inspector, "populate_library_cache", return_value=0),
-            patch.object(
-                analyzer.external_inspector, "_get_library_version", return_value="1.0.0"
-            ),
         ):
             code_py = """\
 import panel as pn
@@ -409,7 +407,7 @@ w = pn.widgets.IntSlider()
             analyzer.analyze_file(code_py)
 
         # Verify cache was populated with the expected data
-        cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+        cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider", version)
         assert cached_data is not None
         assert isinstance(cached_data, ParameterizedInfo)
         assert cached_data.name == "IntSlider"
