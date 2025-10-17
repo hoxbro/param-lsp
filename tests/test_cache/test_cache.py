@@ -9,7 +9,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 from tests.conftest import _get_library_version_from_env
@@ -413,18 +412,16 @@ w = pn.widgets.IntSlider()
 
 
 @pytest.mark.parametrize(
-    ("library_name", "expected_classes", "expected_aliases"),
+    # Update the version and expected values when updating uv.lock
+    ("library_name", "library_version", "expected_classes", "expected_aliases"),
     [
-        # param 2.2.1 - Update these values when param version changes
-        ("param", 11, 5),
-        # panel 1.8.2 - Update these values when panel version changes
-        ("panel", 273, 188),
-        # holoviews 1.21.0 - Update these values when holoviews version changes
-        ("holoviews", 348, 112),
+        ("param", "2.2.1", 11, 5),
+        ("panel", "1.8.2", 273, 188),
+        ("holoviews", "1.21.0", 348, 112),
     ],
 )
 def test_cache_population_levels(
-    enable_cache_for_test, library_name, expected_classes, expected_aliases
+    enable_cache_for_test, library_name, library_version, expected_classes, expected_aliases
 ):
     """Test that cache population produces expected number of classes and aliases.
 
@@ -436,15 +433,6 @@ def test_cache_population_levels(
     """
 
     pytest.importorskip(library_name)
-
-    inspector = ExternalClassInspector()
-
-    # Ensure cache exists (reuses existing cache if available)
-    inspector.populate_library_cache(library_name)
-
-    # Get the correct cache file path for the currently installed version
-    library_version = external_library_cache._get_library_version(library_name)
-    assert library_version is not None, f"Could not determine version for {library_name}"
 
     cache_path = external_library_cache._get_cache_path(library_name, library_version)
     assert cache_path.exists(), (
