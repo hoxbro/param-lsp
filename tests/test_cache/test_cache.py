@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
+from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 
@@ -440,3 +442,65 @@ w = pn.widgets.IntSlider()
         assert isinstance(cached_data, ParameterizedInfo)
         assert cached_data.name == "IntSlider"
         assert "value" in cached_data.parameters
+
+
+@pytest.mark.parametrize(
+    ("library_name", "expected_classes", "expected_aliases"),
+    [
+        # param 2.2.1 - Update these values when param version changes
+        ("param", 11, 5),
+        # panel 1.8.2 - Update these values when panel version changes
+        ("panel", 379, 188),
+        # holoviews 1.21.0 - Update these values when holoviews version changes
+        ("holoviews", 360, 112),
+    ],
+)
+def test_cache_population_levels(
+    enable_cache_for_test, library_name, expected_classes, expected_aliases
+):
+    """Test that cache population produces expected number of classes and aliases.
+
+    This test ensures that the cache population regression is caught early by
+    verifying exact counts of classes and aliases for each library.
+
+    Note: When library versions are updated, run the cache regeneration and update
+    the expected values in the parametrize decorator above with the new counts.
+    """
+
+    pytest.importorskip(library_name)
+
+    inspector = ExternalClassInspector()
+
+    # Ensure cache exists (reuses existing cache if available)
+    inspector.populate_library_cache(library_name)
+
+    # Get the correct cache file path for the currently installed version
+    library_version = external_library_cache._get_library_version(library_name)
+    assert library_version is not None, f"Could not determine version for {library_name}"
+
+    cache_path = external_library_cache._get_cache_path(library_name, library_version)
+    assert cache_path.exists(), (
+        f"Cache file does not exist for {library_name} version {library_version}"
+    )
+
+    with open(cache_path) as f:
+        cache_data = json.load(f)
+
+    classes = cache_data.get("classes", {})
+    aliases = cache_data.get("aliases", {})
+
+    # Verify exact class count
+    assert len(classes) == expected_classes, (
+        f"{library_name}: Cache has {len(classes)} classes, expected {expected_classes}"
+    )
+
+    # Verify exact alias count
+    assert len(aliases) == expected_aliases, (
+        f"{library_name}: Cache has {len(aliases)} aliases, expected {expected_aliases}"
+    )
+
+    # Verify metadata structure
+    assert "metadata" in cache_data
+    assert cache_data["metadata"]["library_name"] == library_name
+    assert "library_version" in cache_data["metadata"]
+    assert "cache_version" in cache_data["metadata"]
