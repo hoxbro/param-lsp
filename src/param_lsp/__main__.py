@@ -105,15 +105,12 @@ def main():
         from .cache import external_library_cache
         from .constants import ALLOWED_EXTERNAL_LIBRARIES
 
-        logger.info("Clearing existing cache...")
         external_library_cache.clear()
 
         inspector = ExternalClassInspector(python_env=python_env)
         total_cached = 0
-        for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
+        for library in ALLOWED_EXTERNAL_LIBRARIES:
             count = inspector.populate_library_cache(library)
-            total_cached += count
-        logger.info(f"Cache regeneration complete. Total classes cached: {total_cached}")
         return
 
     # Handle --generate-cache flag
