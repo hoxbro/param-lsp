@@ -18,7 +18,7 @@ from .models import ParameterInfo, ParameterizedInfo
 logger = get_logger(__name__, "cache")
 
 # Current cache version
-CACHE_VERSION = (1, 1, 1)
+CACHE_VERSION = (1, 1, 2)
 _re_no = re.compile(r"\d+")
 
 
