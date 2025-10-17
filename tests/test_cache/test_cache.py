@@ -55,30 +55,6 @@ class TestExternalLibraryCache:
         assert cache.cache_dir.exists()
         assert cache.cache_dir.is_dir()
 
-    def test_get_library_version(self):
-        """Test getting library version."""
-        cache = ExternalLibraryCache()
-
-        with patch("param_lsp.cache._get_version", return_value="1.2.3"):
-            version = cache._get_library_version("test_lib")
-            assert version == "1.2.3"
-
-    def test_get_library_version_no_version(self):
-        """Test getting library version when no version attribute exists."""
-        cache = ExternalLibraryCache()
-
-        with patch("param_lsp.cache._get_version", return_value=None):
-            version = cache._get_library_version("test_lib_no_version")
-            assert version is None
-
-    def test_get_library_version_import_error(self):
-        """Test getting library version when import fails."""
-        cache = ExternalLibraryCache()
-
-        with patch("param_lsp.cache._get_version", return_value=None):
-            version = cache._get_library_version("nonexistent_lib")
-            assert version is None
-
     def test_cache_path_generation(self):
         """Test cache path generation produces different paths for different libraries/versions."""
         cache = ExternalLibraryCache()
@@ -123,19 +99,17 @@ class TestExternalLibraryCache:
                     default=None,
                 )
             )
-            # Mock library version
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                # Set cache data
-                cache.set("panel", "panel.widgets.IntSlider", param_class_info)
+            # Set cache data
+            cache.set("panel", "panel.widgets.IntSlider", param_class_info, "1.0.0")
 
-                # Get cache data
-                result = cache.get("panel", "panel.widgets.IntSlider")
+            # Get cache data
+            result = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
 
-                assert result is not None
-                assert result.name == param_class_info.name
-                assert len(result.parameters) == len(param_class_info.parameters)
-                assert "value" in result.parameters
-                assert "name" in result.parameters
+            assert result is not None
+            assert result.name == param_class_info.name
+            assert len(result.parameters) == len(param_class_info.parameters)
+            assert "value" in result.parameters
+            assert "name" in result.parameters
 
     def test_cache_get_nonexistent(self, enable_cache_for_test):
         """Test getting data that doesn't exist in cache."""
@@ -143,9 +117,8 @@ class TestExternalLibraryCache:
             cache = ExternalLibraryCache()
             cache.cache_dir = Path(temp_dir)
 
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                result = cache.get("panel", "panel.widgets.NonExistent")
-                assert result is None
+            result = cache.get("panel", "panel.widgets.NonExistent", "1.0.0")
+            assert result is None
 
     def test_cache_multiple_classes_same_library(self, enable_cache_for_test):
         """Test caching multiple classes from the same library."""
@@ -177,22 +150,21 @@ class TestExternalLibraryCache:
                 )
             )
 
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                # Set data for two different classes
-                cache.set("panel", "panel.widgets.IntSlider", param_class_info1)
-                cache.set("panel", "panel.widgets.TextInput", param_class_info2)
+            # Set data for two different classes
+            cache.set("panel", "panel.widgets.IntSlider", param_class_info1, "1.0.0")
+            cache.set("panel", "panel.widgets.TextInput", param_class_info2, "1.0.0")
 
-                # Get both classes
-                result1 = cache.get("panel", "panel.widgets.IntSlider")
-                result2 = cache.get("panel", "panel.widgets.TextInput")
+            # Get both classes
+            result1 = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+            result2 = cache.get("panel", "panel.widgets.TextInput", "1.0.0")
 
-                assert result1 is not None
-                assert result1.name == param_class_info1.name
-                assert "value" in result1.parameters
+            assert result1 is not None
+            assert result1.name == param_class_info1.name
+            assert "value" in result1.parameters
 
-                assert result2 is not None
-                assert result2.name == param_class_info2.name
-                assert "text" in result2.parameters
+            assert result2 is not None
+            assert result2.name == param_class_info2.name
+            assert "text" in result2.parameters
 
     def test_cache_version_isolation(self, enable_cache_for_test):
         """Test that different versions create separate cache files."""
@@ -227,19 +199,14 @@ class TestExternalLibraryCache:
             )
 
             # Cache data for version 1.0.0
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                cache.set("panel", "panel.widgets.Widget", param_class_info_v1)
+            cache.set("panel", "panel.widgets.Widget", param_class_info_v1, "1.0.0")
 
             # Cache data for version 2.0.0
-            with patch.object(cache, "_get_library_version", return_value="2.0.0"):
-                cache.set("panel", "panel.widgets.Widget", param_class_info_v2)
+            cache.set("panel", "panel.widgets.Widget", param_class_info_v2, "2.0.0")
 
             # Get data for each version
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                result_v1 = cache.get("panel", "panel.widgets.Widget")
-
-            with patch.object(cache, "_get_library_version", return_value="2.0.0"):
-                result_v2 = cache.get("panel", "panel.widgets.Widget")
+            result_v1 = cache.get("panel", "panel.widgets.Widget", "1.0.0")
+            result_v2 = cache.get("panel", "panel.widgets.Widget", "2.0.0")
 
             assert result_v1 is not None
             assert result_v1.name == param_class_info_v1.name
@@ -266,22 +233,21 @@ class TestExternalLibraryCache:
                     default=None,
                 )
             )
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                # Set cache data
-                cache.set("panel", "panel.widgets.IntSlider", param_class_info)
+            # Set cache data
+            cache.set("panel", "panel.widgets.IntSlider", param_class_info, "1.0.0")
 
-                # Verify it's there
-                result = cache.get("panel", "panel.widgets.IntSlider")
-                assert result is not None
-                assert result.name == param_class_info.name
-                assert "value" in result.parameters
+            # Verify it's there
+            result = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+            assert result is not None
+            assert result.name == param_class_info.name
+            assert "value" in result.parameters
 
-                # Clear the cache
-                cache.clear("panel")
+            # Clear the cache
+            cache.clear("panel", "1.0.0")
 
-                # Verify it's gone
-                result = cache.get("panel", "panel.widgets.IntSlider")
-                assert result is None
+            # Verify it's gone
+            result = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+            assert result is None
 
     def test_cache_clear_all(self, enable_cache_for_test):
         """Test clearing all cache files."""
@@ -301,20 +267,18 @@ class TestExternalLibraryCache:
                     default=None,
                 )
             )
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                # Set cache data for multiple libraries
-                cache.set("panel", "panel.widgets.IntSlider", param_class_info)
-                cache.set("holoviews", "holoviews.Curve", param_class_info)
+            # Set cache data for multiple libraries
+            cache.set("panel", "panel.widgets.IntSlider", param_class_info, "1.0.0")
+            cache.set("holoviews", "holoviews.Curve", param_class_info, "1.0.0")
 
             # Clear all caches
             cache.clear()
 
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                # Verify all are gone
-                result1 = cache.get("panel", "panel.widgets.IntSlider")
-                result2 = cache.get("holoviews", "holoviews.Curve")
-                assert result1 is None
-                assert result2 is None
+            # Verify all are gone
+            result1 = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+            result2 = cache.get("holoviews", "holoviews.Curve", "1.0.0")
+            assert result1 is None
+            assert result2 is None
 
     def test_cache_corrupted_file_handling(self, enable_cache_for_test):
         """Test handling of corrupted cache files."""
@@ -323,33 +287,32 @@ class TestExternalLibraryCache:
             cache.cache_dir = Path(temp_dir)
 
             # Create a corrupted cache file
-            with patch.object(cache, "_get_library_version", return_value="1.0.0"):
-                cache_path = cache._get_cache_path("panel", "1.0.0")
-                cache_path.write_text("invalid json{")
+            cache_path = cache._get_cache_path("panel", "1.0.0")
+            cache_path.write_text("invalid json{")
 
-                # Getting from corrupted cache should return None
-                result = cache.get("panel", "panel.widgets.IntSlider")
-                assert result is None
+            # Getting from corrupted cache should return None
+            result = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+            assert result is None
 
-                # Setting should overwrite the corrupted file
-                param_class_info = ParameterizedInfo(name="IntSlider")
-                param_class_info.add_parameter(
-                    ParameterInfo(
-                        name="value",
-                        cls="Integer",
-                        bounds=None,
-                        doc=None,
-                        allow_None=False,
-                        default=None,
-                    )
+            # Setting should overwrite the corrupted file
+            param_class_info = ParameterizedInfo(name="IntSlider")
+            param_class_info.add_parameter(
+                ParameterInfo(
+                    name="value",
+                    cls="Integer",
+                    bounds=None,
+                    doc=None,
+                    allow_None=False,
+                    default=None,
                 )
-                cache.set("panel", "panel.widgets.IntSlider", param_class_info)
+            )
+            cache.set("panel", "panel.widgets.IntSlider", param_class_info, "1.0.0")
 
-                # Now get should work
-                result = cache.get("panel", "panel.widgets.IntSlider")
-                assert result is not None
-                assert result.name == param_class_info.name
-                assert "value" in result.parameters
+            # Now get should work
+            result = cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
+            assert result is not None
+            assert result.name == param_class_info.name
+            assert "value" in result.parameters
 
 
 class TestCacheIntegration:
@@ -375,25 +338,31 @@ class TestCacheIntegration:
         original_get = external_library_cache.get
         external_library_cache.get = Mock(return_value=param_class_info)
 
-        try:
-            code_py = """\
+        # Mock version query to return a consistent version
+        with patch.object(
+            analyzer.external_inspector, "_get_library_version", return_value="1.0.0"
+        ):
+            try:
+                code_py = """\
 import panel as pn
 w = pn.widgets.IntSlider()
 w.value = "invalid"  # should error
 """
-            result = analyzer.analyze_file(code_py)
+                result = analyzer.analyze_file(code_py)
 
-            # Verify cache was called
-            external_library_cache.get.assert_called_with("panel", "panel.widgets.IntSlider")
+                # Verify cache was called with version
+                external_library_cache.get.assert_called_with(
+                    "panel", "panel.widgets.IntSlider", "1.0.0"
+                )
 
-            # Should still detect type error using cached data
-            assert len(result["type_errors"]) == 1
-            error = result["type_errors"][0]
-            assert error["code"] == "runtime-type-mismatch"
+                # Should still detect type error using cached data
+                assert len(result["type_errors"]) == 1
+                error = result["type_errors"][0]
+                assert error["code"] == "runtime-type-mismatch"
 
-        finally:
-            # Restore original method
-            external_library_cache.get = original_get
+            finally:
+                # Restore original method
+                external_library_cache.get = original_get
 
     def test_analyzer_populates_cache(self, analyzer, enable_cache_for_test, isolated_cache):
         """Test that the analyzer populates the cache after external class analysis.
@@ -419,7 +388,7 @@ w.value = "invalid"  # should error
         )
 
         # Verify cache is initially empty
-        assert isolated_cache.get("panel", "panel.widgets.IntSlider") is None
+        assert isolated_cache.get("panel", "panel.widgets.IntSlider", "1.0.0") is None
 
         # Mock the expensive operations to focus on cache storage
         with (
@@ -429,6 +398,9 @@ w.value = "invalid"  # should error
                 return_value=mock_class_info,
             ),
             patch.object(analyzer.external_inspector, "populate_library_cache", return_value=0),
+            patch.object(
+                analyzer.external_inspector, "_get_library_version", return_value="1.0.0"
+            ),
         ):
             code_py = """\
 import panel as pn
@@ -437,7 +409,7 @@ w = pn.widgets.IntSlider()
             analyzer.analyze_file(code_py)
 
         # Verify cache was populated with the expected data
-        cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider")
+        cached_data = isolated_cache.get("panel", "panel.widgets.IntSlider", "1.0.0")
         assert cached_data is not None
         assert isinstance(cached_data, ParameterizedInfo)
         assert cached_data.name == "IntSlider"
