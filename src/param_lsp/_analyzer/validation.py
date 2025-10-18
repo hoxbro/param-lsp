@@ -16,11 +16,10 @@ from param_lsp._treesitter import (
     get_children,
     get_class_name,
     get_value,
-    is_assignment_stmt,
     is_function_call,
 )
 from param_lsp._treesitter.queries import (
-    find_assignments,
+    find_attribute_assignments,
     find_calls,
     find_classes,
     find_param_depends_decorators,
@@ -112,9 +111,9 @@ class ParameterValidator:
             self._check_class_parameter_defaults(class_node, lines)
 
         # Check runtime parameter assignments like obj.param = value
-        for assignment_node, _captures in find_assignments(tree):
-            if is_assignment_stmt(assignment_node) and self._has_attribute_target(assignment_node):
-                self._check_runtime_parameter_assignment(assignment_node, lines)
+        # Use optimized find_attribute_assignments query instead of finding all assignments
+        for assignment_node, _captures in find_attribute_assignments(tree):
+            self._check_runtime_parameter_assignment(assignment_node, lines)
 
         # Check constructor calls like MyClass(x="A")
         for call_node, _captures in find_calls(tree):
@@ -305,22 +304,6 @@ class ParameterValidator:
         right_bracket = "]" if right_inclusive else ")"
         return f"{left_bracket}{min_str}, {max_str}{right_bracket}"
 
-    def _has_attribute_target(self, node: Node) -> bool:
-        """Check if assignment has an attribute target (like obj.attr = value)."""
-        # In tree-sitter, check if left side of assignment is an attribute
-        if node.type == "assignment":
-            left_node = node.child_by_field_name("left")
-            if left_node and left_node.type == "attribute":
-                return True
-
-        # Fallback: check children for attribute nodes
-        for child in get_children(node):
-            if child.type == "attribute":
-                return True
-            elif child.text == b"=" or get_value(child) == "=":
-                break
-        return False
-
     def _check_constructor_bounds(
         self,
         node: Node,
@@ -509,30 +492,16 @@ class ParameterValidator:
 
     def _check_runtime_parameter_assignment(self, node: Node, lines: list[str]) -> None:
         """Check runtime parameter assignments like obj.param = value."""
-        # Extract target and assigned value
-        target = None
-        assigned_value = None
+        # Extract target and assigned value from attribute assignment
+        # Since we use find_attribute_assignments, we know node is an attribute assignment
+        left_node = node.child_by_field_name("left")
+        right_node = node.child_by_field_name("right")
 
-        # In tree-sitter, check if this is an assignment with attribute target
-        if node.type == "assignment":
-            left_node = node.child_by_field_name("left")
-            right_node = node.child_by_field_name("right")
-            if left_node and left_node.type == "attribute":
-                target = left_node
-                assigned_value = right_node
-        else:
-            # Fallback: scan children for attribute and value
-            for child in get_children(node):
-                if child.type == "attribute":
-                    target = child
-                elif child.text == b"=" or get_value(child) == "=":
-                    continue
-                elif target is not None:
-                    assigned_value = child
-                    break
-
-        if not target or not assigned_value:
+        if not left_node or not right_node or left_node.type != "attribute":
             return
+
+        target = left_node
+        assigned_value = right_node
 
         # Extract parameter name from the attribute access
         # In tree-sitter, attribute has 'attribute' field

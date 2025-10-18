@@ -284,30 +284,6 @@ class TestParameterValidator:
         bounds = validator._get_parameter_bounds("TestClass", "test_param")
         assert bounds is None
 
-    def test_has_attribute_target_simple_assignment(self, validator):
-        """Test _has_attribute_target with simple assignment."""
-        code = "x = 5"
-        tree = parser.parse(code)
-        # Find assignment node in tree-sitter
-        assignment_nodes = [
-            node for node in walk_tree(tree.root_node) if node.type == "assignment"
-        ]
-        assert len(assignment_nodes) == 1
-
-        assert validator._has_attribute_target(assignment_nodes[0]) is False
-
-    def test_has_attribute_target_attribute_assignment(self, validator):
-        """Test _has_attribute_target with attribute assignment."""
-        code = "obj.attr = 5"
-        tree = parser.parse(code)
-        # Find assignment node in tree-sitter
-        assignment_nodes = [
-            node for node in walk_tree(tree.root_node) if node.type == "assignment"
-        ]
-        assert len(assignment_nodes) == 1
-
-        assert validator._has_attribute_target(assignment_nodes[0]) is True
-
     def test_create_type_error(self, validator):
         """Test _create_type_error method."""
         code = "x = 5"
