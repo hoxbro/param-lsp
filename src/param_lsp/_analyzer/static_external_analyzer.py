@@ -92,12 +92,6 @@ class ExternalClassInspector:
         )
 
         # Query all libraries in a single subprocess call
-        if not hasattr(self.python_env, "get_all_libraries_info"):
-            logger.warning(
-                f"Python environment does not support bulk library info query: {type(self.python_env)}"
-            )
-            return
-
         all_results = self.python_env.get_all_libraries_info(list(ALLOWED_EXTERNAL_LIBRARIES))
 
         # Process and cache the results
@@ -127,82 +121,6 @@ class ExternalClassInspector:
         logger.info(
             f"Pre-populated library info cache with {len(self.library_info_cache)}/{len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
         )
-
-    def _get_library_info(self, library_name: str) -> LibraryInfo | None:
-        """Get library info (version and dependencies) from external Python environment.
-
-        Uses a single subprocess call to get both version and dependencies, caching
-        the result to avoid repeated subprocess calls.
-
-        Args:
-            library_name: Name of the library
-
-        Returns:
-            Dictionary with 'version' and 'dependencies' keys, or None if unable to query
-        """
-        # Check cache first
-        if library_name in self.library_info_cache:
-            return self.library_info_cache[library_name]
-
-        # Fallback if python_env doesn't support get_library_info
-        if not hasattr(self.python_env, "get_library_info"):
-            logger.warning(
-                f"Python environment does not support library info query: {type(self.python_env)}"
-            )
-            return None
-
-        # Query library info using the unified method
-        info = self.python_env.get_library_info(library_name)
-        if not info:
-            return None
-
-        # Parse dependencies to extract only allowed libraries
-        dependencies: list[str] = []
-        requires = info.get("requires", [])
-        if isinstance(requires, list):
-            for req in requires:
-                # Parse requirement string (e.g., "panel>=1.0" -> "panel")
-                dep_name = req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
-
-                # Only include if it's in our allowed list
-                if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
-                    dependencies.append(dep_name)
-                    logger.debug(f"Found dependency: {library_name} -> {dep_name}")
-
-        # Store processed info in cache
-        version = info["version"]
-        if not isinstance(version, str):
-            logger.debug(f"Invalid version type for {library_name}: {type(version)}")
-            return None
-
-        result: LibraryInfo = {"version": version, "dependencies": dependencies}
-        self.library_info_cache[library_name] = result
-        logger.debug(f"Got version {version} for {library_name}")
-        return result
-
-    def _get_library_version(self, library_name: str) -> str | None:
-        """Query library version from the external Python environment.
-
-        Args:
-            library_name: Name of the library
-
-        Returns:
-            Version string or None if unable to determine
-        """
-        info = self._get_library_info(library_name)
-        return info["version"] if info else None
-
-    def _get_library_dependencies(self, library_name: str) -> list[str]:
-        """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
-
-        Args:
-            library_name: Name of the library to check
-
-        Returns:
-            List of dependency library names that are allowed external libraries
-        """
-        info = self._get_library_info(library_name)
-        return info["dependencies"] if info else []
 
     def _build_reexport_map(
         self,
@@ -428,10 +346,13 @@ class ExternalClassInspector:
         # Mark as populated to avoid re-running
         self.populated_libraries.add(library_name)
 
-        # Query library version from external environment
-        version = self._get_library_version(library_name)
-        if not version:
+        # Get library info from pre-populated cache
+        lib_info = self.library_info_cache.get(library_name)
+        if not lib_info:
+            logger.debug(f"No library info found for {library_name}")
             return 0
+
+        version = lib_info["version"]
 
         # Check if cache already has content for this library
         if external_library_cache.has_library_cache(library_name, version):
@@ -440,7 +361,7 @@ class ExternalClassInspector:
 
         # Populate dependencies first to ensure we can resolve inheritance
         # from classes in dependent libraries
-        dependencies = self._get_library_dependencies(library_name)
+        dependencies = lib_info["dependencies"]
         for dep in dependencies:
             if dep not in self.populated_libraries:
                 logger.debug(f"Pre-populating dependency {dep} for {library_name}")
@@ -669,12 +590,14 @@ class ExternalClassInspector:
         # Try to populate cache if not already done
         self.populate_library_cache(root_module)
 
-        # Query library version from external environment
-        version = self._get_library_version(root_module)
-        if not version:
-            logger.debug(f"Could not determine version for {root_module}")
+        # Get library version from pre-populated cache
+        lib_info = self.library_info_cache.get(root_module)
+        if not lib_info:
+            logger.debug(f"No library info found for {root_module}")
             self.parsed_classes[full_class_path] = None
             return None
+
+        version = lib_info["version"]
 
         try:
             # Try to get from cache (which may contain pre-populated data including re-export aliases)

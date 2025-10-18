@@ -78,44 +78,6 @@ class PythonEnvironment:
         ) as e:
             logger.warning(f"Failed to query site from {self.python}: {e}")
 
-    def get_library_info(self, library_name: str) -> dict[str, str | list[str]] | None:
-        """Query library version and dependencies from this Python environment.
-
-        Args:
-            library_name: Name of the library to query
-
-        Returns:
-            Dictionary with 'version' and 'dependencies' keys, or None if unable to query
-        """
-        try:
-            script = f"""
-import json
-import importlib.metadata
-
-try:
-    version = importlib.metadata.version('{library_name}')
-    metadata = importlib.metadata.metadata('{library_name}')
-    requires = list(metadata.get_all('Requires-Dist') or [])
-    print(json.dumps({{'version': version, 'requires': requires}}))
-except Exception as e:
-    print(json.dumps({{'error': str(e)}}))
-"""
-            output = subprocess.check_output(  # noqa: S603
-                [os.fspath(self.python), "-c", script], text=True, timeout=10
-            )
-            result = json.loads(output)
-            if "error" in result:
-                logger.debug(f"Failed to get library info for {library_name}: {result['error']}")
-                return None
-            return result
-        except (
-            subprocess.CalledProcessError,
-            subprocess.TimeoutExpired,
-            json.JSONDecodeError,
-        ) as e:
-            logger.debug(f"Failed to query library info for {library_name}: {e}")
-            return None
-
     def get_all_libraries_info(
         self, library_names: list[str]
     ) -> dict[str, dict[str, str | list[str]]]:
