@@ -108,7 +108,7 @@ for lib_name in libraries:
         results[lib_name] = {{'version': version, 'requires': requires}}
     except Exception:
         # Skip libraries that don't exist or fail to query
-        pass
+        continue
 
 print(json.dumps(results))
 """
