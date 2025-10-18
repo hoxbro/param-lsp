@@ -11,70 +11,57 @@ A Language Server Protocol (LSP) implementation for the HoloViz Param library, p
 
 ## Installation
 
-1. Install the param-lsp package:
+1. Install the param-lsp package, see more ways [here](https://param-lsp.readthedocs.io/en/latest/installation/#installing-param-lsp)
 
    ```bash
    pip install param-lsp
    ```
 
-2. Install this VS Code extension from the marketplace.
+2. Ensure `param-lsp` is available to you:
+
+   ```bash
+   param-lsp --version
+   ```
+
+3. Install this VS Code extension from the marketplace.
 
 ## Configuration
 
 The extension provides simple configuration options:
 
 - **`param-lsp.enable`**: Enable/disable the extension (default: `true`)
-- **`param-lsp.pythonPath`**: Path to Python interpreter with param-lsp installed (optional)
+- **`param-lsp.trace.server`**: Control communication logging between VS Code and the language server (default: `off`)
 
-**Auto-detection:** If `pythonPath` is not specified, the extension automatically detects param-lsp from:
-
-1. Active virtual environment (`VIRTUAL_ENV`)
-2. Active conda environment (`CONDA_PREFIX`)
-3. Direct `param-lsp` command in PATH
-4. System `python` or `python3` with param-lsp installed
-
-**Example configuration:**
-
-```json
-{
-  "param-lsp.pythonPath": "/path/to/python"
-}
-```
-
-Most users won't need any configuration - the extension automatically finds param-lsp in your active environment.
+The extension automatically detects the `param-lsp` command from your PATH. No additional configuration is required.
 
 ## Troubleshooting
 
 ### Extension shows "param-lsp not found" error
 
-1. **Check your environment**: Make sure param-lsp is installed in your active virtual environment or conda environment:
+1. **Check installation**: Make sure param-lsp is installed:
 
    ```bash
    pip install param-lsp
    ```
 
-2. **Verify installation**: Test that param-lsp works from command line:
+2. **Verify PATH**: Test that param-lsp is available in your PATH:
 
    ```bash
    param-lsp --version
-   # or
-   python -c "import param_lsp; print('param-lsp is installed')"
    ```
 
-3. **Manual configuration**: If auto-detection fails, specify the Python path explicitly:
-   ```json
-   {
-     "param-lsp.pythonPath": "/path/to/your/python"
-   }
-   ```
+3. **Check your shell configuration**: Ensure your PATH is correctly configured in your shell profile (`.bashrc`, `.zshrc`, etc.)
 
 ### Works in terminal but not in VS Code
 
-This usually means VS Code is not using the same Python environment as your terminal. Make sure:
+VS Code may not be using the same environment as your terminal. Solutions:
 
-1. Your virtual environment is activated when you start VS Code
-2. VS Code's Python interpreter is set to the same environment where param-lsp is installed
-3. The `param-lsp.pythonPath` setting points to the correct Python interpreter
+1. **Restart VS Code**: After installing param-lsp, restart VS Code to pick up PATH changes
+2. **Launch from terminal**: Start VS Code from your terminal where param-lsp works:
+   ```bash
+   code .
+   ```
+3. **Check VS Code PATH**: Verify VS Code can see param-lsp by running `param-lsp --version` in the VS Code integrated terminal
 
 ## Development
 
