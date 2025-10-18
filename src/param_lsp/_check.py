@@ -151,9 +151,9 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
         print(f"{line_num_str:>2} {cyan}|{reset} {line_content}")
 
         # Print underline carets
-        # Calculate padding: line number width + 1 space + 1 for | + 1 space
-        line_num_width = len(line_num_str)
-        padding = line_num_width + 3 + col
+        # Calculate padding: line number field width (min 2) + 1 space + 1 for | + 1 space
+        line_num_field_width = max(2, len(line_num_str))
+        padding = line_num_field_width + 3 + col
 
         # Calculate underline width - use end_col if on same line
         if end_line == line:
