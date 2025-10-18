@@ -65,12 +65,22 @@ def main():
         type=str,
         help="Path to Python executable for analyzing external libraries (e.g., /path/to/venv/bin/python)",
     )
+    parser.add_argument(
+        "--extra-libraries",
+        type=str,
+        help="Comma-separated list of additional external libraries to analyze (e.g., geoviews,datashader)",
+    )
 
     args = parser.parse_args()
 
     # Configure colored logging
     log_level = getattr(logging, args.log_level)
     setup_colored_logging(level=log_level)
+
+    # Parse extra libraries
+    extra_libraries: set[str] = set()
+    if args.extra_libraries:
+        extra_libraries = {lib.strip() for lib in args.extra_libraries.split(",") if lib.strip()}
 
     # Configure Python environment for external library analysis
     # Priority: CLI argument > environment variables > current environment
@@ -107,9 +117,10 @@ def main():
 
         external_library_cache.clear()
 
-        inspector = ExternalClassInspector(python_env=python_env)
+        inspector = ExternalClassInspector(python_env=python_env, extra_libraries=extra_libraries)
         total_cached = 0
-        for library in ALLOWED_EXTERNAL_LIBRARIES:
+        all_libraries = ALLOWED_EXTERNAL_LIBRARIES | extra_libraries
+        for library in all_libraries:
             count = inspector.populate_library_cache(library)
         return
 
@@ -118,9 +129,10 @@ def main():
         from ._analyzer.static_external_analyzer import ExternalClassInspector
         from .constants import ALLOWED_EXTERNAL_LIBRARIES
 
-        inspector = ExternalClassInspector(python_env=python_env)
+        inspector = ExternalClassInspector(python_env=python_env, extra_libraries=extra_libraries)
         total_cached = 0
-        for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
+        all_libraries = ALLOWED_EXTERNAL_LIBRARIES | extra_libraries
+        for library in sorted(all_libraries):
             count = inspector.populate_library_cache(library)
             total_cached += count
         return
@@ -132,7 +144,7 @@ def main():
     # Import server only when actually needed to avoid loading during --help/--version
     from .server import create_server
 
-    server = create_server(python_env=python_env)
+    server = create_server(python_env=python_env, extra_libraries=extra_libraries)
 
     if args.tcp:
         logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")

@@ -20,18 +20,22 @@ class LSPServerBase(LanguageServer):
     reducing the need for verbose type annotations in mixin methods.
     """
 
-    def __init__(self, *args, python_env: Any = None, **kwargs):
+    def __init__(
+        self, *args, python_env: Any = None, extra_libraries: set[str] | None = None, **kwargs
+    ):
         """
         Initialize the LSP server.
 
         Args:
             python_env: PythonEnvironment instance for analyzing external libraries.
                        If None, uses the current Python environment.
+            extra_libraries: Set of additional external library names to analyze.
         """
         super().__init__(*args, **kwargs)
         self.workspace_root: str | None = None
         self.python_env = python_env
-        self.analyzer = ParamAnalyzer(python_env=python_env)
+        self.extra_libraries = extra_libraries if extra_libraries is not None else set()
+        self.analyzer = ParamAnalyzer(python_env=python_env, extra_libraries=self.extra_libraries)
         self.document_cache: dict[str, dict[str, Any]] = {}
         self.classes = self._get_classes()
 
