@@ -18,7 +18,7 @@ For Neovim users, add this to your Neovim configuration, requires version 0.11 o
 
 ```lua
 vim.lsp.config("param-lsp", {
-	cmd = { "param-lsp" },
+	cmd = { "param-lsp", "server" },
 	filetypes = { "python" },
 	root_markers = { ".git", "setup.py", "pyproject.toml" },
 })

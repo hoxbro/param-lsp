@@ -31,7 +31,7 @@ Install the param-lsp VS Code extension from the marketplace.
 
 ### Other IDEs
 
-Configure your IDE's LSP client to use `param-lsp` as the language server command.
+Configure your IDE's LSP client to use `param-lsp server` as the language server command.
 
 ## Development
 

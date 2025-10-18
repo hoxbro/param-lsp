@@ -62,7 +62,7 @@ async function getServerOptions(config) {
   // Check if param-lsp is available in PATH
   const paramLspExists = await commandExists("param-lsp");
   if (paramLspExists) {
-    return createServerOptions("param-lsp");
+    return createServerOptions("param-lsp", ["server"]);
   }
 
   // No valid server found

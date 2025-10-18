@@ -1,5 +1,5 @@
 vim.lsp.config("param-lsp", {
-    cmd = { "param-lsp" },
+    cmd = { "param-lsp", "server" },
     filetypes = { "python" },
     root_markers = { ".git", "setup.py", "pyproject.toml" },
 })

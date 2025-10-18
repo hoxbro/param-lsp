@@ -30,29 +30,8 @@ def main():
         description=_DESCRIPTION,
         prog="param-lsp",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="Use param-lsp with your editor's LSP client for the best experience.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("--tcp", action="store_true", help="Use TCP instead of stdio")
-    parser.add_argument(
-        "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
-    )
-    parser.add_argument("--stdio", action="store_true", help="Use stdio (default)")
-    parser.add_argument(
-        "--cache-dir",
-        action="store_true",
-        help="Print the cache directory path and exit",
-    )
-    parser.add_argument(
-        "--generate-cache",
-        action="store_true",
-        help="Generate cache for supported libraries and exit",
-    )
-    parser.add_argument(
-        "--regenerate-cache",
-        action="store_true",
-        help="Clear existing cache and regenerate for supported libraries",
-    )
     parser.add_argument(
         "--log-level",
         type=str,
@@ -71,10 +50,74 @@ def main():
         help="Comma-separated list of additional external libraries to analyze (e.g., geoviews,datashader)",
     )
 
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Server subcommand
+    server_parser = subparsers.add_parser(
+        "server",
+        help="Start the LSP server (default)",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    server_parser.add_argument("--tcp", action="store_true", help="Use TCP instead of stdio")
+    server_parser.add_argument(
+        "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
+    )
+    server_parser.add_argument("--stdio", action="store_true", help="Use stdio (default)")
+
+    # Check subcommand
+    check_parser = subparsers.add_parser(
+        "check",
+        help="Check Python files for Param-related errors and warnings",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    check_parser.add_argument(
+        "files",
+        nargs="+",
+        type=str,
+        help="Python files or directories to check (directories are searched recursively)",
+    )
+
+    # Cache subcommand
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Manage the external library cache",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    cache_group = cache_parser.add_mutually_exclusive_group(required=True)
+    cache_group.add_argument(
+        "--show",
+        action="store_true",
+        help="Print the cache directory path",
+    )
+    cache_group.add_argument(
+        "--generate",
+        action="store_true",
+        help="Generate cache for supported libraries",
+    )
+    cache_group.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Clear existing cache and regenerate for supported libraries",
+    )
+
     args = parser.parse_args()
 
-    # Configure colored logging
-    log_level = getattr(logging, args.log_level)
+    # Require explicit subcommand
+    if args.command is None:
+        parser.error(
+            "A subcommand is required. Use 'param-lsp server' to start the LSP server.\n"
+            "See 'param-lsp --help' for available commands."
+        )
+
+    # Configure logging based on command
+    # For check command, default to WARNING to hide INFO messages unless user specified --log-level
+    # For server and cache, use the provided log level (default INFO)
+    if args.command == "check" and args.log_level == "INFO":
+        # For check, default to WARNING instead of INFO
+        log_level = logging.WARNING
+    else:
+        # User explicitly set log level, or it's a different command
+        log_level = getattr(logging, args.log_level)
     setup_colored_logging(level=log_level)
 
     # Parse extra libraries
@@ -101,57 +144,53 @@ def main():
             python_env = PythonEnvironment.from_current()
             logger.info("Using current Python environment")
 
-    # Handle --cache-dir flag
-    if args.cache_dir:
+    # Handle subcommands
+    if args.command == "cache":
+        from ._analyzer.static_external_analyzer import ExternalClassInspector
         from .cache import CACHE_VERSION, external_library_cache
-
-        cache_version_str = ".".join(map(str, CACHE_VERSION))
-        print(f"{external_library_cache.cache_dir}::{cache_version_str}")
-        return
-
-    # Handle --regenerate-cache flag
-    if args.regenerate_cache:
-        from ._analyzer.static_external_analyzer import ExternalClassInspector
-        from .cache import external_library_cache
         from .constants import ALLOWED_EXTERNAL_LIBRARIES
 
-        external_library_cache.clear()
+        if args.show:
+            cache_version_str = ".".join(map(str, CACHE_VERSION))
+            print(f"{external_library_cache.cache_dir}::{cache_version_str}")
+            return
 
         inspector = ExternalClassInspector(python_env=python_env, extra_libraries=extra_libraries)
-        total_cached = 0
         all_libraries = ALLOWED_EXTERNAL_LIBRARIES | extra_libraries
-        for library in all_libraries:
-            count = inspector.populate_library_cache(library)
+
+        if args.regenerate:
+            external_library_cache.clear()
+            for library in all_libraries:
+                inspector.populate_library_cache(library)
+            return
+
+        if args.generate:
+            for library in sorted(all_libraries):
+                inspector.populate_library_cache(library)
+            return
+
+    elif args.command == "check":
+        from ._check import run_check
+
+        run_check(args.files, python_env)
         return
 
-    # Handle --generate-cache flag
-    if args.generate_cache:
-        from ._analyzer.static_external_analyzer import ExternalClassInspector
-        from .constants import ALLOWED_EXTERNAL_LIBRARIES
+    elif args.command == "server":
+        # Check for mutually exclusive options
+        if args.tcp and args.stdio:
+            parser.error("--tcp and --stdio are mutually exclusive")
 
-        inspector = ExternalClassInspector(python_env=python_env, extra_libraries=extra_libraries)
-        total_cached = 0
-        all_libraries = ALLOWED_EXTERNAL_LIBRARIES | extra_libraries
-        for library in sorted(all_libraries):
-            count = inspector.populate_library_cache(library)
-            total_cached += count
-        return
+        # Import server only when actually needed
+        from .server import create_server
 
-    # Check for mutually exclusive options
-    if args.tcp and args.stdio:
-        parser.error("--tcp and --stdio are mutually exclusive")
+        server = create_server(python_env=python_env, extra_libraries=extra_libraries)
 
-    # Import server only when actually needed to avoid loading during --help/--version
-    from .server import create_server
-
-    server = create_server(python_env=python_env, extra_libraries=extra_libraries)
-
-    if args.tcp:
-        logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
-        server.start_tcp("localhost", args.port)
-    else:
-        logger.info(f"Starting Param LSP server ({__version__}) on stdio")
-        server.start_io()
+        if args.tcp:
+            logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
+            server.start_tcp("localhost", args.port)
+        else:
+            logger.info(f"Starting Param LSP server ({__version__}) on stdio")
+            server.start_io()
 
 
 if __name__ == "__main__":
