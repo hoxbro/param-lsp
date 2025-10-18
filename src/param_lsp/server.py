@@ -257,17 +257,20 @@ def _hover(server, params: HoverParams) -> Hover | None:
     return None
 
 
-def create_server(python_env=None):
+def create_server(python_env=None, extra_libraries=None):
     """Create a Param Language Server instance.
 
     Args:
         python_env: PythonEnvironment instance for analyzing external libraries.
                    If None, uses the current Python environment.
+        extra_libraries: Set of additional external library names to analyze.
 
     Returns:
         ParamLanguageServer instance
     """
-    server = ParamLanguageServer("param-lsp", __version__, python_env=python_env)
+    server = ParamLanguageServer(
+        "param-lsp", __version__, python_env=python_env, extra_libraries=extra_libraries
+    )
 
     # Attach feature handlers
     server.feature("initialize")(lambda params: _initialize(server, params))

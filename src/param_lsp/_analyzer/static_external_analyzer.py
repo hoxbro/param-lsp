@@ -50,12 +50,15 @@ class ExternalClassInspector:
     PythonEnvironment instance.
     """
 
-    def __init__(self, python_env: PythonEnvironment | None = None):
+    def __init__(
+        self, python_env: PythonEnvironment | None = None, extra_libraries: set[str] | None = None
+    ):
         """
         Initialize the external class inspector.
 
         Args:
             python_env: Python environment to analyze. If None, uses current environment.
+            extra_libraries: Set of additional external library names to analyze.
         """
         self.library_source_paths: dict[str, list[Path]] = {}
         self.parsed_classes: dict[str, ParameterizedInfo | None] = {}
@@ -78,6 +81,10 @@ class ExternalClassInspector:
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
 
+        # Store extra libraries and create combined allowed libraries set
+        self.extra_libraries = extra_libraries if extra_libraries is not None else set()
+        self.allowed_libraries = ALLOWED_EXTERNAL_LIBRARIES | self.extra_libraries
+
         # Eagerly populate library info cache for all allowed external libraries
         self._populate_all_library_info_cache()
 
@@ -88,11 +95,11 @@ class ExternalClassInspector:
         reducing overhead compared to querying libraries individually on-demand.
         """
         logger.debug(
-            f"Pre-populating library info cache for {len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
+            f"Pre-populating library info cache for {len(self.allowed_libraries)} libraries"
         )
 
         # Query all libraries in a single subprocess call
-        all_results = self.python_env.get_all_libraries_info(list(ALLOWED_EXTERNAL_LIBRARIES))
+        all_results = self.python_env.get_all_libraries_info(list(self.allowed_libraries))
 
         # Process and cache the results
         for library_name, info in all_results.items():
@@ -107,7 +114,7 @@ class ExternalClassInspector:
                     )
 
                     # Only include if it's in our allowed list
-                    if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
+                    if dep_name in self.allowed_libraries and dep_name != library_name:
                         dependencies.append(dep_name)
                         logger.debug(f"Found dependency: {library_name} -> {dep_name}")
 
@@ -119,7 +126,7 @@ class ExternalClassInspector:
                 logger.debug(f"Cached library info for {library_name} version {version}")
 
         logger.info(
-            f"Pre-populated library info cache with {len(self.library_info_cache)}/{len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
+            f"Pre-populated library info cache with {len(self.library_info_cache)}/{len(self.allowed_libraries)} libraries"
         )
 
     def _build_reexport_map(
@@ -334,7 +341,7 @@ class ExternalClassInspector:
         Returns:
             Number of classes cached
         """
-        if library_name not in ALLOWED_EXTERNAL_LIBRARIES:
+        if library_name not in self.allowed_libraries:
             logger.debug(f"Library {library_name} not in allowed list")
             return 0
 
@@ -582,7 +589,7 @@ class ExternalClassInspector:
 
         # Check if this library is allowed
         root_module = full_class_path.split(".")[0]
-        if root_module not in ALLOWED_EXTERNAL_LIBRARIES:
+        if root_module not in self.allowed_libraries:
             logger.debug(f"Library {root_module} not in allowed list")
             self.parsed_classes[full_class_path] = None
             return None
@@ -1082,7 +1089,7 @@ class ExternalClassInspector:
         # For imports like "base.Widget", treat "base" as a relative import
         # since it's likely from the same directory
         if len(module_parts) == 1 and not module_parts[0].startswith(
-            tuple(ALLOWED_EXTERNAL_LIBRARIES)
+            tuple(self.allowed_libraries)
         ):
             return self._resolve_relative_import(module_parts, current_file_path)
 
@@ -1169,7 +1176,7 @@ class ExternalClassInspector:
         # Walk up the directory tree looking for a known library name
         current_dir = file_path.parent
         while current_dir != current_dir.parent:  # Not at filesystem root
-            if current_dir.name in ALLOWED_EXTERNAL_LIBRARIES:
+            if current_dir.name in self.allowed_libraries:
                 return current_dir
             current_dir = current_dir.parent
 
@@ -1473,7 +1480,7 @@ class ExternalClassInspector:
         # Check if the import is from an external library that's not in our allowed list
         # This prevents errors when trying to resolve bokeh, tornado, etc. base classes
         root_module = import_path.split(".")[0]
-        if root_module not in ALLOWED_EXTERNAL_LIBRARIES and root_module != class_name:
+        if root_module not in self.allowed_libraries and root_module != class_name:
             return False
 
         # Get the current file context (we need this for import resolution)

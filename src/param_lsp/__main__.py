@@ -50,6 +50,11 @@ def main():
         type=str,
         help="Path to Python executable for analyzing external libraries (e.g., /path/to/venv/bin/python)",
     )
+    parser.add_argument(
+        "--extra-libraries",
+        type=str,
+        help="Comma-separated list of additional external libraries to analyze (e.g., geoviews,datashader)",
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -114,6 +119,11 @@ def main():
     log_level = getattr(logging, args.log_level)
     setup_colored_logging(level=log_level)
 
+    # Parse extra libraries
+    extra_libraries: set[str] = set()
+    if args.extra_libraries:
+        extra_libraries = {lib.strip() for lib in args.extra_libraries.split(",") if lib.strip()}
+
     # Configure Python environment for external library analysis
     # Priority: CLI argument > environment variables > current environment
     from ._analyzer.python_environment import PythonEnvironment
@@ -144,16 +154,17 @@ def main():
             print(f"{external_library_cache.cache_dir}::{cache_version_str}")
             return
 
+        inspector = ExternalClassInspector(python_env=python_env, extra_libraries=extra_libraries)
+        all_libraries = ALLOWED_EXTERNAL_LIBRARIES | extra_libraries
+
         if args.regenerate:
             external_library_cache.clear()
-            inspector = ExternalClassInspector(python_env=python_env)
-            for library in ALLOWED_EXTERNAL_LIBRARIES:
+            for library in all_libraries:
                 inspector.populate_library_cache(library)
             return
 
         if args.generate:
-            inspector = ExternalClassInspector(python_env=python_env)
-            for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
+            for library in sorted(all_libraries):
                 inspector.populate_library_cache(library)
             return
 
@@ -169,7 +180,7 @@ def main():
         # Import server only when actually needed
         from .server import create_server
 
-        server = create_server(python_env=python_env)
+        server = create_server(python_env=python_env, extra_libraries=extra_libraries)
 
         if args.tcp:
             logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
