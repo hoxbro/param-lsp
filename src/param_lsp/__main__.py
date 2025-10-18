@@ -109,8 +109,15 @@ def main():
             "See 'param-lsp --help' for available commands."
         )
 
-    # Configure colored logging
-    log_level = getattr(logging, args.log_level)
+    # Configure logging based on command
+    # For check command, default to WARNING to hide INFO messages unless user specified --log-level
+    # For server and cache, use the provided log level (default INFO)
+    if args.command == "check" and args.log_level == "INFO":
+        # For check, default to WARNING instead of INFO
+        log_level = logging.WARNING
+    else:
+        # User explicitly set log level, or it's a different command
+        log_level = getattr(logging, args.log_level)
     setup_colored_logging(level=log_level)
 
     # Parse extra libraries
