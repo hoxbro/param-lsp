@@ -80,7 +80,7 @@ def main():
         "files",
         nargs="+",
         type=str,
-        help="Python files to check",
+        help="Python files or directories to check (directories are searched recursively, excluding .venv, .pixi, and node_modules)",
     )
 
     # Cache subcommand
@@ -190,9 +190,58 @@ def main():
             server.start_io()
 
 
+def _expand_paths(paths: list[str]) -> list[Path]:
+    """
+    Expand file/directory paths to a list of Python files.
+
+    Directories are recursively searched for .py files, excluding
+    .venv, .pixi, and node_modules directories.
+
+    Args:
+        paths: List of file or directory paths to expand
+
+    Returns:
+        List of Path objects pointing to Python files
+    """
+    EXCLUDED_DIRS = {".venv", ".pixi", "node_modules"}
+    python_files: list[Path] = []
+
+    for path_str in paths:
+        path = Path(path_str)
+        if not path.exists():
+            print(f"Error: Path not found: {path_str}", file=sys.stderr)
+            sys.exit(1)
+
+        if path.is_file():
+            if path.suffix == ".py":
+                python_files.append(path)
+            else:
+                print(f"Error: Not a Python file: {path_str}", file=sys.stderr)
+                sys.exit(1)
+        elif path.is_dir():
+            # Recursively find all .py files, excluding certain directories
+            python_files.extend(
+                py_file
+                for py_file in path.rglob("*.py")
+                if not any(parent.name in EXCLUDED_DIRS for parent in py_file.parents)
+            )
+        else:
+            print(f"Error: Invalid path: {path_str}", file=sys.stderr)
+            sys.exit(1)
+
+    return python_files
+
+
 def _run_check(files: list[str], python_env) -> None:
     """Run check command on the provided files."""
     from .analyzer import ParamAnalyzer
+
+    # Expand directories to Python files
+    python_files = _expand_paths(files)
+
+    if not python_files:
+        print("No Python files found to check", file=sys.stderr)
+        sys.exit(1)
 
     analyzer = ParamAnalyzer(python_env=python_env)
     total_errors = 0
@@ -200,20 +249,11 @@ def _run_check(files: list[str], python_env) -> None:
     all_diagnostics: list[tuple[str, TypeErrorDict]] = []
 
     # Analyze all files
-    for file_path in files:
-        path = Path(file_path)
-        if not path.exists():
-            print(f"Error: File not found: {file_path}", file=sys.stderr)
-            sys.exit(1)
-
-        if not path.is_file():
-            print(f"Error: Not a file: {file_path}", file=sys.stderr)
-            sys.exit(1)
-
+    for path in python_files:
         try:
             content = path.read_text()
         except Exception as e:
-            print(f"Error reading {file_path}: {e}", file=sys.stderr)
+            print(f"Error reading {path}: {e}", file=sys.stderr)
             sys.exit(1)
 
         # Analyze the file
@@ -236,11 +276,11 @@ def _run_check(files: list[str], python_env) -> None:
         # Print summary
         print()
         print(
-            f"Found {total_errors} error(s) and {total_warnings} warning(s) in {len(files)} file(s)"
+            f"Found {total_errors} error(s) and {total_warnings} warning(s) in {len(python_files)} file(s)"
         )
         sys.exit(1 if total_errors > 0 else 0)
     else:
-        print(f"No issues found in {len(files)} file(s)")
+        print(f"No issues found in {len(python_files)} file(s)")
         sys.exit(0)
 
 
