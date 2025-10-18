@@ -16,6 +16,8 @@ from lsprotocol.types import (
     TextEdit,
 )
 
+from param_lsp import _treesitter
+from param_lsp._treesitter.queries import find_classes
 from param_lsp.constants import (
     COMMON_PARAMETER_ATTRIBUTES,
     CONTAINER_PARAMETER_TYPES,
@@ -55,7 +57,6 @@ _re_reactive_expression = re.compile(
 _re_param_update = re.compile(
     r"^([^#]*?)(\w+(?:\.\w+)*)\s*(?:\([^)]*\))?\s*\.param\.update\s*\([^)]*$", re.MULTILINE
 )
-_re_class_definition = re.compile(r"^([^#]*?)class\s+(\w+)", re.MULTILINE)
 _re_param_dot = re.compile(r"\.param\.(\w*)$")
 
 
@@ -1424,18 +1425,25 @@ class CompletionMixin(LSPServerBase):
         return "\n".join(doc_parts) if doc_parts else f"Parameter of {class_name}"
 
     def _find_containing_class(self, lines: list[str], current_line: int) -> str | None:
-        """Find the class that contains the current line."""
+        """Find the class that contains the current line using tree-sitter."""
+        # Parse the document using tree-sitter
+        content = "\n".join(lines)
+        tree = _treesitter.parser.parse(content, error_recovery=True)
 
-        # Look backwards for class definition
-        for line_idx in range(current_line, -1, -1):
-            if line_idx >= len(lines):
-                continue
-            line = lines[line_idx].strip()
+        # Find all classes using tree-sitter query
+        class_matches = find_classes(tree.root_node)
 
-            # Look for class definition
-            match = _re_class_definition.match(line)
-            if match:
-                class_name = match.group(2)
-                return class_name
+        # Find the class that contains the current line
+        # Tree-sitter line numbers are 0-indexed, matching our current_line parameter
+        for class_node, captures in class_matches:
+            # Check if current_line is within the class definition
+            start_line = class_node.start_point[0]
+            end_line = class_node.end_point[0]
+
+            if start_line <= current_line <= end_line and captures.get("class_name"):
+                # Get the class name from captures
+                class_name = _treesitter.get_value(captures["class_name"])
+                if class_name:
+                    return class_name
 
         return None

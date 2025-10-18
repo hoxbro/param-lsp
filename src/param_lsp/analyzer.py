@@ -28,7 +28,6 @@ like Panel, HoloViews, Bokeh, and others.
 from __future__ import annotations
 
 import inspect
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -39,7 +38,7 @@ from ._analyzer.inheritance_resolver import InheritanceResolver
 from ._analyzer.parameter_extractor import extract_parameter_info_from_assignment
 from ._analyzer.static_external_analyzer import ExternalClassInspector
 from ._analyzer.validation import ParameterValidator
-from ._treesitter.queries import find_calls, find_classes, find_imports
+from ._treesitter.queries import find_assignments, find_calls, find_classes, find_imports
 from ._types import AnalysisResult
 from .models import ParameterInfo, ParameterizedInfo
 
@@ -378,20 +377,45 @@ class ParamAnalyzer:
     def resolve_class_name_from_context(
         self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str
     ) -> str | None:
-        """Resolve a class name from context, handling both direct class names and variable names."""
+        """Resolve a class name from context, handling both direct class names and variable names using tree-sitter."""
         # If it's already a known param class, return it
         if class_name in param_classes:
             return class_name
 
-        # If it's a variable name, try to find its assignment in the document
+        # If it's a variable name, try to find its assignment in the document using tree-sitter
         if document_content:
-            # Look for assignments like: variable_name = ClassName(...)
-            assignment_pattern = re.compile(
-                rf"^([^#]*?){re.escape(class_name)}\s*=\s*(\w+(?:\.\w+)*)\s*\(", re.MULTILINE
-            )
+            # Parse the document with tree-sitter
+            tree = _treesitter.parser.parse(document_content, error_recovery=True)
 
-            for match in assignment_pattern.finditer(document_content):
-                assigned_class = match.group(2)
+            # Look for assignments like: variable_name = ClassName(...)
+            for _assignment_node, captures in find_assignments(tree.root_node):
+                # Get the target (left side of assignment)
+                target_node = captures.get("target")
+                if not target_node:
+                    continue
+
+                # Check if the target matches our variable name
+                target_name = _treesitter.get_value(target_node)
+                if target_name != class_name:
+                    continue
+
+                # Get the value (right side of assignment)
+                value_node = captures.get("value")
+                if not value_node or value_node.type != "call":
+                    continue
+
+                # Get the function being called (the class name)
+                function_node = None
+                if hasattr(value_node, "child_by_field_name"):
+                    function_node = value_node.child_by_field_name("function")
+
+                if not function_node:
+                    continue
+
+                # Extract the class name from the function node
+                assigned_class = self._extract_class_name_from_node(function_node)
+                if not assigned_class:
+                    continue
 
                 # Check if the assigned class is a known param class
                 if assigned_class in param_classes:
@@ -411,5 +435,34 @@ class ParamAnalyzer:
                             if class_info:
                                 # Return the original dotted name for external class handling
                                 return assigned_class
+
+        return None
+
+    def _extract_class_name_from_node(self, node: Node) -> str | None:
+        """Extract a class name from a function node (handles both simple and dotted names)."""
+        if node.type == "identifier":
+            # Simple class name like: MyClass
+            return _treesitter.get_value(node)
+        elif node.type == "attribute":
+            # Dotted name like: hv.Curve
+            # Build the full dotted name by walking the attribute chain
+            parts = []
+            current = node
+            while current and current.type == "attribute":
+                # Get the attribute name
+                if hasattr(current, "child_by_field_name"):
+                    attr_node = current.child_by_field_name("attribute")
+                    if attr_node:
+                        parts.insert(0, _treesitter.get_value(attr_node))
+                    # Move to the object part
+                    current = current.child_by_field_name("object")
+                else:
+                    break
+
+            # Add the final identifier
+            if current and current.type == "identifier":
+                parts.insert(0, _treesitter.get_value(current))
+
+            return ".".join(parts) if parts else None
 
         return None
