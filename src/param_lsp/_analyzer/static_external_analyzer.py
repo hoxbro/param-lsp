@@ -9,7 +9,7 @@ from source files directly.
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from param_lsp import _treesitter
 from param_lsp._logging import get_logger
@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 logger = get_logger(__name__, "cache")
 
 _STDLIB_MODULES = tuple(f"{c}." for c in ("__future__", *sys.stdlib_module_names))
+
+
+class LibraryInfo(TypedDict):
+    """Type for library information returned by _get_library_info."""
+
+    version: str
+    dependencies: list[str]
 
 
 class ExternalClassInspector:
@@ -63,11 +70,58 @@ class ExternalClassInspector:
         self.current_file_context: Path | None = None  # Track current file for import resolution
         # Track which libraries have been pre-populated in this session
         self.populated_libraries: set[str] = set()
+        # Cache library info (version and dependencies) to avoid repeated subprocess calls
+        self.library_info_cache: dict[str, LibraryInfo] = {}
 
         # Python environment for analysis
         if python_env is None:
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
+
+    def _get_library_info(self, library_name: str) -> LibraryInfo | None:
+        """Get library info (version and dependencies) from external Python environment.
+
+        Uses a single subprocess call to get both version and dependencies, caching
+        the result to avoid repeated subprocess calls.
+
+        Args:
+            library_name: Name of the library
+
+        Returns:
+            Dictionary with 'version' and 'dependencies' keys, or None if unable to query
+        """
+        # Check cache first
+        if library_name in self.library_info_cache:
+            return self.library_info_cache[library_name]
+
+        # Query library info using the unified method
+        info = self.python_env.get_library_info(library_name)
+        if not info:
+            return None
+
+        # Parse dependencies to extract only allowed libraries
+        dependencies: list[str] = []
+        requires = info.get("requires", [])
+        if isinstance(requires, list):
+            for req in requires:
+                # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                dep_name = req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+
+                # Only include if it's in our allowed list
+                if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
+                    dependencies.append(dep_name)
+                    logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+
+        # Store processed info in cache
+        version = info["version"]
+        if not isinstance(version, str):
+            logger.debug(f"Invalid version type for {library_name}: {type(version)}")
+            return None
+
+        result: LibraryInfo = {"version": version, "dependencies": dependencies}
+        self.library_info_cache[library_name] = result
+        logger.debug(f"Got version {version} for {library_name}")
+        return result
 
     def _get_library_version(self, library_name: str) -> str | None:
         """Query library version from the external Python environment.
@@ -78,30 +132,8 @@ class ExternalClassInspector:
         Returns:
             Version string or None if unable to determine
         """
-        import subprocess
-
-        try:
-            result = subprocess.run(  # noqa: S603
-                [
-                    str(self.python_env.python),
-                    "-c",
-                    f"import importlib.metadata; print(importlib.metadata.version('{library_name}'))",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            if result.returncode == 0:
-                version = result.stdout.strip()
-                logger.debug(f"Got version {version} for {library_name}")
-                return version
-            else:
-                logger.debug(f"Failed to get version for {library_name}: {result.stderr}")
-                return None
-        except Exception as e:
-            logger.debug(f"Error getting version for {library_name}: {e}")
-            return None
+        info = self._get_library_info(library_name)
+        return info["version"] if info else None
 
     def _get_library_dependencies(self, library_name: str) -> list[str]:
         """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
@@ -112,45 +144,8 @@ class ExternalClassInspector:
         Returns:
             List of dependency library names that are allowed external libraries
         """
-        dependencies = []
-        try:
-            # Query metadata from the custom python environment, not the current one
-            import json
-            import subprocess
-
-            result = subprocess.run(  # noqa: S603
-                [
-                    str(self.python_env.python),
-                    "-c",
-                    f"import importlib.metadata, json; "
-                    f"m = importlib.metadata.metadata('{library_name}'); "
-                    f"print(json.dumps(list(m.get_all('Requires-Dist') or [])))",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-
-            if result.returncode == 0:
-                requires = json.loads(result.stdout.strip())
-                for req in requires:
-                    # Parse requirement string (e.g., "panel>=1.0" -> "panel")
-                    dep_name = (
-                        req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
-                    )
-
-                    # Only include if it's in our allowed list
-                    if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
-                        dependencies.append(dep_name)
-                        logger.debug(f"Found dependency: {library_name} -> {dep_name}")
-            else:
-                logger.debug(f"Failed to query metadata for {library_name}: {result.stderr}")
-
-        except Exception as e:
-            logger.debug(f"Could not get dependencies for {library_name}: {e}")
-
-        return dependencies
+        info = self._get_library_info(library_name)
+        return info["dependencies"] if info else []
 
     def _build_reexport_map(
         self,
