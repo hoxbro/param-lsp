@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .__version import __version__
 from ._logging import get_logger, setup_colored_logging
+
+if TYPE_CHECKING:
+    from ._types import TypeErrorDict
 
 logger = get_logger(__name__, "main")
 
@@ -30,29 +36,8 @@ def main():
         description=_DESCRIPTION,
         prog="param-lsp",
         formatter_class=argparse.RawTextHelpFormatter,
-        epilog="Use param-lsp with your editor's LSP client for the best experience.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("--tcp", action="store_true", help="Use TCP instead of stdio")
-    parser.add_argument(
-        "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
-    )
-    parser.add_argument("--stdio", action="store_true", help="Use stdio (default)")
-    parser.add_argument(
-        "--cache-dir",
-        action="store_true",
-        help="Print the cache directory path and exit",
-    )
-    parser.add_argument(
-        "--generate-cache",
-        action="store_true",
-        help="Generate cache for supported libraries and exit",
-    )
-    parser.add_argument(
-        "--regenerate-cache",
-        action="store_true",
-        help="Clear existing cache and regenerate for supported libraries",
-    )
     parser.add_argument(
         "--log-level",
         type=str,
@@ -66,7 +51,64 @@ def main():
         help="Path to Python executable for analyzing external libraries (e.g., /path/to/venv/bin/python)",
     )
 
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Server subcommand
+    server_parser = subparsers.add_parser(
+        "server",
+        help="Start the LSP server (default)",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    server_parser.add_argument("--tcp", action="store_true", help="Use TCP instead of stdio")
+    server_parser.add_argument(
+        "--port", type=int, default=8080, help="TCP port to listen on (default: %(default)s)"
+    )
+    server_parser.add_argument("--stdio", action="store_true", help="Use stdio (default)")
+
+    # Check subcommand
+    check_parser = subparsers.add_parser(
+        "check",
+        help="Check Python files for Param-related errors and warnings",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    check_parser.add_argument(
+        "files",
+        nargs="+",
+        type=str,
+        help="Python files to check",
+    )
+
+    # Cache subcommand
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Manage the external library cache",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    cache_group = cache_parser.add_mutually_exclusive_group(required=True)
+    cache_group.add_argument(
+        "--show",
+        action="store_true",
+        help="Print the cache directory path",
+    )
+    cache_group.add_argument(
+        "--generate",
+        action="store_true",
+        help="Generate cache for supported libraries",
+    )
+    cache_group.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Clear existing cache and regenerate for supported libraries",
+    )
+
     args = parser.parse_args()
+
+    # Default to server command if no subcommand specified
+    if args.command is None:
+        args.command = "server"
+        args.tcp = False
+        args.stdio = False
+        args.port = 8080
 
     # Configure colored logging
     log_level = getattr(logging, args.log_level)
@@ -91,55 +133,122 @@ def main():
             python_env = PythonEnvironment.from_current()
             logger.info("Using current Python environment")
 
-    # Handle --cache-dir flag
-    if args.cache_dir:
+    # Handle subcommands
+    if args.command == "cache":
+        from ._analyzer.static_external_analyzer import ExternalClassInspector
         from .cache import CACHE_VERSION, external_library_cache
-
-        cache_version_str = ".".join(map(str, CACHE_VERSION))
-        print(f"{external_library_cache.cache_dir}::{cache_version_str}")
-        return
-
-    # Handle --regenerate-cache flag
-    if args.regenerate_cache:
-        from ._analyzer.static_external_analyzer import ExternalClassInspector
-        from .cache import external_library_cache
         from .constants import ALLOWED_EXTERNAL_LIBRARIES
 
-        external_library_cache.clear()
+        if args.show:
+            cache_version_str = ".".join(map(str, CACHE_VERSION))
+            print(f"{external_library_cache.cache_dir}::{cache_version_str}")
+            return
 
-        inspector = ExternalClassInspector(python_env=python_env)
-        total_cached = 0
-        for library in ALLOWED_EXTERNAL_LIBRARIES:
-            count = inspector.populate_library_cache(library)
+        if args.regenerate:
+            external_library_cache.clear()
+            inspector = ExternalClassInspector(python_env=python_env)
+            for library in ALLOWED_EXTERNAL_LIBRARIES:
+                inspector.populate_library_cache(library)
+            return
+
+        if args.generate:
+            inspector = ExternalClassInspector(python_env=python_env)
+            for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
+                inspector.populate_library_cache(library)
+            return
+
+    elif args.command == "check":
+        _run_check(args.files, python_env)
         return
 
-    # Handle --generate-cache flag
-    if args.generate_cache:
-        from ._analyzer.static_external_analyzer import ExternalClassInspector
-        from .constants import ALLOWED_EXTERNAL_LIBRARIES
+    elif args.command == "server":
+        # Check for mutually exclusive options
+        if args.tcp and args.stdio:
+            parser.error("--tcp and --stdio are mutually exclusive")
 
-        inspector = ExternalClassInspector(python_env=python_env)
-        total_cached = 0
-        for library in sorted(ALLOWED_EXTERNAL_LIBRARIES):
-            count = inspector.populate_library_cache(library)
-            total_cached += count
-        return
+        # Import server only when actually needed
+        from .server import create_server
 
-    # Check for mutually exclusive options
-    if args.tcp and args.stdio:
-        parser.error("--tcp and --stdio are mutually exclusive")
+        server = create_server(python_env=python_env)
 
-    # Import server only when actually needed to avoid loading during --help/--version
-    from .server import create_server
+        if args.tcp:
+            logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
+            server.start_tcp("localhost", args.port)
+        else:
+            logger.info(f"Starting Param LSP server ({__version__}) on stdio")
+            server.start_io()
 
-    server = create_server(python_env=python_env)
 
-    if args.tcp:
-        logger.info(f"Starting Param LSP server ({__version__}) on TCP port {args.port}")
-        server.start_tcp("localhost", args.port)
+def _run_check(files: list[str], python_env) -> None:
+    """Run check command on the provided files."""
+    from .analyzer import ParamAnalyzer
+
+    analyzer = ParamAnalyzer(python_env=python_env)
+    total_errors = 0
+    total_warnings = 0
+    all_diagnostics: list[tuple[str, TypeErrorDict]] = []
+
+    # Analyze all files
+    for file_path in files:
+        path = Path(file_path)
+        if not path.exists():
+            print(f"Error: File not found: {file_path}", file=sys.stderr)
+            sys.exit(1)
+
+        if not path.is_file():
+            print(f"Error: Not a file: {file_path}", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            content = path.read_text()
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # Analyze the file
+        result = analyzer.analyze_file(content, str(path.absolute()))
+        type_errors = result.get("type_errors", [])
+
+        # Collect diagnostics
+        for error in type_errors:
+            all_diagnostics.append((str(path), error))
+            if error.get("severity") == "error":
+                total_errors += 1
+            else:
+                total_warnings += 1
+
+    # Print diagnostics
+    if all_diagnostics:
+        for file_path, diagnostic in all_diagnostics:
+            _print_diagnostic(file_path, diagnostic)
+
+        # Print summary
+        print()
+        print(
+            f"Found {total_errors} error(s) and {total_warnings} warning(s) in {len(files)} file(s)"
+        )
+        sys.exit(1 if total_errors > 0 else 0)
     else:
-        logger.info(f"Starting Param LSP server ({__version__}) on stdio")
-        server.start_io()
+        print(f"No issues found in {len(files)} file(s)")
+        sys.exit(0)
+
+
+def _print_diagnostic(file_path: str, diagnostic: TypeErrorDict) -> None:
+    """Print a single diagnostic in a readable format."""
+    line = diagnostic["line"] + 1  # Convert to 1-indexed
+    col = diagnostic["col"] + 1
+    severity = diagnostic.get("severity", "error").upper()
+    message = diagnostic["message"]
+    code = diagnostic.get("code", "")
+
+    # Color codes
+    color = "\033[91m" if severity == "ERROR" else "\033[93m"  # Red or Yellow
+    reset = "\033[0m"
+
+    # Format: file:line:col: severity: message [code]
+    location = f"{file_path}:{line}:{col}"
+    code_str = f" [{code}]" if code else ""
+    print(f"{location}: {color}{severity}{reset}: {message}{code_str}")
 
 
 if __name__ == "__main__":
