@@ -2,16 +2,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
-from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .__version import __version__
 from ._logging import get_logger, setup_colored_logging
-from .constants import EXCLUDED_DIRS
-
-if TYPE_CHECKING:
-    from ._types import TypeErrorDict
 
 logger = get_logger(__name__, "main")
 
@@ -170,7 +163,9 @@ def main():
             return
 
     elif args.command == "check":
-        _run_check(args.files, python_env)
+        from ._check import run_check
+
+        run_check(args.files, python_env)
         return
 
     elif args.command == "server":
@@ -189,117 +184,6 @@ def main():
         else:
             logger.info(f"Starting Param LSP server ({__version__}) on stdio")
             server.start_io()
-
-
-def _expand_paths(paths: list[str]) -> list[Path]:
-    """
-    Expand file/directory paths to a list of Python files.
-
-    Directories are recursively searched for .py files, excluding
-    directories defined in EXCLUDED_DIRS constant.
-
-    Args:
-        paths: List of file or directory paths to expand
-
-    Returns:
-        List of Path objects pointing to Python files
-    """
-    python_files: list[Path] = []
-
-    for path_str in paths:
-        path = Path(path_str)
-        if not path.exists():
-            print(f"Error: Path not found: {path_str}", file=sys.stderr)
-            sys.exit(1)
-
-        if path.is_file():
-            if path.suffix == ".py":
-                python_files.append(path)
-            else:
-                print(f"Error: Not a Python file: {path_str}", file=sys.stderr)
-                sys.exit(1)
-        elif path.is_dir():
-            # Recursively find all .py files, excluding certain directories
-            python_files.extend(
-                py_file
-                for py_file in path.rglob("*.py")
-                if not any(parent.name in EXCLUDED_DIRS for parent in py_file.parents)
-            )
-        else:
-            print(f"Error: Invalid path: {path_str}", file=sys.stderr)
-            sys.exit(1)
-
-    return python_files
-
-
-def _run_check(files: list[str], python_env) -> None:
-    """Run check command on the provided files."""
-    from .analyzer import ParamAnalyzer
-
-    # Expand directories to Python files
-    python_files = _expand_paths(files)
-
-    if not python_files:
-        print("No Python files found to check", file=sys.stderr)
-        sys.exit(1)
-
-    analyzer = ParamAnalyzer(python_env=python_env)
-    total_errors = 0
-    total_warnings = 0
-    all_diagnostics: list[tuple[str, TypeErrorDict]] = []
-
-    # Analyze all files
-    for path in python_files:
-        try:
-            content = path.read_text()
-        except Exception as e:
-            print(f"Error reading {path}: {e}", file=sys.stderr)
-            sys.exit(1)
-
-        # Analyze the file
-        result = analyzer.analyze_file(content, str(path.absolute()))
-        type_errors = result.get("type_errors", [])
-
-        # Collect diagnostics
-        for error in type_errors:
-            all_diagnostics.append((str(path), error))
-            if error.get("severity") == "error":
-                total_errors += 1
-            else:
-                total_warnings += 1
-
-    # Print diagnostics
-    if all_diagnostics:
-        for file_path, diagnostic in all_diagnostics:
-            _print_diagnostic(file_path, diagnostic)
-
-        # Print summary
-        print()
-        print(
-            f"Found {total_errors} error(s) and {total_warnings} warning(s) in {len(python_files)} file(s)"
-        )
-        sys.exit(1 if total_errors > 0 else 0)
-    else:
-        print(f"No issues found in {len(python_files)} file(s)")
-        sys.exit(0)
-
-
-def _print_diagnostic(file_path: str, diagnostic: TypeErrorDict) -> None:
-    """Print a single diagnostic in a readable format."""
-    line = diagnostic["line"] + 1  # Convert to 1-indexed
-    col = diagnostic["col"] + 1
-    severity = diagnostic.get("severity", "error").upper()
-    message = diagnostic["message"]
-    code = diagnostic.get("code", "")
-
-    # Color codes
-    color = "\033[91m" if severity == "ERROR" else "\033[93m"  # Red or Yellow
-    reset = "\033[0m"
-
-    # Format: file:line:col: severity: message [code]
-    location = f"{file_path}:{line}:{col}"
-    code_str = f" [{code}]" if code else ""
-    print(f"{location}: {color}{severity}{reset}: {message}{code_str}")
 
 
 if __name__ == "__main__":

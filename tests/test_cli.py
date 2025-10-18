@@ -54,7 +54,6 @@ class Widget(param.Parameterized):
             text=True,
         )
         assert result.returncode == 1
-        assert "ERROR" in result.stdout
         assert "type-mismatch" in result.stdout
         assert "Found 1 error(s)" in result.stdout
     finally:
@@ -82,8 +81,8 @@ class Widget(param.Parameterized):
             text=True,
         )
         assert result.returncode == 1
-        assert "ERROR" in result.stdout
         assert "bounds-violation" in result.stdout
+        assert "Found 1 error(s)" in result.stdout
     finally:
         Path(temp_file).unlink()
 
@@ -122,7 +121,7 @@ class Widget2(param.Parameterized):
             text=True,
         )
         assert result.returncode == 1
-        assert "ERROR" in result.stdout
+        assert "type-mismatch" in result.stdout
         assert "Found 1 error(s)" in result.stdout
         assert "in 2 file(s)" in result.stdout
     finally:
@@ -167,8 +166,8 @@ class Widget(param.Parameterized):
             text=True,
         )
         assert result.returncode == 1
-        assert "ERROR" in result.stdout
         assert "invalid-depends-parameter" in result.stdout
+        assert "Found 1 error(s)" in result.stdout
     finally:
         Path(temp_file).unlink()
 
@@ -254,7 +253,7 @@ class Widget(param.Parameterized):
             text=True,
         )
         assert result.returncode == 1
-        assert "ERROR" in result.stdout
+        assert "type-mismatch" in result.stdout
         assert "Found 1 error(s)" in result.stdout
         assert "in 2 file(s)" in result.stdout
 
