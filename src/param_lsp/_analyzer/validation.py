@@ -156,6 +156,16 @@ class ParameterValidator:
 
         # Check each keyword argument passed to the constructor
         for param_name, param_value in kwargs.items():
+            # Get the keyword argument node (e.g., x="1") instead of just the value node (e.g., "1")
+            # The param_value is the value node, its parent should be the keyword_argument node
+            keyword_arg_node = (
+                param_value.parent
+                if hasattr(param_value, "parent")
+                and param_value.parent
+                and param_value.parent.type == "keyword_argument"
+                else param_value
+            )
+
             # Get the expected parameter type
             cls = self._get_parameter_type_from_class(class_name, param_name)
             if not cls:
@@ -185,21 +195,25 @@ class ParameterValidator:
                     )
                     if not is_bool_value:
                         message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)"
-                        self._create_type_error(node, message, "constructor-boolean-type-mismatch")
+                        self._create_type_error(
+                            keyword_arg_node, message, "constructor-boolean-type-mismatch"
+                        )
                 elif inferred_type and not any(
                     (isinstance(inferred_type, type) and issubclass(inferred_type, t))
                     or inferred_type == t
                     for t in expected_types
                 ):
                     message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
-                    self._create_type_error(node, message, "constructor-type-mismatch")
+                    self._create_type_error(keyword_arg_node, message, "constructor-type-mismatch")
 
             # Check bounds for numeric parameters in constructor calls
-            self._check_constructor_bounds(node, class_name, param_name, cls, param_value)
+            self._check_constructor_bounds(
+                keyword_arg_node, class_name, param_name, cls, param_value
+            )
 
             # Check container constraints (List item_type, Tuple length)
             self._check_constructor_container_constraints(
-                node, class_name, param_name, cls, param_value
+                keyword_arg_node, class_name, param_name, cls, param_value
             )
 
     def _infer_value_type(self, node: Node) -> type | None:
@@ -393,7 +407,7 @@ class ParameterValidator:
             item_type_inferred = self._infer_value_type(item)
             if item_type_inferred and not self._is_type_compatible(item_type_inferred, item_type):
                 message = f"Item {i} in List parameter '{param_name}' has type {item_type_inferred.__name__}, expected {item_type.__name__}"
-                self._create_type_error(node, message, "list-item-type-mismatch")
+                self._create_type_error(item, message, "list-item-type-mismatch")
 
     def _check_tuple_length_constructor(
         self,
