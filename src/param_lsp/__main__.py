@@ -81,7 +81,7 @@ def main():
         "files",
         nargs="+",
         type=str,
-        help=f"Python files or directories to check (directories are searched recursively, excluding {', '.join(sorted(EXCLUDED_DIRS))})",
+        help="Python files or directories to check (directories are searched recursively",
     )
 
     # Cache subcommand

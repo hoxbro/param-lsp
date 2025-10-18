@@ -18,6 +18,8 @@ EXCLUDED_DIRS = {
     ".venv",
     ".pixi",
     "node_modules",
+    ".ipynb_checkpoints",
+    "__pycache__",
 }
 
 # Parameter type mapping for type checking and validation
