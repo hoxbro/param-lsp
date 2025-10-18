@@ -74,7 +74,7 @@ def main():
         "files",
         nargs="+",
         type=str,
-        help="Python files or directories to check (directories are searched recursively",
+        help="Python files or directories to check (directories are searched recursively)",
     )
 
     # Cache subcommand
