@@ -139,7 +139,7 @@ def test_check_command_file_not_found():
         text=True,
     )
     assert result.returncode == 1
-    assert "File not found" in result.stderr
+    assert "Path not found" in result.stderr
 
 
 def test_check_command_with_depends_error():
@@ -208,7 +208,7 @@ def test_check_help():
     )
     assert result.returncode == 0
     assert "files" in result.stdout
-    assert "Python files to check" in result.stdout
+    assert "directories" in result.stdout
 
 
 def test_requires_subcommand():
