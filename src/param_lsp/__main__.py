@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .__version import __version__
 from ._logging import get_logger, setup_colored_logging
+from .constants import EXCLUDED_DIRS
 
 if TYPE_CHECKING:
     from ._types import TypeErrorDict
@@ -80,7 +81,7 @@ def main():
         "files",
         nargs="+",
         type=str,
-        help="Python files or directories to check (directories are searched recursively, excluding .venv, .pixi, and node_modules)",
+        help=f"Python files or directories to check (directories are searched recursively, excluding {', '.join(sorted(EXCLUDED_DIRS))})",
     )
 
     # Cache subcommand
@@ -195,7 +196,7 @@ def _expand_paths(paths: list[str]) -> list[Path]:
     Expand file/directory paths to a list of Python files.
 
     Directories are recursively searched for .py files, excluding
-    .venv, .pixi, and node_modules directories.
+    directories defined in EXCLUDED_DIRS constant.
 
     Args:
         paths: List of file or directory paths to expand
@@ -203,7 +204,6 @@ def _expand_paths(paths: list[str]) -> list[Path]:
     Returns:
         List of Path objects pointing to Python files
     """
-    EXCLUDED_DIRS = {".venv", ".pixi", "node_modules"}
     python_files: list[Path] = []
 
     for path_str in paths:

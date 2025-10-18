@@ -13,6 +13,13 @@ ALLOWED_EXTERNAL_LIBRARIES = {
     "param",
 }
 
+# Directories to exclude when recursively searching for Python files
+EXCLUDED_DIRS = {
+    ".venv",
+    ".pixi",
+    "node_modules",
+}
+
 # Parameter type mapping for type checking and validation
 PARAM_TYPE_MAP = {
     "Number": (int, float),
