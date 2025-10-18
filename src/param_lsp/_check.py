@@ -109,20 +109,27 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     """Print a single diagnostic in ruff-like format."""
     line = diagnostic["line"]  # 0-indexed
     col = diagnostic["col"]  # 0-indexed
+    end_line = diagnostic["end_line"]  # 0-indexed
+    end_col = diagnostic["end_col"]  # 0-indexed
     message = diagnostic["message"]
     code = diagnostic.get("code", "")
+    severity = diagnostic.get("severity", "error")
 
-    # Get the line content
+    # Get all lines
     lines = content.split("\n")
-    line_content = lines[line] if line < len(lines) else ""
 
     # Color codes
     red = "\033[91m"
+    yellow = "\033[93m"
     cyan = "\033[36m"
+    dim = "\033[2m"
     reset = "\033[0m"
 
+    # Choose color based on severity
+    error_color = yellow if severity == "warning" else red
+
     # Format: code message (like ruff)
-    print(f"{red}{code}{reset} {message}")
+    print(f"{error_color}{code}{reset} {message}")
 
     # Format location with arrow (like ruff)
     print(f"  {cyan}-->{reset} {file_path}:{line + 1}:{col + 1}")
@@ -130,20 +137,38 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     # Print separator
     print("   " + cyan + "|" + reset)
 
-    # Print the line with line number
-    line_num_str = str(line + 1)
-    print(f"{line_num_str:>2} " + cyan + "|" + reset + f" {line_content}")
+    # Show context: 1-2 lines before
+    context_before = 2
+    for i in range(max(0, line - context_before), line):
+        if i < len(lines):
+            line_num_str = str(i + 1)
+            print(f"{dim}{line_num_str:>2} {cyan}|{reset} {lines[i]}{reset}")
 
-    # Print underline carets
-    # Calculate padding: line number width + 1 space + 1 for | + 1 space
-    line_num_width = len(line_num_str)
-    padding = line_num_width + 3 + col
+    # Print the error line with line number
+    if line < len(lines):
+        line_content = lines[line]
+        line_num_str = str(line + 1)
+        print(f"{line_num_str:>2} {cyan}|{reset} {line_content}")
 
-    # Calculate underline width - from col to end of content on that line
-    remaining_content = line_content[col:].rstrip()
-    underline_width = len(remaining_content) if remaining_content else 1
+        # Print underline carets
+        # Calculate padding: line number width + 1 space + 1 for | + 1 space
+        line_num_width = len(line_num_str)
+        padding = line_num_width + 3 + col
 
-    print(" " * padding + red + "^" * underline_width + reset)
+        # Calculate underline width - use end_col if on same line
+        if end_line == line:
+            underline_width = max(1, end_col - col)
+        else:
+            # Multi-line error, underline to end of line
+            underline_width = len(line_content[col:].rstrip()) or 1
+
+        print(" " * padding + error_color + "^" * underline_width + reset)
+
+    # Show context: 1-2 lines after
+    context_after = 2
+    for i in range(line + 1, min(len(lines), line + context_after + 1)):
+        line_num_str = str(i + 1)
+        print(f"{dim}{line_num_str:>2} {cyan}|{reset} {lines[i]}{reset}")
 
     # Print closing separator
     print("   " + cyan + "|" + reset)
