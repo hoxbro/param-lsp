@@ -65,7 +65,12 @@ logger = get_logger(__name__, "analyzer")
 class ParamAnalyzer:
     """Analyzes Python code for Param usage patterns."""
 
-    def __init__(self, python_env: Any = None, workspace_root: str | None = None):
+    def __init__(
+        self,
+        python_env: Any = None,
+        workspace_root: str | None = None,
+        extra_libraries: set[str] | None = None,
+    ):
         """
         Initialize the Param analyzer.
 
@@ -73,6 +78,7 @@ class ParamAnalyzer:
             python_env: PythonEnvironment instance for analyzing external libraries.
                        If None, uses the current Python environment.
             workspace_root: Root directory of the workspace
+            extra_libraries: Set of additional external library names to analyze.
         """
         self.param_classes: ParamClassDict = {}
         self.imports: ImportDict = {}
@@ -85,11 +91,14 @@ class ParamAnalyzer:
         self.module_cache: dict[str, AnalysisResult] = {}  # module_name -> analysis_result
         self.file_cache: dict[str, AnalysisResult] = {}  # file_path -> analysis_result
 
-        # Store python_env for passing to child analyzers
+        # Store python_env and extra_libraries for passing to child analyzers
         self.python_env = python_env
+        self.extra_libraries = extra_libraries if extra_libraries is not None else set()
 
         # Use static external analyzer for external class analysis
-        self.external_inspector = ExternalClassInspector(python_env=python_env)
+        self.external_inspector = ExternalClassInspector(
+            python_env=python_env, extra_libraries=self.extra_libraries
+        )
 
         # Maintain compatibility with external_param_classes interface
         # The static analyzer doesn't need pre-caching, so this can be empty
@@ -137,10 +146,11 @@ class ParamAnalyzer:
     ) -> AnalysisResult:
         """Analyze a file for the import resolver (avoiding circular dependencies)."""
         # Create a new analyzer instance for the imported module to avoid conflicts
-        # Pass through the python_env to ensure external library analysis uses the correct environment
+        # Pass through the python_env and extra_libraries to ensure external library analysis uses the correct environment
         module_analyzer = ParamAnalyzer(
             python_env=self.python_env,
             workspace_root=str(self.workspace_root) if self.workspace_root else None,
+            extra_libraries=self.extra_libraries,
         )
         return module_analyzer.analyze_file(content, file_path)
 
