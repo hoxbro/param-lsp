@@ -18,6 +18,8 @@ nav:
       - Autocompletion: features/autocompletion.md
       - Validation: features/validation.md
       - Hover Information: features/hover-information.md
+  - CLI Tools:
+      - Check Command: check-command.md
 
 theme:
   name: material
