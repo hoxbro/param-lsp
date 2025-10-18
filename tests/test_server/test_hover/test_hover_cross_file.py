@@ -38,7 +38,7 @@ Child().local_param = "wrong"
         # Set up language server
         server = ParamLanguageServer("param-lsp", "v0.1.0")
         server.workspace_root = str(tmp_path)
-        server.analyzer = server.analyzer.__class__(str(tmp_path))
+        server.analyzer = server.analyzer.__class__(workspace_root=str(tmp_path))
 
         # Analyze the child file
         with open(child_file) as f:
@@ -98,7 +98,7 @@ Child().bounded_num = 15  # Should violate bounds
         # Set up language server
         server = ParamLanguageServer("param-lsp", "v0.1.0")
         server.workspace_root = str(tmp_path)
-        server.analyzer = server.analyzer.__class__(str(tmp_path))
+        server.analyzer = server.analyzer.__class__(workspace_root=str(tmp_path))
 
         # Analyze the child file
         with open(child_file) as f:
@@ -155,7 +155,7 @@ Final().final_value = "wrong"    # From Final
         # Set up language server
         server = ParamLanguageServer("param-lsp", "v0.1.0")
         server.workspace_root = str(tmp_path)
-        server.analyzer = server.analyzer.__class__(str(tmp_path))
+        server.analyzer = server.analyzer.__class__(workspace_root=str(tmp_path))
 
         # Analyze the final file
         with open(final_file) as f:
@@ -213,7 +213,7 @@ Child().value = 123  # Should error based on overridden type
         # Set up language server
         server = ParamLanguageServer("param-lsp", "v0.1.0")
         server.workspace_root = str(tmp_path)
-        server.analyzer = server.analyzer.__class__(str(tmp_path))
+        server.analyzer = server.analyzer.__class__(workspace_root=str(tmp_path))
 
         # Analyze the child file
         with open(child_file) as f:
@@ -246,7 +246,7 @@ obj.unknown_param = "value"  # This parameter doesn't exist
         # Set up language server
         server = ParamLanguageServer("param-lsp", "v0.1.0")
         server.workspace_root = str(tmp_path)
-        server.analyzer = server.analyzer.__class__(str(tmp_path))
+        server.analyzer = server.analyzer.__class__(workspace_root=str(tmp_path))
 
         # Analyze the file
         with open(simple_file) as f:
@@ -291,7 +291,7 @@ Child().required_value = "invalid"  # Should be invalid
         # Set up language server
         server = ParamLanguageServer("param-lsp", "v0.1.0")
         server.workspace_root = str(tmp_path)
-        server.analyzer = server.analyzer.__class__(str(tmp_path))
+        server.analyzer = server.analyzer.__class__(workspace_root=str(tmp_path))
 
         # Analyze the child file
         with open(child_file) as f:

@@ -9,7 +9,7 @@ from source files directly.
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from param_lsp import _treesitter
 from param_lsp._logging import get_logger
@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 logger = get_logger(__name__, "cache")
 
 _STDLIB_MODULES = tuple(f"{c}." for c in ("__future__", *sys.stdlib_module_names))
+
+
+class LibraryInfo(TypedDict):
+    """Type for library information returned by _get_library_info."""
+
+    version: str
+    dependencies: list[str]
 
 
 class ExternalClassInspector:
@@ -63,77 +70,36 @@ class ExternalClassInspector:
         self.current_file_context: Path | None = None  # Track current file for import resolution
         # Track which libraries have been pre-populated in this session
         self.populated_libraries: set[str] = set()
+        # Cache library info (version and dependencies) to avoid repeated subprocess calls
+        self.library_info_cache: dict[str, LibraryInfo] = {}
 
         # Python environment for analysis
         if python_env is None:
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
 
-    def _get_library_version(self, library_name: str) -> str | None:
-        """Query library version from the external Python environment.
+        # Eagerly populate library info cache for all allowed external libraries
+        self._populate_all_library_info_cache()
 
-        Args:
-            library_name: Name of the library
+    def _populate_all_library_info_cache(self) -> None:
+        """Pre-populate library info cache for all allowed external libraries.
 
-        Returns:
-            Version string or None if unable to determine
+        Makes a single subprocess call to query all libraries at once, significantly
+        reducing overhead compared to querying libraries individually on-demand.
         """
-        import subprocess
+        logger.debug(
+            f"Pre-populating library info cache for {len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
+        )
 
-        try:
-            result = subprocess.run(  # noqa: S603
-                [
-                    str(self.python_env.python),
-                    "-c",
-                    f"import importlib.metadata; print(importlib.metadata.version('{library_name}'))",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            if result.returncode == 0:
-                version = result.stdout.strip()
-                logger.debug(f"Got version {version} for {library_name}")
-                return version
-            else:
-                logger.debug(f"Failed to get version for {library_name}: {result.stderr}")
-                return None
-        except Exception as e:
-            logger.debug(f"Error getting version for {library_name}: {e}")
-            return None
+        # Query all libraries in a single subprocess call
+        all_results = self.python_env.get_all_libraries_info(list(ALLOWED_EXTERNAL_LIBRARIES))
 
-    def _get_library_dependencies(self, library_name: str) -> list[str]:
-        """Get dependencies of a library that are also in ALLOWED_EXTERNAL_LIBRARIES.
-
-        Args:
-            library_name: Name of the library to check
-
-        Returns:
-            List of dependency library names that are allowed external libraries
-        """
-        dependencies = []
-        try:
-            # Query metadata from the custom python environment, not the current one
-            import json
-            import subprocess
-
-            result = subprocess.run(  # noqa: S603
-                [
-                    str(self.python_env.python),
-                    "-c",
-                    f"import importlib.metadata, json; "
-                    f"m = importlib.metadata.metadata('{library_name}'); "
-                    f"print(json.dumps(list(m.get_all('Requires-Dist') or [])))",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-
-            if result.returncode == 0:
-                requires = json.loads(result.stdout.strip())
+        # Process and cache the results
+        for library_name, info in all_results.items():
+            # Parse dependencies to extract only allowed libraries
+            dependencies: list[str] = []
+            requires = info.get("requires", [])
+            if isinstance(requires, list):
                 for req in requires:
                     # Parse requirement string (e.g., "panel>=1.0" -> "panel")
                     dep_name = (
@@ -144,13 +110,17 @@ class ExternalClassInspector:
                     if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
                         dependencies.append(dep_name)
                         logger.debug(f"Found dependency: {library_name} -> {dep_name}")
-            else:
-                logger.debug(f"Failed to query metadata for {library_name}: {result.stderr}")
 
-        except Exception as e:
-            logger.debug(f"Could not get dependencies for {library_name}: {e}")
+            # Store processed info in cache
+            version = info["version"]
+            if isinstance(version, str):
+                result: LibraryInfo = {"version": version, "dependencies": dependencies}
+                self.library_info_cache[library_name] = result
+                logger.debug(f"Cached library info for {library_name} version {version}")
 
-        return dependencies
+        logger.info(
+            f"Pre-populated library info cache with {len(self.library_info_cache)}/{len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
+        )
 
     def _build_reexport_map(
         self,
@@ -376,10 +346,13 @@ class ExternalClassInspector:
         # Mark as populated to avoid re-running
         self.populated_libraries.add(library_name)
 
-        # Query library version from external environment
-        version = self._get_library_version(library_name)
-        if not version:
+        # Get library info from pre-populated cache
+        lib_info = self.library_info_cache.get(library_name)
+        if not lib_info:
+            logger.debug(f"No library info found for {library_name}")
             return 0
+
+        version = lib_info["version"]
 
         # Check if cache already has content for this library
         if external_library_cache.has_library_cache(library_name, version):
@@ -388,7 +361,7 @@ class ExternalClassInspector:
 
         # Populate dependencies first to ensure we can resolve inheritance
         # from classes in dependent libraries
-        dependencies = self._get_library_dependencies(library_name)
+        dependencies = lib_info["dependencies"]
         for dep in dependencies:
             if dep not in self.populated_libraries:
                 logger.debug(f"Pre-populating dependency {dep} for {library_name}")
@@ -617,12 +590,14 @@ class ExternalClassInspector:
         # Try to populate cache if not already done
         self.populate_library_cache(root_module)
 
-        # Query library version from external environment
-        version = self._get_library_version(root_module)
-        if not version:
-            logger.debug(f"Could not determine version for {root_module}")
+        # Get library version from pre-populated cache
+        lib_info = self.library_info_cache.get(root_module)
+        if not lib_info:
+            logger.debug(f"No library info found for {root_module}")
             self.parsed_classes[full_class_path] = None
             return None
+
+        version = lib_info["version"]
 
         try:
             # Try to get from cache (which may contain pre-populated data including re-export aliases)
