@@ -78,6 +78,56 @@ class ExternalClassInspector:
             python_env = PythonEnvironment.from_current()
         self.python_env = python_env
 
+        # Eagerly populate library info cache for all allowed external libraries
+        self._populate_all_library_info_cache()
+
+    def _populate_all_library_info_cache(self) -> None:
+        """Pre-populate library info cache for all allowed external libraries.
+
+        Makes a single subprocess call to query all libraries at once, significantly
+        reducing overhead compared to querying libraries individually on-demand.
+        """
+        logger.debug(
+            f"Pre-populating library info cache for {len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
+        )
+
+        # Query all libraries in a single subprocess call
+        if not hasattr(self.python_env, "get_all_libraries_info"):
+            logger.warning(
+                f"Python environment does not support bulk library info query: {type(self.python_env)}"
+            )
+            return
+
+        all_results = self.python_env.get_all_libraries_info(list(ALLOWED_EXTERNAL_LIBRARIES))
+
+        # Process and cache the results
+        for library_name, info in all_results.items():
+            # Parse dependencies to extract only allowed libraries
+            dependencies: list[str] = []
+            requires = info.get("requires", [])
+            if isinstance(requires, list):
+                for req in requires:
+                    # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                    dep_name = (
+                        req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+                    )
+
+                    # Only include if it's in our allowed list
+                    if dep_name in ALLOWED_EXTERNAL_LIBRARIES and dep_name != library_name:
+                        dependencies.append(dep_name)
+                        logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+
+            # Store processed info in cache
+            version = info["version"]
+            if isinstance(version, str):
+                result: LibraryInfo = {"version": version, "dependencies": dependencies}
+                self.library_info_cache[library_name] = result
+                logger.debug(f"Cached library info for {library_name} version {version}")
+
+        logger.info(
+            f"Pre-populated library info cache with {len(self.library_info_cache)}/{len(ALLOWED_EXTERNAL_LIBRARIES)} libraries"
+        )
+
     def _get_library_info(self, library_name: str) -> LibraryInfo | None:
         """Get library info (version and dependencies) from external Python environment.
 
@@ -93,6 +143,13 @@ class ExternalClassInspector:
         # Check cache first
         if library_name in self.library_info_cache:
             return self.library_info_cache[library_name]
+
+        # Fallback if python_env doesn't support get_library_info
+        if not hasattr(self.python_env, "get_library_info"):
+            logger.warning(
+                f"Python environment does not support library info query: {type(self.python_env)}"
+            )
+            return None
 
         # Query library info using the unified method
         info = self.python_env.get_library_info(library_name)

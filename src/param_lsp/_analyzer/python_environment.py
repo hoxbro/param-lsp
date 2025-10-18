@@ -116,6 +116,56 @@ except Exception as e:
             logger.debug(f"Failed to query library info for {library_name}: {e}")
             return None
 
+    def get_all_libraries_info(
+        self, library_names: list[str]
+    ) -> dict[str, dict[str, str | list[str]]]:
+        """Query version and dependencies for multiple libraries in a single subprocess call.
+
+        Args:
+            library_names: List of library names to query
+
+        Returns:
+            Dictionary mapping library names to their info (version and requires).
+            Libraries that don't exist or fail to query are excluded from the result.
+        """
+        try:
+            # Convert library names list to JSON for safe passing to subprocess
+            libraries_json = json.dumps(library_names)
+            script = f"""
+import json
+import importlib.metadata
+
+libraries = {libraries_json}
+results = {{}}
+
+for lib_name in libraries:
+    try:
+        version = importlib.metadata.version(lib_name)
+        metadata = importlib.metadata.metadata(lib_name)
+        requires = list(metadata.get_all('Requires-Dist') or [])
+        results[lib_name] = {{'version': version, 'requires': requires}}
+    except Exception:
+        # Skip libraries that don't exist or fail to query
+        pass
+
+print(json.dumps(results))
+"""
+            output = subprocess.check_output(  # noqa: S603
+                [os.fspath(self.python), "-c", script], text=True, timeout=30
+            )
+            results = json.loads(output)
+            logger.debug(
+                f"Queried {len(results)}/{len(library_names)} libraries successfully: {list(results.keys())}"
+            )
+            return results
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            json.JSONDecodeError,
+        ) as e:
+            logger.warning(f"Failed to query bulk library info: {e}")
+            return {}
+
     @classmethod
     def from_current(cls) -> PythonEnvironment:
         """Create a PythonEnvironment from the current Python interpreter."""
