@@ -11,13 +11,13 @@ A Language Server Protocol (LSP) implementation for the HoloViz Param library, p
 
 ## Installation
 
-1. Install the param-lsp package:
+1. Install the param-lsp package, see more ways [here](https://param-lsp.readthedocs.io/en/latest/installation/#installing-param-lsp)
 
    ```bash
    pip install param-lsp
    ```
 
-2. Ensure `param-lsp` is available in your PATH:
+2. Ensure `param-lsp` is available to you:
 
    ```bash
    param-lsp --version

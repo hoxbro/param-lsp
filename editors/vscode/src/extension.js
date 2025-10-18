@@ -31,7 +31,9 @@ function showInstallationError(message) {
     .then((selection) => {
       if (selection === installAction) {
         vscode.env.openExternal(
-          vscode.Uri.parse("https://github.com/hoxbro/param-lsp#installation"),
+          vscode.Uri.parse(
+            "https://param-lsp.readthedocs.io/en/latest/installation/#installing-param-lsp",
+          ),
         );
       }
     });
@@ -65,7 +67,7 @@ async function getServerOptions(config) {
 
   // No valid server found
   showInstallationError(
-    `Cannot find param-lsp in PATH. Please install it with 'pip install param-lsp' and ensure it's available in your PATH.`,
+    `Cannot find param-lsp. Please install it and ensure it's available to you.`,
   );
   return null;
 }
