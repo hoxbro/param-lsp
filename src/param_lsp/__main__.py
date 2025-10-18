@@ -103,12 +103,12 @@ def main():
 
     args = parser.parse_args()
 
-    # Default to server command if no subcommand specified
+    # Require explicit subcommand
     if args.command is None:
-        args.command = "server"
-        args.tcp = False
-        args.stdio = False
-        args.port = 8080
+        parser.error(
+            "A subcommand is required. Use 'param-lsp server' to start the LSP server.\n"
+            "See 'param-lsp --help' for available commands."
+        )
 
     # Configure colored logging
     log_level = getattr(logging, args.log_level)

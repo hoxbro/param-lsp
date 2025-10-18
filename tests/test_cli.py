@@ -209,3 +209,16 @@ def test_check_help():
     assert result.returncode == 0
     assert "files" in result.stdout
     assert "Python files to check" in result.stdout
+
+
+def test_requires_subcommand():
+    """Test that CLI requires an explicit subcommand."""
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "param_lsp"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "A subcommand is required" in result.stderr
+    assert "param-lsp server" in result.stderr
