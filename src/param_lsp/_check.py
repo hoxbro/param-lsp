@@ -23,7 +23,7 @@ def expand_paths(paths: list[str]) -> list[Path]:
         paths: List of file or directory paths to expand
 
     Returns:
-        List of Path objects pointing to Python files
+        Sorted list of Path objects pointing to Python files
     """
     python_files: list[Path] = []
 
@@ -50,7 +50,8 @@ def expand_paths(paths: list[str]) -> list[Path]:
             print(f"Error: Invalid path: {path_str}", file=sys.stderr)
             sys.exit(1)
 
-    return python_files
+    # Sort files for consistent output
+    return sorted(python_files)
 
 
 def run_check(files: list[str], python_env) -> None:
@@ -128,8 +129,8 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     # Choose color based on severity
     error_color = yellow if severity == "warning" else red
 
-    # Format: code message (like ruff)
-    print(f"{error_color}{code}{reset} {message}")
+    # Format: code: message (like ruff)
+    print(f"{error_color}{code}:{reset} {message}")
 
     # Format location with arrow (like ruff)
     print(f"  {cyan}-->{reset} {file_path}:{line + 1}:{col + 1}")
