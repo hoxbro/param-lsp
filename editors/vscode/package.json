@@ -2,7 +2,7 @@
   "name": "param-lsp",
   "displayName": "Param LSP",
   "description": "Language Server Protocol support for HoloViz Param library",
-  "version": "2025.14.0",
+  "version": "2025.15.0",
   "publisher": "hoxbro",
   "icon": "param-logo.png",
   "readme": "README.md",
