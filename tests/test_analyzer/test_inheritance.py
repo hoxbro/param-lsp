@@ -32,7 +32,7 @@ S().b = "a"
         # Should detect type error
         assert len(result["type_errors"]) == 1
         error = result["type_errors"][0]
-        assert error["code"] == "runtime-boolean-type-mismatch"
+        assert error["code"] == "runtime-type-mismatch"
         assert "b" in error["message"]
 
     def test_multi_level_inheritance(self, analyzer):
@@ -76,7 +76,7 @@ T().name = 123
         assert len(result["type_errors"]) == 3
         error_codes = [e["code"] for e in result["type_errors"]]
         assert "runtime-type-mismatch" in error_codes
-        assert "runtime-boolean-type-mismatch" in error_codes
+        assert len([e for e in error_codes if e == "runtime-type-mismatch"]) == 3
 
     def test_parameter_overriding(self, analyzer):
         """Test parameter overriding in child classes."""

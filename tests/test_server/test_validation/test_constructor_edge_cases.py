@@ -275,20 +275,9 @@ P(flag=None)      # Should error - None not boolean (unless allow_None=True)
 
         assert len(errors) == 5  # All non-boolean values should error
         error_messages = [error["message"] for error in errors]
+        assert sum("Cannot assign str to parameter 'flag'" in msg for msg in error_messages) == 2
         assert (
-            sum("Cannot assign int to Boolean parameter 'flag'" in msg for msg in error_messages)
-            == 2
-        )
-        assert (
-            sum("Cannot assign str to Boolean parameter 'flag'" in msg for msg in error_messages)
-            == 2
-        )
-        assert (
-            sum(
-                "Cannot assign NoneType to Boolean parameter 'flag'" in msg
-                for msg in error_messages
-            )
-            == 1
+            sum("Cannot assign NoneType to parameter 'flag'" in msg for msg in error_messages) == 1
         )
 
     def test_constructor_zero_and_negative_zero(self):

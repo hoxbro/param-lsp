@@ -104,12 +104,10 @@ S().b = "a"
         # Verify the type error is detected
         assert len(result["type_errors"]) == 1, "Should detect exactly one type error"
         error = result["type_errors"][0]
-        assert "Cannot assign str to Boolean parameter 'b'" in error["message"], (
+        assert "Cannot assign str to parameter 'b'" in error["message"], (
             "Should detect string assignment to Boolean parameter"
         )
-        assert error["code"] == "runtime-boolean-type-mismatch", (
-            "Should be a boolean type mismatch error"
-        )
+        assert error["code"] == "runtime-type-mismatch", "Should be a boolean type mismatch error"
 
     def test_complex_inheritance_chain_across_files(self, tmp_path):
         """Test inheritance chain across multiple files to ensure robustness."""

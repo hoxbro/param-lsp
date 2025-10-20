@@ -64,7 +64,7 @@ w3 = pn.widgets.Checkbox(value="true")
 
         # Second error: Checkbox with string value
         error2 = result["type_errors"][1]
-        assert error2["code"] == "constructor-boolean-type-mismatch"
+        assert error2["code"] == "constructor-type-mismatch"
         assert "value" in error2["message"]
         assert "Boolean" in error2["message"]
 

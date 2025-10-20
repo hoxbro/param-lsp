@@ -71,14 +71,12 @@ TestClass().bool_param = []    # Error: list not allowed for Boolean
 
         result = analyzer.analyze_file(code_py)
 
-        boolean_errors = [
-            e for e in result["type_errors"] if e["code"] == "runtime-boolean-type-mismatch"
-        ]
+        boolean_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
         assert len(boolean_errors) == 4
 
         for error in boolean_errors:
-            assert "Boolean parameter" in error["message"]
-            assert "expects True/False" in error["message"]
+            assert "of type Boolean" in error["message"]
+            assert "expects bool" in error["message"]
 
     def test_runtime_bounds_violations(self, analyzer):
         """Test runtime assignment bounds violations."""
