@@ -1840,6 +1840,7 @@ name = "param-lsp"
 source = { editable = "." }
 dependencies = [
     { name = "lsprotocol" },
+    { name = "param" },
     { name = "platformdirs" },
     { name = "pygls" },
     { name = "tree-sitter" },
@@ -1872,6 +1873,7 @@ docs = [
 requires-dist = [
     { name = "jupyterlab-lsp", marker = "extra == 'jupyter'" },
     { name = "lsprotocol" },
+    { name = "param" },
     { name = "platformdirs" },
     { name = "pygls", specifier = ">=2.0" },
     { name = "tree-sitter", specifier = ">=0.25.0" },
