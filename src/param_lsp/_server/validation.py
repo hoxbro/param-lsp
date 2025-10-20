@@ -5,7 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from lsprotocol.types import Diagnostic, DiagnosticSeverity, Position, Range
+from lsprotocol.types import (
+    Diagnostic,
+    DiagnosticSeverity,
+    Position,
+    PublishDiagnosticsParams,
+    Range,
+)
 
 from param_lsp.analyzer import ParamAnalyzer
 
@@ -82,4 +88,4 @@ class ValidationMixin(LSPServerBase):
             diagnostics.append(diagnostic)
 
         # Publish diagnostics
-        self.publish_diagnostics(uri, diagnostics)
+        self.text_document_publish_diagnostics(PublishDiagnosticsParams(uri, diagnostics))

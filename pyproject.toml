@@ -22,7 +22,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "pygls",
+    "pygls >=2.0",
     "lsprotocol",
     "platformdirs",
     "tree-sitter>=0.25.0",
