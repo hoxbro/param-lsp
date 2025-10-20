@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import param
-from pygls.server import LanguageServer
+from pygls.lsp.server import LanguageServer
 
 from param_lsp.analyzer import ParamAnalyzer
 from param_lsp.constants import PARAM_TYPE_MAP
