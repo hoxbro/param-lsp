@@ -136,7 +136,7 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     print(f"  {cyan}-->{reset} {file_path}:{line + 1}:{col + 1}")
 
     # Print separator
-    print("   " + cyan + "|" + reset)
+    print("   " + cyan + dim + "|" + reset)
 
     # Show context: 1-2 lines before
     context_before = 2
@@ -172,5 +172,5 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
         print(f"{dim}{line_num_str:>2} {cyan}|{reset} {lines[i]}{reset}")
 
     # Print closing separator
-    print("   " + cyan + "|" + reset)
+    print("   " + cyan + dim + "|" + reset)
     print()
