@@ -6,7 +6,6 @@ import re
 import textwrap
 from typing import TYPE_CHECKING
 
-import param
 from lsprotocol.types import (
     CompletionItem,
     CompletionItemKind,
@@ -81,37 +80,8 @@ class CompletionMixin(LSPServerBase):
     def _get_completions_for_param_class(self, line: str, character: int) -> list[CompletionItem]:
         """Get completions for param class attributes and methods."""
 
-        # Only show param types when typing after "param."
-        before_cursor = line[:character]
-        if before_cursor.rstrip().endswith("param."):
-            completions = []
-            for cls in self.classes:
-                documentation = f"Param parameter type: {cls}"
-
-                # Try to get actual documentation from param module
-                if param:
-                    try:
-                        param_class = getattr(param, cls, None)
-                        if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
-                            # Extract first line of docstring for concise documentation
-                            doc_lines = param_class.__doc__.strip().split("\n")
-                            if doc_lines:
-                                documentation = doc_lines[0].strip()
-                    except (AttributeError, TypeError):
-                        pass
-
-                completions.append(
-                    CompletionItem(
-                        label=cls,
-                        kind=CompletionItemKind.Class,
-                        detail=f"param.{cls}",
-                        documentation=documentation,
-                    )
-                )
-            return completions
-
         # Show parameter arguments only when inside param.ParameterType(...)
-        elif self._is_in_param_definition_context(line, character):
+        if self._is_in_param_definition_context(line, character):
             return [
                 CompletionItem(
                     label=arg_name,
