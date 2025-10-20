@@ -185,20 +185,7 @@ class ParameterValidator:
                 if not isinstance(expected_types, tuple):
                     expected_types = (expected_types,)
 
-                # Special handling for Boolean parameters - they should only accept actual bool values
-                if cls == "Boolean" and inferred_type and inferred_type is not bool:
-                    # For tree-sitter nodes, check if it's a keyword node with True/False
-                    is_bool_value = (
-                        hasattr(param_value, "type")
-                        and param_value.type == "keyword"
-                        and get_value(param_value) in ("True", "False")
-                    )
-                    if not is_bool_value:
-                        message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' in {class_name}() constructor (expects True/False)"
-                        self._create_type_error(
-                            keyword_arg_node, message, "constructor-boolean-type-mismatch"
-                        )
-                elif inferred_type and not any(
+                if inferred_type and not any(
                     (isinstance(inferred_type, type) and issubclass(inferred_type, t))
                     or inferred_type == t
                     for t in expected_types
@@ -593,13 +580,7 @@ class ParameterValidator:
                 if allow_None:
                     return  # None is allowed, skip further validation
 
-            # Special handling for Boolean parameters
-            if cls == "Boolean" and inferred_type and inferred_type is not bool:
-                # For Boolean parameters, only accept actual boolean values
-                if not self._is_boolean_literal(assigned_value):
-                    message = f"Cannot assign {inferred_type.__name__} to Boolean parameter '{param_name}' (expects True/False)"
-                    self._create_type_error(node, message, "runtime-boolean-type-mismatch")
-            elif inferred_type and not any(
+            if inferred_type and not any(
                 (isinstance(inferred_type, type) and issubclass(inferred_type, t))
                 or inferred_type == t
                 for t in expected_types

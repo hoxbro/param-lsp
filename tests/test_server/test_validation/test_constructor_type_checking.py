@@ -46,10 +46,10 @@ P(flag="true")  # Should trigger error
 
         assert len(errors) == 1
         assert (
-            "Cannot assign str to Boolean parameter 'flag' in P() constructor"
+            "Cannot assign str to parameter 'flag' of type Boolean in P() constructor"
             in errors[0]["message"]
         )
-        assert errors[0]["code"] == "constructor-boolean-type-mismatch"
+        assert errors[0]["code"] == "constructor-type-mismatch"
 
     def test_constructor_bounds_violation(self):
         """Test that constructor calls with values outside bounds are detected."""
@@ -122,9 +122,7 @@ P(x="A", y=15, flag="true")  # Should trigger 3 errors
             "Value 15 for parameter 'y' in P() constructor is outside bounds [0, 10]" in msg
             for msg in error_messages
         )
-        assert any(
-            "Cannot assign str to Boolean parameter 'flag'" in msg for msg in error_messages
-        )
+        assert any("Cannot assign str to parameter 'flag'" in msg for msg in error_messages)
 
     def test_constructor_inherited_parameters(self):
         """Test that constructor type checking works with inherited parameters."""
@@ -365,9 +363,7 @@ Child(base_param=123, middle_param="abc", child_param="true")  # All should erro
             "Cannot assign str to parameter 'middle_param' of type Integer" in msg
             for msg in error_messages
         )
-        assert any(
-            "Cannot assign str to Boolean parameter 'child_param'" in msg for msg in error_messages
-        )
+        assert any("Cannot assign str to parameter 'child_param'" in msg for msg in error_messages)
 
     def test_constructor_mixed_valid_invalid_parameters(self):
         """Test constructor with mix of valid and invalid parameters."""
@@ -388,7 +384,7 @@ P(a=5, b="valid", c="invalid", d=15)  # 2 should error, 2 should be valid
 
         assert len(errors) == 2
         error_messages = [error["message"] for error in errors]
-        assert any("Cannot assign str to Boolean parameter 'c'" in msg for msg in error_messages)
+        assert any("Cannot assign str to parameter 'c'" in msg for msg in error_messages)
         assert any(
             "Value 15 for parameter 'd' in P() constructor is outside bounds [0, 10]" in msg
             for msg in error_messages

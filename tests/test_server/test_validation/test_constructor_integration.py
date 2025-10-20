@@ -241,7 +241,6 @@ extended.priority = 10  # Runtime bounds error on new parameter
         error_codes = [error["code"] for error in errors]
         assert "constructor-type-mismatch" in error_codes
         assert "constructor-bounds-violation" in error_codes
-        assert "constructor-boolean-type-mismatch" in error_codes
         assert "runtime-type-mismatch" in error_codes
         assert "bounds-violation" in error_codes
 

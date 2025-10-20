@@ -91,9 +91,7 @@ Diamond(
             "Cannot assign str to parameter 'left_param' of type Integer" in msg
             for msg in error_messages
         )
-        assert any(
-            "Cannot assign str to Boolean parameter 'right_param'" in msg for msg in error_messages
-        )
+        assert any("Cannot assign str to parameter 'right_param'" in msg for msg in error_messages)
         assert any(
             "Cannot assign str to parameter 'diamond_param' of type Number" in msg
             for msg in error_messages
@@ -279,9 +277,7 @@ ColoredRectangle(
         assert any(
             "Cannot assign int to parameter 'name' of type String" in msg for msg in error_messages
         )
-        assert any(
-            "Cannot assign str to Boolean parameter 'visible'" in msg for msg in error_messages
-        )
+        assert any("Cannot assign str to parameter 'visible'" in msg for msg in error_messages)
         assert any(
             "Cannot assign int to parameter 'color' of type String" in msg
             for msg in error_messages
@@ -424,5 +420,5 @@ ManyParams(
         error_messages = [error["message"] for error in errors]
         assert any("type Integer" in msg for msg in error_messages)
         assert any("type String" in msg for msg in error_messages)
-        assert any("Boolean parameter" in msg for msg in error_messages)
+        assert any("parameter" in msg for msg in error_messages)
         assert any("bounds" in msg for msg in error_messages)

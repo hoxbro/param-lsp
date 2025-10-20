@@ -96,7 +96,7 @@ example.ratio = 0               # Exclusive bounds violation
 
         # Count and categorize errors
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
-        boolean_errors = [e for e in result["type_errors"] if "boolean" in e["code"]]
+        boolean_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
         bounds_errors = [e for e in result["type_errors"] if "bounds" in e["code"]]
         runtime_errors = [e for e in result["type_errors"] if "runtime" in e["code"]]
 
