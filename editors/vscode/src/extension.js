@@ -49,7 +49,6 @@ function createServerOptions(command, args = []) {
   return {
     command,
     args,
-    transport: TransportKind.stdio,
   };
 }
 
