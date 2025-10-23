@@ -233,6 +233,7 @@ class ExternalClassInspector:
         # Track if we've seen the 'import' keyword to distinguish module name from imported names
         seen_import_keyword = False
         imported_names = []
+        is_wildcard_import = False
         for child in _treesitter.get_children(import_node):
             if child.type == "import":
                 seen_import_keyword = True
@@ -258,13 +259,35 @@ class ExternalClassInspector:
                         name = _treesitter.get_value(name_node)
                         if name:
                             imported_names.append(name)
+                elif child.type == "wildcard_import":
+                    # Wildcard import: from .element import *
+                    is_wildcard_import = True
+
+        # For wildcard imports, store the source module for later processing
+        # We'll handle it after we've collected all classes
+        if is_wildcard_import:
+            # current_module is from an __init__.py, so it's a package
+            full_source_module = self._resolve_relative_module_path(
+                source_module, current_module, library_name, is_package=True
+            )
+            if full_source_module:
+                # Store wildcard import info for later processing
+                # Format: current_module -> source_module
+                if not hasattr(self, "_wildcard_imports"):
+                    self._wildcard_imports = []
+                self._wildcard_imports.append((current_module, full_source_module))
+                logger.debug(
+                    f"Wildcard import: {current_module} imports * from {full_source_module}"
+                )
+            return
 
         if not imported_names:
             return
 
         # Resolve relative imports like ".input" to "panel.widgets.input"
+        # current_module is from an __init__.py, so it's a package
         full_source_module = self._resolve_relative_module_path(
-            source_module, current_module, library_name
+            source_module, current_module, library_name, is_package=True
         )
         if not full_source_module:
             return
@@ -280,7 +303,11 @@ class ExternalClassInspector:
             logger.debug(f"Re-export: {short_path} -> {full_path}")
 
     def _resolve_relative_module_path(
-        self, relative_module: str, current_module: str, library_name: str
+        self,
+        relative_module: str,
+        current_module: str,
+        library_name: str,
+        is_package: bool = False,
     ) -> str | None:
         """Resolve a relative module path to an absolute module path.
 
@@ -288,6 +315,7 @@ class ExternalClassInspector:
             relative_module: Relative module like ".input" or "..base"
             current_module: Current module path like "panel.widgets"
             library_name: Root library name like "panel"
+            is_package: True if current_module is a package (__init__.py), False if regular module
 
         Returns:
             Absolute module path like "panel.widgets.input" or None if cannot resolve
@@ -318,12 +346,256 @@ class ExternalClassInspector:
             return None
 
         # Navigate up the hierarchy
-        base_parts = (
-            current_parts[: len(current_parts) - (level - 1)] if level > 1 else current_parts
-        )
+        # Python relative imports:
+        # - `.module` (level=1): same package as current module - go up 1 level from the module
+        # - `..module` (level=2): parent package - go up 2 levels from the module
+        # BUT: if current_module is a package (__init__.py), relative imports are FROM the package itself
+        # So for packages, we need to go up (level - 1) levels
+        # Examples:
+        #   - From module holoviews.core.element, `.dimension` → holoviews.core.dimension (up 1)
+        #   - From package holoviews.core.data, `..element` → holoviews.core.element (up 1, not 2!)
+        levels_up = level - 1 if is_package else level
+        base_parts = current_parts[: len(current_parts) - levels_up]
 
         # Add the remaining module path
         result = ".".join([*base_parts, remaining]) if remaining else ".".join(base_parts)
+        return result
+
+    def _find_likely_file_for_class(
+        self, full_class_path: str, source_paths: list[Path]
+    ) -> Path | None:
+        """Find the most likely file that should contain a class based on module path.
+
+        Args:
+            full_class_path: Full class path like "holoviews.plotting.util.initialize_dynamic"
+            source_paths: List of source file paths to search
+
+        Returns:
+            Path to the likely file, or None if not found
+        """
+        parts = full_class_path.split(".")
+        if len(parts) < 2:
+            return None
+
+        # Try to find file matching the module path
+        # e.g., "holoviews.plotting.util.Foo" -> holoviews/plotting/util.py
+        module_parts = parts[:-1]  # Everything except the class name
+
+        for source_path in source_paths:
+            # Check if this file matches the module path
+            path_parts = source_path.parts
+            if all(part in path_parts for part in module_parts):
+                # Check if the ordering matches
+                indices = [path_parts.index(part) for part in module_parts]
+                if indices == sorted(indices):  # Parts appear in correct order
+                    return source_path
+
+        return None
+
+    def _is_class_definition_in_file(self, file_path: Path, class_name: str) -> bool:
+        """Quickly check if a name is defined as a class in the given file.
+
+        This is a fast check that only parses the file to look for definitions.
+
+        Args:
+            file_path: Path to the Python file
+            class_name: Name to check (e.g., "initialize_dynamic")
+
+        Returns:
+            False ONLY if we find a function definition with this name (not a class).
+            True otherwise (might be a class, or re-exported, or not found in this file).
+        """
+        try:
+            source_code = file_path.read_text(encoding="utf-8")
+            tree = _treesitter.parser.parse(source_code)
+
+            # Look for ANY top-level definition with this name
+            for node in _treesitter.get_children(tree.root_node):
+                if node.type == "function_definition":
+                    name_node = node.child_by_field_name("name")
+                    if name_node and _treesitter.get_value(name_node) == class_name:
+                        # Found a function definition with this name - definitely not a class
+                        return False
+
+            # Either found as a class, or not found (might be re-exported) - continue search
+            return True
+        except Exception as e:
+            logger.debug(f"Error checking if {class_name} is a class in {file_path}: {e}")
+            # If we can't check, assume it might be a class to avoid false negatives
+            return True
+
+    def _build_file_dependency_graph(
+        self, source_paths: list[Path], library_name: str, library_root_path: Path
+    ) -> dict[Path, set[Path]]:
+        """Build a dependency graph showing which files import from which files.
+
+        Args:
+            source_paths: List of source file paths to analyze
+            library_name: Name of the library (e.g., "panel")
+            library_root_path: Root path of the library
+
+        Returns:
+            Dictionary mapping file paths to sets of file paths they depend on
+        """
+        logger.debug(f"Building dependency graph for {len(source_paths)} files")
+        graph: dict[Path, set[Path]] = {path: set() for path in source_paths}
+        # Map module paths to file paths for import resolution
+        module_to_file: dict[str, Path] = {}
+
+        # First pass: Build module -> file mapping
+        for source_path in source_paths:
+            try:
+                if source_path.is_relative_to(library_root_path):
+                    relative_path = source_path.relative_to(library_root_path)
+                    parts = list(relative_path.parts[:-1])  # Exclude filename
+                    if relative_path.stem != "__init__":
+                        parts.append(relative_path.stem)
+                    module_path = ".".join([library_name, *parts]) if parts else library_name
+                    module_to_file[module_path] = source_path
+            except Exception as e:
+                logger.debug(f"Error building module path for {source_path}: {e}")
+
+        # Second pass: Parse imports and build dependencies
+        for source_path in source_paths:
+            try:
+                source_code = source_path.read_text(encoding="utf-8")
+                tree = _treesitter.parser.parse(source_code)
+
+                # Extract imports
+                for import_node, _captures in find_imports(tree.root_node):
+                    if import_node.type == "import_from_statement":
+                        # Extract module name
+                        module_name_node = import_node.child_by_field_name("module_name")
+                        if not module_name_node:
+                            for child in _treesitter.get_children(import_node):
+                                if child.type in ("dotted_name", "relative_import", "identifier"):
+                                    module_name_node = child
+                                    break
+
+                        if module_name_node:
+                            module_name = _treesitter.get_value(module_name_node)
+                            if module_name:
+                                # Resolve relative imports
+                                if module_name.startswith("."):
+                                    # Get current module path
+                                    current_module = None
+                                    for mod_path, file_path in module_to_file.items():
+                                        if file_path == source_path:
+                                            current_module = mod_path
+                                            break
+
+                                    if current_module:
+                                        resolved_module = self._resolve_relative_module_path(
+                                            module_name, current_module, library_name
+                                        )
+                                        if resolved_module and resolved_module in module_to_file:
+                                            graph[source_path].add(module_to_file[resolved_module])
+                                elif module_name.startswith(library_name):
+                                    # Absolute import within library
+                                    if module_name in module_to_file:
+                                        graph[source_path].add(module_to_file[module_name])
+
+            except Exception as e:
+                logger.debug(f"Error analyzing imports in {source_path}: {e}")
+
+        logger.debug(
+            f"Built dependency graph with {sum(len(deps) for deps in graph.values())} edges"
+        )
+        return graph
+
+    def _topological_sort_files(
+        self, source_paths: list[Path], dependency_graph: dict[Path, set[Path]]
+    ) -> list[Path]:
+        """Sort files in topological order (dependencies first).
+
+        Args:
+            source_paths: List of file paths to sort
+            dependency_graph: Dependency graph where graph[A] = {B, C} means A depends on B and C
+
+        Returns:
+            List of file paths in topological order (dependencies before dependents)
+        """
+        # Build in-degree map: count how many dependencies each file has
+        in_degree: dict[Path, int] = {
+            path: len(dependency_graph.get(path, set())) for path in source_paths
+        }
+
+        # Queue of nodes with no dependencies
+        queue: list[Path] = [path for path in source_paths if in_degree[path] == 0]
+        result: list[Path] = []
+
+        while queue:
+            # Process node with no dependencies
+            current = queue.pop(0)
+            result.append(current)
+
+            # For all files that depend on current, reduce their in-degree
+            for dependent in source_paths:
+                if current in dependency_graph.get(dependent, set()):
+                    in_degree[dependent] -= 1
+                    if in_degree[dependent] == 0:
+                        queue.append(dependent)
+
+        # If result doesn't contain all files, there's a cycle - just append remaining
+        if len(result) < len(source_paths):
+            logger.debug(
+                f"Cycle detected in dependency graph, {len(source_paths) - len(result)} files not sorted"
+            )
+            for path in source_paths:
+                if path not in result:
+                    result.append(path)
+
+        logger.debug(f"Topologically sorted {len(result)} files")
+        return result
+
+    def _topological_sort_classes(
+        self, classes: set[str], inheritance_map: dict[str, list[str]]
+    ) -> list[str]:
+        """Sort classes in topological order (parents before children).
+
+        Args:
+            classes: Set of class paths to sort
+            inheritance_map: Map of class_path -> [base_class_paths]
+
+        Returns:
+            List of class paths in topological order (parents before children)
+        """
+        # Build in-degree map: count how many parent classes each class has
+        # Only count parents that are in the classes set
+        in_degree: dict[str, int] = {}
+        for class_path in classes:
+            parents = inheritance_map.get(class_path, [])
+            # Only count parents that are in our set of classes
+            in_degree[class_path] = sum(1 for p in parents if p in classes)
+
+        # Queue of classes with no dependencies (base classes)
+        queue: list[str] = [cls for cls in classes if in_degree[cls] == 0]
+        result: list[str] = []
+
+        # Track which classes we've seen to handle cycles
+        seen = set(queue)
+
+        while queue:
+            # Process class with no dependencies
+            current = queue.pop(0)
+            result.append(current)
+
+            # For all classes that inherit from current, reduce their in-degree
+            for class_path in classes:
+                if class_path in seen:
+                    continue
+                parents = inheritance_map.get(class_path, [])
+                if current in parents:
+                    in_degree[class_path] -= 1
+                    if in_degree[class_path] == 0:
+                        queue.append(class_path)
+                        seen.add(class_path)
+
+        # Add any remaining classes (shouldn't happen with valid DAG)
+        for class_path in classes:
+            if class_path not in result:
+                result.append(class_path)
+
         return result
 
     def populate_library_cache(self, library_name: str) -> int:
@@ -381,6 +653,28 @@ class ExternalClassInspector:
         if not source_paths:
             logger.debug(f"No source files found for {library_name}")
             return 0
+
+        # Build dependency graph and sort files in topological order
+        # Pre-compute library root path
+        search_dirs = list(self.python_env.site_packages)
+        if self.python_env.user_site:
+            search_dirs.append(self.python_env.user_site)
+
+        library_root_path = None
+        for site_dir in search_dirs:
+            lib_path = site_dir / library_name
+            if lib_path.exists():
+                library_root_path = lib_path
+                break
+
+        if not library_root_path:
+            logger.debug(f"Could not find library root path for {library_name}")
+            return 0
+
+        dependency_graph = self._build_file_dependency_graph(
+            source_paths, library_name, library_root_path
+        )
+        source_paths = self._topological_sort_files(source_paths, dependency_graph)
 
         # Phase 0: Parse all files once and extract imports, classes, and re-exports in a single pass
         logger.debug("Phase 0: Parsing all source files and extracting classes")
@@ -526,10 +820,91 @@ class ExternalClassInspector:
 
         logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
 
+        # Resolve relative import paths in inheritance map before topological sort
+        # The map may contain relative paths like ".dimension.ViewableElement" which need
+        # to be resolved to full paths for proper dependency tracking
+        resolved_inheritance_map: dict[str, list[str]] = {}
+        for class_path, parents in inheritance_map.items():
+            resolved_parents = []
+            for parent in parents:
+                if parent.startswith("."):
+                    # Resolve relative import
+                    current_module = ".".join(
+                        class_path.split(".")[:-1]
+                    )  # Module containing the class
+                    # Check if the class is in a package (__init__.py)
+                    is_package = False
+                    if class_path in class_ast_nodes:
+                        _, _, source_path = class_ast_nodes[class_path]
+                        is_package = source_path.name == "__init__.py"
+                    resolved = self._resolve_relative_module_path(
+                        parent, current_module, library_name, is_package
+                    )
+                    if resolved:
+                        resolved_parents.append(resolved)
+                    else:
+                        resolved_parents.append(parent)  # Keep original if resolution fails
+                else:
+                    resolved_parents.append(parent)
+            resolved_inheritance_map[class_path] = resolved_parents
+
+        # Process wildcard imports to build alias map BEFORE topological sort
+        # This is needed so we can resolve aliases in the inheritance map for correct ordering
+        alias_map = {}  # short_path -> full_path
+        if hasattr(self, "_wildcard_imports"):
+            logger.debug(f"Building alias map from {len(self._wildcard_imports)} wildcard imports")
+            # First pass: build alias map from classes
+            for current_module, source_module in self._wildcard_imports:
+                for class_path in parameterized_classes:
+                    if class_path.startswith(source_module + "."):
+                        class_name = class_path.split(".")[-1]
+                        short_path = f"{current_module}.{class_name}"
+                        alias_map[short_path] = class_path
+
+                # Also check reexport_map for explicit imports in the source module
+                # E.g., holoviews.element.Dataset is an alias, not a class
+                for short_path_in_map, full_path_in_map in reexport_map.items():
+                    # Check if this is an export from the source module
+                    if short_path_in_map.startswith(source_module + "."):
+                        class_name = short_path_in_map.split(".")[-1]
+                        # Create alias in current module
+                        short_path = f"{current_module}.{class_name}"
+                        alias_map[short_path] = full_path_in_map
+
+        # Replace aliases in inheritance map BEFORE topological sort
+        # This ensures dependencies are correctly identified
+        for class_path, parents in resolved_inheritance_map.items():
+            updated_parents = []
+            for parent in parents:
+                if parent in alias_map:
+                    updated_parents.append(alias_map[parent])
+                else:
+                    updated_parents.append(parent)
+            resolved_inheritance_map[class_path] = updated_parents
+
+        # Sort parameterized classes in topological order (parents before children)
+        # This ensures parent classes are cached before their children, allowing proper inheritance
+        sorted_classes = self._topological_sort_classes(
+            parameterized_classes, resolved_inheritance_map
+        )
+        logger.debug(f"Sorted {len(sorted_classes)} classes in topological order")
+
+        # Register wildcard aliases in cache AFTER topological sort but BEFORE Phase 2
+        if hasattr(self, "_wildcard_imports"):
+            logger.debug(f"Registering {len(alias_map)} wildcard aliases in cache")
+            for short_path, full_path in alias_map.items():
+                try:
+                    external_library_cache.set_alias(library_name, short_path, full_path, version)
+                    logger.debug(f"Registered alias: {short_path} -> {full_path}")
+                except Exception as e:
+                    logger.debug(f"Failed to register alias {short_path}: {e}")
+            # Clear for next library
+            del self._wildcard_imports
+
         # Phase 2: Extract parameters for Parameterized classes
         logger.debug("Phase 2: Extracting parameters")
         count = 0
-        for class_path in parameterized_classes:
+        for class_path in sorted_classes:
             try:
                 class_node, file_imports, source_path = class_ast_nodes[class_path]
                 class_info = self._convert_ast_to_class_info(
@@ -590,7 +965,7 @@ class ExternalClassInspector:
         # Check if this library is allowed
         root_module = full_class_path.split(".")[0]
         if root_module not in self.allowed_libraries:
-            logger.debug(f"Library {root_module} not in allowed list")
+            # Not from an allowed library - cache as None and skip
             self.parsed_classes[full_class_path] = None
             return None
 
@@ -614,8 +989,15 @@ class ExternalClassInspector:
                 self.parsed_classes[full_class_path] = class_info
                 return class_info
 
-            # Fallback to dynamic AST analysis if not in cache
-            logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
+            # Check if cache exists for this library - if yes and class not found, it's not a Parameterized class
+            if external_library_cache.has_library_cache(root_module, version):
+                # Cache exists and class not in it - it's not a Parameterized class
+                logger.debug(f"{full_class_path} not in cache, skipping expensive file search")
+                self.parsed_classes[full_class_path] = None
+                return None
+
+            # No cache exists - fallback to dynamic AST analysis (e.g., cache disabled or first run)
+            logger.debug(f"No cache for {root_module}, trying AST analysis for {full_class_path}")
             class_info = self._analyze_class_from_source(full_class_path)
             self.parsed_classes[full_class_path] = class_info
 
@@ -652,6 +1034,13 @@ class ExternalClassInspector:
         source_paths = self._discover_library_sources(root_module)
         if not source_paths:
             logger.debug(f"No source files found for {root_module}")
+            return None
+
+        # Try to find the likely file based on module path first for quick validation
+        likely_file = self._find_likely_file_for_class(full_class_path, source_paths)
+        if likely_file and not self._is_class_definition_in_file(likely_file, class_name):
+            # Quick check: is this even a class definition?
+            logger.debug(f"{class_name} in {likely_file} is not a class definition, skipping")
             return None
 
         # Search for the class in source files using queue-based analysis
@@ -1311,12 +1700,15 @@ class ExternalClassInspector:
 
         # Extract parameters from parent classes using inheritance_map
         if inheritance_map and class_ast_nodes:
+            # Use a per-class visited set to avoid cross-class pollution
+            visited = set()
             self._extract_inherited_parameters_from_map(
                 full_class_path,
                 parameter_detector,
                 class_info,
                 inheritance_map,
                 class_ast_nodes,
+                visited,
             )
         else:
             # Fallback to old method for same-file inheritance
@@ -1379,6 +1771,7 @@ class ExternalClassInspector:
         class_info: ParameterizedInfo,
         inheritance_map: dict[str, list[str]],
         class_ast_nodes: dict[str, tuple[Node, dict[str, str], Path]],
+        visited: set[str],
     ) -> None:
         """Extract parameters from parent classes using the inheritance map.
 
@@ -1391,15 +1784,13 @@ class ExternalClassInspector:
             class_info: Class info to populate with inherited parameters
             inheritance_map: Map of full_class_path -> [base_class_paths]
             class_ast_nodes: Map of full_class_path -> (ast_node, imports, file_path)
+            visited: Set of already visited class paths (per-class context)
         """
         # Avoid infinite recursion with a visited set
-        if not hasattr(self, "_inheritance_extraction_visited"):
-            self._inheritance_extraction_visited = set()
-
-        if full_class_path in self._inheritance_extraction_visited:
+        if full_class_path in visited:
             return
 
-        self._inheritance_extraction_visited.add(full_class_path)
+        visited.add(full_class_path)
 
         try:
             # Get base classes for this class
@@ -1412,7 +1803,50 @@ class ExternalClassInspector:
                 if self._is_parameterized_base(base_class_path, library_name):
                     continue
 
-                # Try to find the base class in our AST nodes
+                # First, try to get from cache (parents are processed before children due to topological sort)
+                library_name = full_class_path.split(".")[0]
+                lib_info = self.library_info_cache.get(library_name)
+                parent_class_info_cached = None
+                if lib_info:
+                    version = lib_info["version"]
+
+                    # Resolve relative import paths to full paths
+                    # base_class_path might be like ".dimension.ViewableElement" or "..element.Element"
+                    resolved_parent_path = base_class_path
+                    if base_class_path.startswith("."):
+                        # Relative import - resolve to full path
+                        # e.g., full_class_path = "holoviews.core.element.Element"
+                        #       base_class_path = ".dimension.ViewableElement"
+                        # Result should be "holoviews.core.dimension.ViewableElement"
+                        #
+                        # The current module is the file containing the class
+                        # e.g., for "holoviews.core.data.Dataset", current_module is "holoviews.core.data"
+                        current_module = ".".join(
+                            full_class_path.split(".")[:-1]
+                        )  # Remove class name
+                        # Check if this class is in a package (__init__.py)
+                        is_package = False
+                        if full_class_path in class_ast_nodes:
+                            _, _, source_path = class_ast_nodes[full_class_path]
+                            is_package = source_path.name == "__init__.py"
+                        resolved_parent_path = self._resolve_relative_module_path(
+                            base_class_path, current_module, library_name, is_package
+                        )
+
+                    if resolved_parent_path:
+                        parent_class_info_cached = external_library_cache.get(
+                            library_name, resolved_parent_path, version
+                        )
+
+                if parent_class_info_cached:
+                    # Parent is already cached with ALL its inherited parameters - just use it!
+                    for param_name, param_info in parent_class_info_cached.parameters.items():
+                        if param_name not in class_info.parameters:
+                            class_info.parameters[param_name] = param_info
+                    # Don't recurse - cached parent already has everything
+                    continue
+
+                # If not cached, try to find in AST nodes
                 if base_class_path in class_ast_nodes:
                     parent_node, parent_imports, parent_file_path = class_ast_nodes[
                         base_class_path
@@ -1451,14 +1885,14 @@ class ExternalClassInspector:
                         class_info,
                         inheritance_map,
                         class_ast_nodes,
+                        visited,
                     )
                 else:
-                    # Base class not found in our AST nodes
-                    # This might be from an external library or stdlib
-                    logger.debug(f"Base class {base_class_path} not found in AST nodes")
+                    # Base class not found in AST nodes or cache
+                    logger.debug(f"Base class {base_class_path} not found in AST nodes or cache")
 
         finally:
-            self._inheritance_extraction_visited.discard(full_class_path)
+            visited.discard(full_class_path)
 
     def _resolve_imported_class_inheritance(
         self, class_name: str, import_path: str, context_imports: dict[str, str]
