@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import cast
 
@@ -19,7 +20,8 @@ from param_lsp._logging import get_logger
 logger = get_logger(__name__, "python-env")
 
 # Sentinel value to distinguish "not queried" from "queried but None"
-_NOT_QUERIED = object()
+_NotQueriedType = Enum("NOT_QUERIED", "NOPE")
+_NOT_QUERIED = _NotQueriedType.NOPE
 
 
 class PythonEnvironment:
