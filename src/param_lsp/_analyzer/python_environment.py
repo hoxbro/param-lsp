@@ -18,6 +18,9 @@ from param_lsp._logging import get_logger
 
 logger = get_logger(__name__, "python-env")
 
+# Sentinel value to distinguish "not queried" from "queried but None"
+_NOT_QUERIED = object()
+
 
 class PythonEnvironment:
     """Represents a Python environment with its site-packages paths."""
@@ -37,8 +40,9 @@ class PythonEnvironment:
             user_site: User site-packages directory (will be queried if None)
         """
         self.python = Path(python)
-        self._site_packages = site_packages
-        self._user_site = user_site
+        # Use sentinel to distinguish "not queried" from "queried but None/empty"
+        self._site_packages = site_packages if site_packages is not None else _NOT_QUERIED
+        self._user_site = user_site if user_site is not None else _NOT_QUERIED
 
         # Validate the Python executable exists
         if not self.python.exists():
@@ -48,16 +52,16 @@ class PythonEnvironment:
     @property
     def site_packages(self) -> list[Path]:
         """Get the site-packages directories for this environment."""
-        if self._site_packages is None:
+        if self._site_packages is _NOT_QUERIED:
             self._query_python_exe()
         return cast("list[Path]", self._site_packages)
 
     @property
     def user_site(self) -> Path | None:
         """Get the user site-packages directory for this environment."""
-        if self._user_site is None:
+        if self._user_site is _NOT_QUERIED:
             self._query_python_exe()
-        return self._user_site
+        return self._user_site  # type: ignore[return-value]
 
     def _query_python_exe(self) -> Path | None:
         try:
