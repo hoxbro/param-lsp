@@ -326,6 +326,130 @@ class ExternalClassInspector:
         result = ".".join([*base_parts, remaining]) if remaining else ".".join(base_parts)
         return result
 
+    def _build_file_dependency_graph(
+        self, source_paths: list[Path], library_name: str, library_root_path: Path
+    ) -> dict[Path, set[Path]]:
+        """Build a dependency graph showing which files import from which files.
+
+        Args:
+            source_paths: List of source file paths to analyze
+            library_name: Name of the library (e.g., "panel")
+            library_root_path: Root path of the library
+
+        Returns:
+            Dictionary mapping file paths to sets of file paths they depend on
+        """
+        logger.debug(f"Building dependency graph for {len(source_paths)} files")
+        graph: dict[Path, set[Path]] = {path: set() for path in source_paths}
+        # Map module paths to file paths for import resolution
+        module_to_file: dict[str, Path] = {}
+
+        # First pass: Build module -> file mapping
+        for source_path in source_paths:
+            try:
+                if source_path.is_relative_to(library_root_path):
+                    relative_path = source_path.relative_to(library_root_path)
+                    parts = list(relative_path.parts[:-1])  # Exclude filename
+                    if relative_path.stem != "__init__":
+                        parts.append(relative_path.stem)
+                    module_path = ".".join([library_name, *parts]) if parts else library_name
+                    module_to_file[module_path] = source_path
+            except Exception as e:
+                logger.debug(f"Error building module path for {source_path}: {e}")
+
+        # Second pass: Parse imports and build dependencies
+        for source_path in source_paths:
+            try:
+                source_code = source_path.read_text(encoding="utf-8")
+                tree = _treesitter.parser.parse(source_code)
+
+                # Extract imports
+                for import_node, _captures in find_imports(tree.root_node):
+                    if import_node.type == "import_from_statement":
+                        # Extract module name
+                        module_name_node = import_node.child_by_field_name("module_name")
+                        if not module_name_node:
+                            for child in _treesitter.get_children(import_node):
+                                if child.type in ("dotted_name", "relative_import", "identifier"):
+                                    module_name_node = child
+                                    break
+
+                        if module_name_node:
+                            module_name = _treesitter.get_value(module_name_node)
+                            if module_name:
+                                # Resolve relative imports
+                                if module_name.startswith("."):
+                                    # Get current module path
+                                    current_module = None
+                                    for mod_path, file_path in module_to_file.items():
+                                        if file_path == source_path:
+                                            current_module = mod_path
+                                            break
+
+                                    if current_module:
+                                        resolved_module = self._resolve_relative_module_path(
+                                            module_name, current_module, library_name
+                                        )
+                                        if resolved_module and resolved_module in module_to_file:
+                                            graph[source_path].add(module_to_file[resolved_module])
+                                elif module_name.startswith(library_name):
+                                    # Absolute import within library
+                                    if module_name in module_to_file:
+                                        graph[source_path].add(module_to_file[module_name])
+
+            except Exception as e:
+                logger.debug(f"Error analyzing imports in {source_path}: {e}")
+
+        logger.debug(
+            f"Built dependency graph with {sum(len(deps) for deps in graph.values())} edges"
+        )
+        return graph
+
+    def _topological_sort_files(
+        self, source_paths: list[Path], dependency_graph: dict[Path, set[Path]]
+    ) -> list[Path]:
+        """Sort files in topological order (dependencies first).
+
+        Args:
+            source_paths: List of file paths to sort
+            dependency_graph: Dependency graph where graph[A] = {B, C} means A depends on B and C
+
+        Returns:
+            List of file paths in topological order (dependencies before dependents)
+        """
+        # Build in-degree map: count how many dependencies each file has
+        in_degree: dict[Path, int] = {
+            path: len(dependency_graph.get(path, set())) for path in source_paths
+        }
+
+        # Queue of nodes with no dependencies
+        queue: list[Path] = [path for path in source_paths if in_degree[path] == 0]
+        result: list[Path] = []
+
+        while queue:
+            # Process node with no dependencies
+            current = queue.pop(0)
+            result.append(current)
+
+            # For all files that depend on current, reduce their in-degree
+            for dependent in source_paths:
+                if current in dependency_graph.get(dependent, set()):
+                    in_degree[dependent] -= 1
+                    if in_degree[dependent] == 0:
+                        queue.append(dependent)
+
+        # If result doesn't contain all files, there's a cycle - just append remaining
+        if len(result) < len(source_paths):
+            logger.debug(
+                f"Cycle detected in dependency graph, {len(source_paths) - len(result)} files not sorted"
+            )
+            for path in source_paths:
+                if path not in result:
+                    result.append(path)
+
+        logger.debug(f"Topologically sorted {len(result)} files")
+        return result
+
     def populate_library_cache(self, library_name: str) -> int:
         """Pre-populate cache with all Parameterized classes from a library.
 
@@ -381,6 +505,28 @@ class ExternalClassInspector:
         if not source_paths:
             logger.debug(f"No source files found for {library_name}")
             return 0
+
+        # Build dependency graph and sort files in topological order
+        # Pre-compute library root path
+        search_dirs = list(self.python_env.site_packages)
+        if self.python_env.user_site:
+            search_dirs.append(self.python_env.user_site)
+
+        library_root_path = None
+        for site_dir in search_dirs:
+            lib_path = site_dir / library_name
+            if lib_path.exists():
+                library_root_path = lib_path
+                break
+
+        if not library_root_path:
+            logger.debug(f"Could not find library root path for {library_name}")
+            return 0
+
+        dependency_graph = self._build_file_dependency_graph(
+            source_paths, library_name, library_root_path
+        )
+        source_paths = self._topological_sort_files(source_paths, dependency_graph)
 
         # Phase 0: Parse all files once and extract imports, classes, and re-exports in a single pass
         logger.debug("Phase 0: Parsing all source files and extracting classes")
