@@ -823,8 +823,15 @@ class ExternalClassInspector:
                 self.parsed_classes[full_class_path] = class_info
                 return class_info
 
-            # Fallback to dynamic AST analysis if not in cache
-            logger.debug(f"No cached metadata found for {full_class_path}, trying AST analysis")
+            # Check if cache exists for this library - if yes and class not found, it's not a Parameterized class
+            if external_library_cache.has_library_cache(root_module, version):
+                # Cache exists and class not in it - it's not a Parameterized class
+                logger.debug(f"{full_class_path} not in cache, skipping expensive file search")
+                self.parsed_classes[full_class_path] = None
+                return None
+
+            # No cache exists - fallback to dynamic AST analysis (e.g., cache disabled or first run)
+            logger.debug(f"No cache for {root_module}, trying AST analysis for {full_class_path}")
             class_info = self._analyze_class_from_source(full_class_path)
             self.parsed_classes[full_class_path] = class_info
 
