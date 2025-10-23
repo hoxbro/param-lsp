@@ -382,7 +382,27 @@ class ParamAnalyzer:
         for call_node, _captures in find_calls(tree):
             if _treesitter.is_function_call(call_node):
                 full_class_path = self.import_resolver.resolve_full_class_path(call_node)
-                self._analyze_external_class_ast(full_class_path)
+                # Only analyze if this is from an imported library we care about
+                if self._is_from_allowed_library(full_class_path):
+                    self._analyze_external_class_ast(full_class_path)
+
+    def _is_from_allowed_library(self, full_class_path: str | None) -> bool:
+        """Check if a class path is from an allowed external library.
+
+        Args:
+            full_class_path: Full path like "panel.widgets.IntSlider"
+
+        Returns:
+            True if from an allowed library (panel, holoviews, param), False otherwise
+        """
+        if not full_class_path or "." not in full_class_path:
+            return False
+
+        root_module = full_class_path.split(".")[0]
+
+        # Only process if it's from one of our allowed libraries
+        # This is checked against the external inspector's allowed_libraries
+        return root_module in self.external_inspector.allowed_libraries
 
     def resolve_class_name_from_context(
         self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str

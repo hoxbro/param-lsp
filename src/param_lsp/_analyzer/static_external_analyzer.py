@@ -799,7 +799,7 @@ class ExternalClassInspector:
         # Check if this library is allowed
         root_module = full_class_path.split(".")[0]
         if root_module not in self.allowed_libraries:
-            logger.debug(f"Library {root_module} not in allowed list")
+            # Not from an allowed library - cache as None and skip
             self.parsed_classes[full_class_path] = None
             return None
 
