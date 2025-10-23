@@ -115,6 +115,7 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     message = diagnostic["message"]
     code = diagnostic.get("code", "")
     severity = diagnostic.get("severity", "error")
+    context = 2
 
     # Get all lines
     lines = content.split("\n")
@@ -139,11 +140,11 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     print(f"  {cyan}-->{reset} {file_path}:{line + 1}:{col + 1}")
 
     # Print separator
-    print("   " + cyan + dim + "|" + reset)
+    padding_size = max(len(str(line + 1 + context)), 2) + 1
+    print(" " * padding_size + cyan + dim + "|" + reset)
 
     # Show context: 1-2 lines before
-    context_before = 2
-    for i in range(max(0, line - context_before), line):
+    for i in range(max(0, line - context), line):
         if i < len(lines):
             line_num_str = str(i + 1)
             print(f"{dim}{line_num_str:>2} {cyan}|{reset} {lines[i]}{reset}")
@@ -169,11 +170,10 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
         print(" " * padding + error_color + "^" * underline_width + reset)
 
     # Show context: 1-2 lines after
-    context_after = 2
-    for i in range(line + 1, min(len(lines), line + context_after + 1)):
+    for i in range(line + 1, min(len(lines), line + context + 1)):
         line_num_str = str(i + 1)
         print(f"{dim}{line_num_str:>2} {cyan}|{reset} {lines[i]}{reset}")
 
     # Print closing separator
-    print("   " + cyan + dim + "|" + reset)
+    print(" " * padding_size + cyan + dim + "|" + reset)
     print()
