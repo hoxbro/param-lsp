@@ -534,6 +534,56 @@ class ExternalClassInspector:
         logger.debug(f"Topologically sorted {len(result)} files")
         return result
 
+    def _topological_sort_classes(
+        self, classes: set[str], inheritance_map: dict[str, list[str]]
+    ) -> list[str]:
+        """Sort classes in topological order (parents before children).
+
+        Args:
+            classes: Set of class paths to sort
+            inheritance_map: Map of class_path -> [base_class_paths]
+
+        Returns:
+            List of class paths in topological order (parents before children)
+        """
+        # Build in-degree map: count how many parent classes each class has
+        # Only count parents that are in the classes set
+        in_degree: dict[str, int] = {}
+        for class_path in classes:
+            parents = inheritance_map.get(class_path, [])
+            # Only count parents that are in our set of classes
+            in_degree[class_path] = sum(1 for p in parents if p in classes)
+
+        # Queue of classes with no dependencies (base classes)
+        queue: list[str] = [cls for cls in classes if in_degree[cls] == 0]
+        result: list[str] = []
+
+        # Track which classes we've seen to handle cycles
+        seen = set(queue)
+
+        while queue:
+            # Process class with no dependencies
+            current = queue.pop(0)
+            result.append(current)
+
+            # For all classes that inherit from current, reduce their in-degree
+            for class_path in classes:
+                if class_path in seen:
+                    continue
+                parents = inheritance_map.get(class_path, [])
+                if current in parents:
+                    in_degree[class_path] -= 1
+                    if in_degree[class_path] == 0:
+                        queue.append(class_path)
+                        seen.add(class_path)
+
+        # Add any remaining classes (shouldn't happen with valid DAG)
+        for class_path in classes:
+            if class_path not in result:
+                result.append(class_path)
+
+        return result
+
     def populate_library_cache(self, library_name: str) -> int:
         """Pre-populate cache with all Parameterized classes from a library.
 
@@ -756,10 +806,15 @@ class ExternalClassInspector:
 
         logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
 
+        # Sort parameterized classes in topological order (parents before children)
+        # This ensures parent classes are cached before their children, allowing proper inheritance
+        sorted_classes = self._topological_sort_classes(parameterized_classes, inheritance_map)
+        logger.debug(f"Sorted {len(sorted_classes)} classes in topological order")
+
         # Phase 2: Extract parameters for Parameterized classes
         logger.debug("Phase 2: Extracting parameters")
         count = 0
-        for class_path in parameterized_classes:
+        for class_path in sorted_classes:
             try:
                 class_node, file_imports, source_path = class_ast_nodes[class_path]
                 class_info = self._convert_ast_to_class_info(
@@ -1582,12 +1637,15 @@ class ExternalClassInspector:
 
         # Extract parameters from parent classes using inheritance_map
         if inheritance_map and class_ast_nodes:
+            # Use a per-class visited set to avoid cross-class pollution
+            visited = set()
             self._extract_inherited_parameters_from_map(
                 full_class_path,
                 parameter_detector,
                 class_info,
                 inheritance_map,
                 class_ast_nodes,
+                visited,
             )
         else:
             # Fallback to old method for same-file inheritance
@@ -1650,6 +1708,7 @@ class ExternalClassInspector:
         class_info: ParameterizedInfo,
         inheritance_map: dict[str, list[str]],
         class_ast_nodes: dict[str, tuple[Node, dict[str, str], Path]],
+        visited: set[str],
     ) -> None:
         """Extract parameters from parent classes using the inheritance map.
 
@@ -1662,15 +1721,13 @@ class ExternalClassInspector:
             class_info: Class info to populate with inherited parameters
             inheritance_map: Map of full_class_path -> [base_class_paths]
             class_ast_nodes: Map of full_class_path -> (ast_node, imports, file_path)
+            visited: Set of already visited class paths (per-class context)
         """
         # Avoid infinite recursion with a visited set
-        if not hasattr(self, "_inheritance_extraction_visited"):
-            self._inheritance_extraction_visited = set()
-
-        if full_class_path in self._inheritance_extraction_visited:
+        if full_class_path in visited:
             return
 
-        self._inheritance_extraction_visited.add(full_class_path)
+        visited.add(full_class_path)
 
         try:
             # Get base classes for this class
@@ -1683,7 +1740,28 @@ class ExternalClassInspector:
                 if self._is_parameterized_base(base_class_path, library_name):
                     continue
 
-                # Try to find the base class in our AST nodes
+                # First, try to get from cache (parents are processed before children due to topological sort)
+                library_name = full_class_path.split(".")[0]
+                lib_info = self.library_info_cache.get(library_name)
+                parent_class_info_cached = None
+                if lib_info:
+                    version = lib_info["version"]
+                    parent_class_info_cached = external_library_cache.get(
+                        library_name, base_class_path, version
+                    )
+
+                if parent_class_info_cached:
+                    # Parent is already cached with ALL its inherited parameters - just use it!
+                    for param_name, param_info in parent_class_info_cached.parameters.items():
+                        if param_name not in class_info.parameters:
+                            class_info.parameters[param_name] = param_info
+                    logger.debug(
+                        f"Inherited {len(parent_class_info_cached.parameters)} params from cached {base_class_path}"
+                    )
+                    # Don't recurse - cached parent already has everything
+                    continue
+
+                # If not cached, try to find in AST nodes
                 if base_class_path in class_ast_nodes:
                     parent_node, parent_imports, parent_file_path = class_ast_nodes[
                         base_class_path
@@ -1722,14 +1800,14 @@ class ExternalClassInspector:
                         class_info,
                         inheritance_map,
                         class_ast_nodes,
+                        visited,
                     )
                 else:
-                    # Base class not found in our AST nodes
-                    # This might be from an external library or stdlib
-                    logger.debug(f"Base class {base_class_path} not found in AST nodes")
+                    # Base class not found in AST nodes or cache
+                    logger.debug(f"Base class {base_class_path} not found in AST nodes or cache")
 
         finally:
-            self._inheritance_extraction_visited.discard(full_class_path)
+            visited.discard(full_class_path)
 
     def _resolve_imported_class_inheritance(
         self, class_name: str, import_path: str, context_imports: dict[str, str]
