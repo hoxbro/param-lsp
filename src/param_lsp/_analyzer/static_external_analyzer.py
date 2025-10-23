@@ -266,8 +266,9 @@ class ExternalClassInspector:
         # For wildcard imports, store the source module for later processing
         # We'll handle it after we've collected all classes
         if is_wildcard_import:
+            # current_module is from an __init__.py, so it's a package
             full_source_module = self._resolve_relative_module_path(
-                source_module, current_module, library_name
+                source_module, current_module, library_name, is_package=True
             )
             if full_source_module:
                 # Store wildcard import info for later processing
@@ -284,8 +285,9 @@ class ExternalClassInspector:
             return
 
         # Resolve relative imports like ".input" to "panel.widgets.input"
+        # current_module is from an __init__.py, so it's a package
         full_source_module = self._resolve_relative_module_path(
-            source_module, current_module, library_name
+            source_module, current_module, library_name, is_package=True
         )
         if not full_source_module:
             return
@@ -301,7 +303,11 @@ class ExternalClassInspector:
             logger.debug(f"Re-export: {short_path} -> {full_path}")
 
     def _resolve_relative_module_path(
-        self, relative_module: str, current_module: str, library_name: str
+        self,
+        relative_module: str,
+        current_module: str,
+        library_name: str,
+        is_package: bool = False,
     ) -> str | None:
         """Resolve a relative module path to an absolute module path.
 
@@ -309,6 +315,7 @@ class ExternalClassInspector:
             relative_module: Relative module like ".input" or "..base"
             current_module: Current module path like "panel.widgets"
             library_name: Root library name like "panel"
+            is_package: True if current_module is a package (__init__.py), False if regular module
 
         Returns:
             Absolute module path like "panel.widgets.input" or None if cannot resolve
@@ -339,9 +346,16 @@ class ExternalClassInspector:
             return None
 
         # Navigate up the hierarchy
-        base_parts = (
-            current_parts[: len(current_parts) - (level - 1)] if level > 1 else current_parts
-        )
+        # Python relative imports:
+        # - `.module` (level=1): same package as current module - go up 1 level from the module
+        # - `..module` (level=2): parent package - go up 2 levels from the module
+        # BUT: if current_module is a package (__init__.py), relative imports are FROM the package itself
+        # So for packages, we need to go up (level - 1) levels
+        # Examples:
+        #   - From module holoviews.core.element, `.dimension` → holoviews.core.dimension (up 1)
+        #   - From package holoviews.core.data, `..element` → holoviews.core.element (up 1, not 2!)
+        levels_up = level - 1 if is_package else level
+        base_parts = current_parts[: len(current_parts) - levels_up]
 
         # Add the remaining module path
         result = ".".join([*base_parts, remaining]) if remaining else ".".join(base_parts)
@@ -806,10 +820,76 @@ class ExternalClassInspector:
 
         logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
 
+        # Resolve relative import paths in inheritance map before topological sort
+        # The map may contain relative paths like ".dimension.ViewableElement" which need
+        # to be resolved to full paths for proper dependency tracking
+        resolved_inheritance_map: dict[str, list[str]] = {}
+        for class_path, parents in inheritance_map.items():
+            resolved_parents = []
+            for parent in parents:
+                if parent.startswith("."):
+                    # Resolve relative import
+                    current_module = ".".join(
+                        class_path.split(".")[:-1]
+                    )  # Module containing the class
+                    # Check if the class is in a package (__init__.py)
+                    is_package = False
+                    if class_path in class_ast_nodes:
+                        _, _, source_path = class_ast_nodes[class_path]
+                        is_package = source_path.name == "__init__.py"
+                    resolved = self._resolve_relative_module_path(
+                        parent, current_module, library_name, is_package
+                    )
+                    if resolved:
+                        resolved_parents.append(resolved)
+                    else:
+                        resolved_parents.append(parent)  # Keep original if resolution fails
+                else:
+                    resolved_parents.append(parent)
+            resolved_inheritance_map[class_path] = resolved_parents
+
+        # Process wildcard imports to build alias map BEFORE topological sort
+        # This is needed so we can resolve aliases in the inheritance map for correct ordering
+        alias_map = {}  # short_path -> full_path
+        if hasattr(self, "_wildcard_imports"):
+            logger.debug(f"Building alias map from {len(self._wildcard_imports)} wildcard imports")
+            # First pass: build alias map
+            for current_module, source_module in self._wildcard_imports:
+                for class_path in parameterized_classes:
+                    if class_path.startswith(source_module + "."):
+                        class_name = class_path.split(".")[-1]
+                        short_path = f"{current_module}.{class_name}"
+                        alias_map[short_path] = class_path
+
+        # Replace aliases in inheritance map BEFORE topological sort
+        # This ensures dependencies are correctly identified
+        for class_path, parents in resolved_inheritance_map.items():
+            updated_parents = []
+            for parent in parents:
+                if parent in alias_map:
+                    updated_parents.append(alias_map[parent])
+                else:
+                    updated_parents.append(parent)
+            resolved_inheritance_map[class_path] = updated_parents
+
         # Sort parameterized classes in topological order (parents before children)
         # This ensures parent classes are cached before their children, allowing proper inheritance
-        sorted_classes = self._topological_sort_classes(parameterized_classes, inheritance_map)
+        sorted_classes = self._topological_sort_classes(
+            parameterized_classes, resolved_inheritance_map
+        )
         logger.debug(f"Sorted {len(sorted_classes)} classes in topological order")
+
+        # Register wildcard aliases in cache AFTER topological sort but BEFORE Phase 2
+        if hasattr(self, "_wildcard_imports"):
+            logger.debug(f"Registering {len(alias_map)} wildcard aliases in cache")
+            for short_path, full_path in alias_map.items():
+                try:
+                    external_library_cache.set_alias(library_name, short_path, full_path, version)
+                    logger.debug(f"Registered alias: {short_path} -> {full_path}")
+                except Exception as e:
+                    logger.debug(f"Failed to register alias {short_path}: {e}")
+            # Clear for next library
+            del self._wildcard_imports
 
         # Phase 2: Extract parameters for Parameterized classes
         logger.debug("Phase 2: Extracting parameters")
@@ -846,33 +926,6 @@ class ExternalClassInspector:
                                 )
             except Exception as e:
                 logger.debug(f"Failed to cache {class_path}: {e}")
-
-        # Process wildcard imports: from .element import *
-        if hasattr(self, "_wildcard_imports"):
-            logger.debug(f"Processing {len(self._wildcard_imports)} wildcard imports")
-            for current_module, source_module in self._wildcard_imports:
-                # Find all classes from source_module
-                for class_path in parameterized_classes:
-                    # Check if this class is from the source module or any of its submodules
-                    if class_path.startswith(source_module + "."):
-                        # Get the simple class name (last part)
-                        class_name = class_path.split(".")[-1]
-                        # Create the re-export path
-                        short_path = f"{current_module}.{class_name}"
-                        # Register the alias
-                        try:
-                            external_library_cache.set_alias(
-                                library_name, short_path, class_path, version
-                            )
-                            logger.debug(
-                                f"Registered wildcard re-export alias: {short_path} -> {class_path}"
-                            )
-                        except Exception as e:
-                            logger.debug(
-                                f"Failed to register wildcard re-export alias {short_path}: {e}"
-                            )
-            # Clear the wildcard imports for next cache population
-            del self._wildcard_imports
 
         logger.info(f"Populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
@@ -1746,18 +1799,40 @@ class ExternalClassInspector:
                 parent_class_info_cached = None
                 if lib_info:
                     version = lib_info["version"]
-                    parent_class_info_cached = external_library_cache.get(
-                        library_name, base_class_path, version
-                    )
+
+                    # Resolve relative import paths to full paths
+                    # base_class_path might be like ".dimension.ViewableElement" or "..element.Element"
+                    resolved_parent_path = base_class_path
+                    if base_class_path.startswith("."):
+                        # Relative import - resolve to full path
+                        # e.g., full_class_path = "holoviews.core.element.Element"
+                        #       base_class_path = ".dimension.ViewableElement"
+                        # Result should be "holoviews.core.dimension.ViewableElement"
+                        #
+                        # The current module is the file containing the class
+                        # e.g., for "holoviews.core.data.Dataset", current_module is "holoviews.core.data"
+                        current_module = ".".join(
+                            full_class_path.split(".")[:-1]
+                        )  # Remove class name
+                        # Check if this class is in a package (__init__.py)
+                        is_package = False
+                        if full_class_path in class_ast_nodes:
+                            _, _, source_path = class_ast_nodes[full_class_path]
+                            is_package = source_path.name == "__init__.py"
+                        resolved_parent_path = self._resolve_relative_module_path(
+                            base_class_path, current_module, library_name, is_package
+                        )
+
+                    if resolved_parent_path:
+                        parent_class_info_cached = external_library_cache.get(
+                            library_name, resolved_parent_path, version
+                        )
 
                 if parent_class_info_cached:
                     # Parent is already cached with ALL its inherited parameters - just use it!
                     for param_name, param_info in parent_class_info_cached.parameters.items():
                         if param_name not in class_info.parameters:
                             class_info.parameters[param_name] = param_info
-                    logger.debug(
-                        f"Inherited {len(parent_class_info_cached.parameters)} params from cached {base_class_path}"
-                    )
                     # Don't recurse - cached parent already has everything
                     continue
 
