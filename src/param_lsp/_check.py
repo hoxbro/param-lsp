@@ -107,7 +107,7 @@ def run_check(files: list[str], python_env) -> None:
 
 
 def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) -> None:
-    """Print a single diagnostic in ruff-like format."""
+    """Print a single diagnostic."""
     line = diagnostic["line"]  # 0-indexed
     col = diagnostic["col"]  # 0-indexed
     end_line = diagnostic["end_line"]  # 0-indexed
@@ -120,19 +120,22 @@ def print_diagnostic(file_path: str, content: str, diagnostic: TypeErrorDict) ->
     lines = content.split("\n")
 
     # Color codes
-    red = "\033[91m"
-    yellow = "\033[93m"
-    cyan = "\033[36m"
-    dim = "\033[2m"
-    reset = "\033[0m"
+    if hasattr(sys.stdout, "isatty") and sys.stdout.isatty():
+        red = "\033[91m"
+        yellow = "\033[93m"
+        cyan = "\033[36m"
+        dim = "\033[2m"
+        reset = "\033[0m"
+    else:
+        red = yellow = cyan = dim = reset = ""
 
     # Choose color based on severity
     error_color = yellow if severity == "warning" else red
 
-    # Format: code: message (like ruff)
+    # Format: code: message
     print(f"{error_color}{code}:{reset} {message}")
 
-    # Format location with arrow (like ruff)
+    # Format location with arrow
     print(f"  {cyan}-->{reset} {file_path}:{line + 1}:{col + 1}")
 
     # Print separator
