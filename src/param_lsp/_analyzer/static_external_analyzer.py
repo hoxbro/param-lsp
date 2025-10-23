@@ -326,6 +326,69 @@ class ExternalClassInspector:
         result = ".".join([*base_parts, remaining]) if remaining else ".".join(base_parts)
         return result
 
+    def _find_likely_file_for_class(
+        self, full_class_path: str, source_paths: list[Path]
+    ) -> Path | None:
+        """Find the most likely file that should contain a class based on module path.
+
+        Args:
+            full_class_path: Full class path like "holoviews.plotting.util.initialize_dynamic"
+            source_paths: List of source file paths to search
+
+        Returns:
+            Path to the likely file, or None if not found
+        """
+        parts = full_class_path.split(".")
+        if len(parts) < 2:
+            return None
+
+        # Try to find file matching the module path
+        # e.g., "holoviews.plotting.util.Foo" -> holoviews/plotting/util.py
+        module_parts = parts[:-1]  # Everything except the class name
+
+        for source_path in source_paths:
+            # Check if this file matches the module path
+            path_parts = source_path.parts
+            if all(part in path_parts for part in module_parts):
+                # Check if the ordering matches
+                indices = [path_parts.index(part) for part in module_parts]
+                if indices == sorted(indices):  # Parts appear in correct order
+                    return source_path
+
+        return None
+
+    def _is_class_definition_in_file(self, file_path: Path, class_name: str) -> bool:
+        """Quickly check if a name is defined as a class in the given file.
+
+        This is a fast check that only parses the file to look for definitions.
+
+        Args:
+            file_path: Path to the Python file
+            class_name: Name to check (e.g., "initialize_dynamic")
+
+        Returns:
+            False ONLY if we find a function definition with this name (not a class).
+            True otherwise (might be a class, or re-exported, or not found in this file).
+        """
+        try:
+            source_code = file_path.read_text(encoding="utf-8")
+            tree = _treesitter.parser.parse(source_code)
+
+            # Look for ANY top-level definition with this name
+            for node in _treesitter.get_children(tree.root_node):
+                if node.type == "function_definition":
+                    name_node = node.child_by_field_name("name")
+                    if name_node and _treesitter.get_value(name_node) == class_name:
+                        # Found a function definition with this name - definitely not a class
+                        return False
+
+            # Either found as a class, or not found (might be re-exported) - continue search
+            return True
+        except Exception as e:
+            logger.debug(f"Error checking if {class_name} is a class in {file_path}: {e}")
+            # If we can't check, assume it might be a class to avoid false negatives
+            return True
+
     def _build_file_dependency_graph(
         self, source_paths: list[Path], library_name: str, library_root_path: Path
     ) -> dict[Path, set[Path]]:
@@ -798,6 +861,13 @@ class ExternalClassInspector:
         source_paths = self._discover_library_sources(root_module)
         if not source_paths:
             logger.debug(f"No source files found for {root_module}")
+            return None
+
+        # Try to find the likely file based on module path first for quick validation
+        likely_file = self._find_likely_file_for_class(full_class_path, source_paths)
+        if likely_file and not self._is_class_definition_in_file(likely_file, class_name):
+            # Quick check: is this even a class definition?
+            logger.debug(f"{class_name} in {likely_file} is not a class definition, skipping")
             return None
 
         # Search for the class in source files using queue-based analysis
