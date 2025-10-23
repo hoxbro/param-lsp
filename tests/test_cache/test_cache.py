@@ -416,13 +416,8 @@ w = pn.widgets.IntSlider()
     ("library_name", "library_version", "expected_classes", "expected_aliases"),
     [
         ("param", "2.2.1", 11, 5),
-        ("panel", "1.8.2", 279, 190),  # Updated: dependency-ordered processing finds more classes
-        (
-            "holoviews",
-            "1.21.0",
-            362,
-            112,
-        ),  # Updated: dependency-ordered processing finds more classes
+        ("panel", "1.8.2", 279, 190),
+        ("holoviews", "1.21.0", 362, 112),
     ],
 )
 def test_cache_population_levels(
