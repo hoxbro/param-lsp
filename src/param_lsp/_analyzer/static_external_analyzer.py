@@ -853,13 +853,23 @@ class ExternalClassInspector:
         alias_map = {}  # short_path -> full_path
         if hasattr(self, "_wildcard_imports"):
             logger.debug(f"Building alias map from {len(self._wildcard_imports)} wildcard imports")
-            # First pass: build alias map
+            # First pass: build alias map from classes
             for current_module, source_module in self._wildcard_imports:
                 for class_path in parameterized_classes:
                     if class_path.startswith(source_module + "."):
                         class_name = class_path.split(".")[-1]
                         short_path = f"{current_module}.{class_name}"
                         alias_map[short_path] = class_path
+
+                # Also check reexport_map for explicit imports in the source module
+                # E.g., holoviews.element.Dataset is an alias, not a class
+                for short_path_in_map, full_path_in_map in reexport_map.items():
+                    # Check if this is an export from the source module
+                    if short_path_in_map.startswith(source_module + "."):
+                        class_name = short_path_in_map.split(".")[-1]
+                        # Create alias in current module
+                        short_path = f"{current_module}.{class_name}"
+                        alias_map[short_path] = full_path_in_map
 
         # Replace aliases in inheritance map BEFORE topological sort
         # This ensures dependencies are correctly identified

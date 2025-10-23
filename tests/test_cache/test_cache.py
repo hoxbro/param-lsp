@@ -417,7 +417,7 @@ w = pn.widgets.IntSlider()
     [
         ("param", "2.2.1", 11, 5),
         ("panel", "1.8.2", 275, 190),
-        ("holoviews", "1.21.0", 346, 501),
+        ("holoviews", "1.21.0", 346, 528),  # Increased due to chained alias support
     ],
 )
 def test_cache_population_levels(
