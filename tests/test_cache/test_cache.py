@@ -33,17 +33,21 @@ def isolated_cache():
             # Test code that modifies cache
             external_library_cache.clear()  # Safe - won't affect other tests
     """
-    # Save the original cache directory
+    # Save the original cache directory and pending cache
     original_cache_dir = external_library_cache.cache_dir
+    original_pending_cache = external_library_cache._pending_cache.copy()
 
     # Create and use a temporary directory for this test
     with tempfile.TemporaryDirectory() as temp_dir:
         external_library_cache.cache_dir = Path(temp_dir)
+        # Clear the in-memory pending cache to ensure isolation
+        external_library_cache._pending_cache.clear()
         try:
             yield external_library_cache
         finally:
-            # Restore the original cache directory
+            # Restore the original cache directory and pending cache
             external_library_cache.cache_dir = original_cache_dir
+            external_library_cache._pending_cache = original_pending_cache
 
 
 class TestExternalLibraryCache:
