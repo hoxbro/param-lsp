@@ -945,6 +945,7 @@ class ExternalClassInspector:
                     source_path,
                     inheritance_map,
                     class_ast_nodes,
+                    self.detected_parameter_types,
                 )
                 if class_info:
                     # Cache under the full path
@@ -1085,8 +1086,14 @@ class ExternalClassInspector:
                     # Verify this is actually a Parameterized class
                     if self._inherits_from_parameterized(class_definition, class_imports):
                         # Convert AST node to ParameterizedInfo
+                        # For local files, parameter_types may not be available (None is fine)
+                        parameter_types = getattr(self, "detected_parameter_types", None)
                         result = self._convert_ast_to_class_info(
-                            class_definition, class_imports, full_class_path, source_path
+                            class_definition,
+                            class_imports,
+                            full_class_path,
+                            source_path,
+                            parameter_types=parameter_types,
                         )
                         # Clean up AST caches after successful conversion
                         self._cleanup_ast_caches()
@@ -1394,7 +1401,9 @@ class ExternalClassInspector:
         class_info = ParameterizedInfo(name=class_name)
 
         # Find parameter assignments in class body
-        parameter_detector = ParameterDetector(imports)
+        # For local analysis, parameter_types may not be available
+        parameter_types = getattr(self, "detected_parameter_types", None)
+        parameter_detector = ParameterDetector(imports, parameter_types)
         self._extract_class_parameters(
             class_node, parameter_detector, class_info, source_lines, imports
         )
@@ -1716,6 +1725,7 @@ class ExternalClassInspector:
         file_path: Path,
         inheritance_map: dict[str, list[str]] | None = None,
         class_ast_nodes: dict[str, tuple[Node, dict[str, str], Path]] | None = None,
+        parameter_types: set[str] | None = None,
     ) -> ParameterizedInfo:
         """Convert an AST class node to ParameterizedInfo.
 
@@ -1726,6 +1736,7 @@ class ExternalClassInspector:
             file_path: Path to the source file
             inheritance_map: Optional map of full_class_path -> [base_class_paths]
             class_ast_nodes: Optional map of full_class_path -> (ast_node, imports, file_path)
+            parameter_types: Set of detected Parameter type paths from static analysis
 
         Returns:
             ParameterizedInfo with extracted parameters
@@ -1741,7 +1752,7 @@ class ExternalClassInspector:
         # Find parameter assignments in class body
         from param_lsp._analyzer.ast_navigator import ParameterDetector
 
-        parameter_detector = ParameterDetector(imports)
+        parameter_detector = ParameterDetector(imports, parameter_types)
 
         # Get the actual source lines for parameter extraction
         source_lines = self.file_source_cache.get(file_path)
