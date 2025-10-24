@@ -32,7 +32,7 @@ PARAM_TYPE_MAP = {
     "Tuple": tuple,
     "Dict": dict,
     "Array": (list, tuple),
-    "Range": (int, float),
+    "Range": tuple,
     "Date": str,
     "CalendarDate": str,
     "Filename": str,
