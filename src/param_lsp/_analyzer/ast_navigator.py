@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from param_lsp import _treesitter
-from param_lsp.constants import PARAM_TYPES
+from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPES
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -98,9 +98,18 @@ class ParameterDetector:
             # Check if it's an imported param type
             if func_name in self.imports:
                 imported_full_name = self.imports[func_name]
+                # Accept types from param module
                 if imported_full_name.startswith("param."):
                     param_type = imported_full_name.split(".")[-1]
                     return param_type in PARAM_TYPES
+
+                # Accept custom parameter types from known external libraries
+                # (e.g., panel.viewable.Children, holoviews.core.dimension.Dimension)
+                for library in ALLOWED_EXTERNAL_LIBRARIES:
+                    if imported_full_name.startswith(f"{library}."):
+                        # Accept it as a potential parameter type
+                        # Custom types like Children inherit from param.Parameter
+                        return True
 
         return False
 

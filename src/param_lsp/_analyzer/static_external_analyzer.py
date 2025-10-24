@@ -810,6 +810,47 @@ class ExternalClassInspector:
 
         logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
 
+        # Phase 1.5: Iterative Parameter type detection
+        logger.debug("Phase 1.5: Iterative Parameter type detection")
+        parameter_types: set[str] = set()
+
+        # Round 0: Find param.Parameter base class itself
+        for class_path in inheritance_map:
+            if self._is_parameter_base(class_path, library_name):
+                parameter_types.add(class_path)
+
+        logger.debug(f"Round 0: Found {len(parameter_types)} Parameter root classes")
+
+        # Round 1: Find direct Parameter subclasses
+        for class_path, bases in inheritance_map.items():
+            if any(self._is_parameter_base(base, library_name) for base in bases):
+                parameter_types.add(class_path)
+
+        logger.debug(f"Round 1: Found {len(parameter_types)} direct Parameter subclasses")
+
+        # Round 2+: Propagate iteratively through inheritance hierarchy
+        round_num = 2
+        changed = True
+        while changed:
+            changed = False
+            for class_path, bases in inheritance_map.items():
+                if class_path not in parameter_types:
+                    # Check if any base class is already marked as Parameter type
+                    for base in bases:
+                        if self._base_matches_parameter_type(base, parameter_types):
+                            parameter_types.add(class_path)
+                            changed = True
+                            break
+
+            if changed:
+                logger.debug(f"Round {round_num}: Total {len(parameter_types)} Parameter types")
+                round_num += 1
+
+        logger.debug(f"Final: Found {len(parameter_types)} total Parameter types")
+
+        # Store detected parameter types for use in parameter extraction
+        self.detected_parameter_types = parameter_types
+
         # Resolve relative import paths in inheritance map before topological sort
         # The map may contain relative paths like ".dimension.ViewableElement" which need
         # to be resolved to full paths for proper dependency tracking
