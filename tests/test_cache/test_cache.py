@@ -33,17 +33,21 @@ def isolated_cache():
             # Test code that modifies cache
             external_library_cache.clear()  # Safe - won't affect other tests
     """
-    # Save the original cache directory
+    # Save the original cache directory and pending cache
     original_cache_dir = external_library_cache.cache_dir
+    original_pending_cache = external_library_cache._pending_cache.copy()
 
     # Create and use a temporary directory for this test
     with tempfile.TemporaryDirectory() as temp_dir:
         external_library_cache.cache_dir = Path(temp_dir)
+        # Clear the in-memory pending cache to ensure isolation
+        external_library_cache._pending_cache.clear()
         try:
             yield external_library_cache
         finally:
-            # Restore the original cache directory
+            # Restore the original cache directory and pending cache
             external_library_cache.cache_dir = original_cache_dir
+            external_library_cache._pending_cache = original_pending_cache
 
 
 class TestExternalLibraryCache:
@@ -415,9 +419,9 @@ w = pn.widgets.IntSlider()
     # Update the version and expected values when updating uv.lock
     ("library_name", "library_version", "expected_classes", "expected_aliases"),
     [
-        ("param", "2.2.1", 11, 5),
-        ("panel", "1.8.2", 275, 190),
-        ("holoviews", "1.21.0", 346, 528),
+        ("param", "2.2.1", 11, 82),
+        ("panel", "1.8.2", 381, 368),
+        ("holoviews", "1.21.0", 358, 779),
     ],
 )
 def test_cache_population_levels(

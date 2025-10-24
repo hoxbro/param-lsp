@@ -655,18 +655,8 @@ class ExternalClassInspector:
             return 0
 
         # Build dependency graph and sort files in topological order
-        # Pre-compute library root path
-        search_dirs = list(self.python_env.site_packages)
-        if self.python_env.user_site:
-            search_dirs.append(self.python_env.user_site)
-
-        library_root_path = None
-        for site_dir in search_dirs:
-            lib_path = site_dir / library_name
-            if lib_path.exists():
-                library_root_path = lib_path
-                break
-
+        # Pre-compute library root path from source files
+        library_root_path = self._find_library_root_path(library_name, source_paths)
         if not library_root_path:
             logger.debug(f"Could not find library root path for {library_name}")
             return 0
@@ -919,23 +909,17 @@ class ExternalClassInspector:
                     # Cache under the full path
                     external_library_cache.set(library_name, class_path, class_info, version)
                     count += 1
-
-                    # Register any re-export aliases for this class
-                    for short_path, full_path in reexport_map.items():
-                        if full_path == class_path:
-                            try:
-                                external_library_cache.set_alias(
-                                    library_name, short_path, full_path, version
-                                )
-                                logger.debug(
-                                    f"Registered re-export alias: {short_path} -> {full_path}"
-                                )
-                            except Exception as e:
-                                logger.debug(
-                                    f"Failed to register re-export alias {short_path}: {e}"
-                                )
             except Exception as e:
                 logger.debug(f"Failed to cache {class_path}: {e}")
+
+        # Register all re-export aliases (including chains like panel.Column -> panel.layout.Column -> panel.layout.base.Column)
+        logger.debug(f"Registering {len(reexport_map)} re-export aliases")
+        for short_path, full_path in reexport_map.items():
+            try:
+                external_library_cache.set_alias(library_name, short_path, full_path, version)
+                logger.debug(f"Registered re-export alias: {short_path} -> {full_path}")
+            except Exception as e:
+                logger.debug(f"Failed to register re-export alias {short_path}: {e}")
 
         logger.info(f"Populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
@@ -970,7 +954,8 @@ class ExternalClassInspector:
             return None
 
         # Try to populate cache if not already done
-        self.populate_library_cache(root_module)
+        if root_module not in self.populated_libraries:
+            self.populate_library_cache(root_module)
 
         # Get library version from pre-populated cache
         lib_info = self.library_info_cache.get(root_module)
@@ -1197,6 +1182,46 @@ class ExternalClassInspector:
         )
         return unique_paths
 
+    def _find_library_root_path(self, library_name: str, source_paths: list[Path]) -> Path | None:
+        """Find the library root path from source files.
+
+        First checks if source files are in site-packages directories.
+        If not (editable install case), finds the actual library root from source files.
+
+        Args:
+            library_name: Name of the library (e.g., "panel")
+            source_paths: List of source file paths for the library
+
+        Returns:
+            Path to library root directory or None if not found
+        """
+        if not source_paths:
+            return None
+
+        # First, try to find library in site-packages directories
+        # This handles normal pip installs
+        search_dirs = list(self.python_env.site_packages)
+        if self.python_env.user_site:
+            search_dirs.append(self.python_env.user_site)
+
+        # Only check the first source path for efficiency (all should be in same root)
+        first_source = source_paths[0]
+        for site_dir in search_dirs:
+            lib_path = site_dir / library_name
+            # Check if library exists and first source file is in this path
+            if lib_path.exists() and first_source.is_relative_to(lib_path):
+                return lib_path
+
+        # If not found in site-packages, find from source files themselves
+        # This handles editable installs where source files are in project directories
+        # Only check the first source file since all should share the same root
+        for parent in first_source.parents:
+            if parent.name == library_name:
+                logger.debug(f"Found library root from source files: {parent} (editable install)")
+                return parent
+
+        return None
+
     def _collect_python_files(self, directory: Path) -> list[Path]:
         """Recursively collect Python files from a directory.
 
@@ -1211,11 +1236,7 @@ class ExternalClassInspector:
             if directory.is_file() and directory.suffix == ".py":
                 python_files.append(directory)
             elif directory.is_dir():
-                python_files.extend(
-                    path
-                    for path in directory.rglob("*.py")
-                    if path.is_file() and not any(part in ("test", "tests") for part in path.parts)
-                )
+                python_files.extend(path for path in directory.rglob("*.py") if path.is_file())
         except (OSError, PermissionError) as e:
             logger.debug(f"Error accessing {directory}: {e}")
 
