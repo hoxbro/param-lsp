@@ -567,3 +567,49 @@ class TestClass(param.Parameterized):
         """Test _get_class_parameters with missing class."""
         params = validator._get_class_parameters("MissingClass")
         assert len(params) == 0
+
+    def test_check_param_depends_duplicate_class_names(self, validator):
+        """Test @param.depends with duplicate class names - should use last definition."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.String()
+
+class Test(param.Parameterized):
+    label = param.String(default="label")
+
+    @param.depends("label")
+    def value(self):
+        return self.label.title()
+"""
+        tree = parser.parse(code)
+
+        # Should not create errors - the second Test class should be used
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
+
+    def test_check_param_depends_duplicate_class_names_in_functions(self, validator):
+        """Test @param.depends with duplicate class names in different function scopes."""
+        code = """
+import param
+
+def test1():
+    class Test(param.Parameterized):
+        a = param.String()
+
+def test2():
+    class Test(param.Parameterized):
+        label = param.String(default="label")
+
+        @param.depends("label")
+        def value(self):
+            return self.label.title()
+"""
+        tree = parser.parse(code)
+
+        # Should not create errors - each function scope has its own Test class
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
