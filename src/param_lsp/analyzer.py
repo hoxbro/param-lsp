@@ -182,12 +182,15 @@ class ParamAnalyzer:
         class_nodes: list[TSNode] = [class_node for class_node, _captures in class_matches]
 
         # Process classes in dependency order (parents before children)
-        processed_classes = set()
-        while len(processed_classes) < len(class_nodes):
+        # Track processed nodes (not names) to allow duplicate class names
+        processed_nodes = set()
+        processed_names = set()  # Track names separately for dependency checking
+        while len(processed_nodes) < len(class_nodes):
             progress_made = False
             for node in class_nodes:
                 class_name = _treesitter.get_class_name(node)
-                if not class_name or class_name in processed_classes:
+                # Skip if this specific node was already processed or has no name
+                if not class_name or id(node) in processed_nodes:
                     continue
 
                 # Check if all parent classes are processed or are external param classes
@@ -201,14 +204,15 @@ class ParamAnalyzer:
                             any(
                                 _treesitter.get_class_name(cn) == parent_name for cn in class_nodes
                             )
-                            and parent_name not in processed_classes
+                            and parent_name not in processed_names
                         ):
                             can_process = False
                             break
 
                 if can_process:
                     self._handle_class_def(node)
-                    processed_classes.add(class_name)
+                    processed_nodes.add(id(node))
+                    processed_names.add(class_name)  # Track name for dependency checking
                     progress_made = True
 
             # Prevent infinite loop if there are circular dependencies
@@ -216,9 +220,10 @@ class ParamAnalyzer:
                 # Process remaining classes anyway
                 for node in class_nodes:
                     class_name = _treesitter.get_class_name(node)
-                    if class_name and class_name not in processed_classes:
+                    if class_name and id(node) not in processed_nodes:
                         self._handle_class_def(node)
-                        processed_classes.add(class_name)
+                        processed_nodes.add(id(node))
+                        processed_names.add(class_name)
                 break
 
         # Pre-pass: discover all external Parameterized classes using optimized queries
