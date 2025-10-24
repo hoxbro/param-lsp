@@ -62,6 +62,13 @@ class ExternalLibraryCache:
         if not version:
             return False
 
+        # Check in-memory pending cache first (fast path)
+        cache_key = f"{library_name}:{version}"
+        if cache_key in self._pending_cache:
+            classes_data = self._pending_cache[cache_key].get("classes", {})
+            return len(classes_data) > 0
+
+        # Check disk cache (slower path)
         cache_path = self._get_cache_path(library_name, version)
         if not cache_path.exists():
             return False
@@ -73,6 +80,9 @@ class ExternalLibraryCache:
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
                 return False
+
+            # Load into memory for future fast lookups
+            self._pending_cache[cache_key] = cache_data
 
             # Check if cache has any classes
             classes_data = cache_data.get("classes", {})
@@ -99,11 +109,14 @@ class ExternalLibraryCache:
             if class_data:
                 return self._deserialize_param_class_info(class_data)
 
-            # Check if this is an alias for another class
+            # Check if this is an alias for another class (follow alias chain)
             aliases = cache_data.get("aliases", {})
-            if class_path in aliases:
-                full_path = aliases[class_path]
-                class_data = classes_data.get(full_path)
+            current_path = class_path
+            seen = set()  # Prevent infinite loops
+            while current_path in aliases and current_path not in seen:
+                seen.add(current_path)
+                current_path = aliases[current_path]
+                class_data = classes_data.get(current_path)
                 if class_data:
                     return self._deserialize_param_class_info(class_data)
 
@@ -121,17 +134,23 @@ class ExternalLibraryCache:
                 logger.debug(f"Cache invalid for {library_name}, will regenerate")
                 return None
 
+            # Load the disk cache into memory for subsequent fast lookups
+            self._pending_cache[cache_key] = cache_data
+
             # Check if this specific class path is in the cache
             classes_data = cache_data.get("classes", {})
             class_data = classes_data.get(class_path)
             if class_data:
                 return self._deserialize_param_class_info(class_data)
 
-            # Check if this is an alias for another class
+            # Check if this is an alias for another class (follow alias chain)
             aliases = cache_data.get("aliases", {})
-            if class_path in aliases:
-                full_path = aliases[class_path]
-                class_data = classes_data.get(full_path)
+            current_path = class_path
+            seen = set()  # Prevent infinite loops
+            while current_path in aliases and current_path not in seen:
+                seen.add(current_path)
+                current_path = aliases[current_path]
+                class_data = classes_data.get(current_path)
                 if class_data:
                     return self._deserialize_param_class_info(class_data)
 

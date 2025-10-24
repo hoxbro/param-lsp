@@ -415,9 +415,9 @@ w = pn.widgets.IntSlider()
     # Update the version and expected values when updating uv.lock
     ("library_name", "library_version", "expected_classes", "expected_aliases"),
     [
-        ("param", "2.2.1", 11, 5),
-        ("panel", "1.8.2", 275, 190),
-        ("holoviews", "1.21.0", 346, 528),
+        ("param", "2.2.1", 11, 82),
+        ("panel", "1.8.2", 381, 368),
+        ("holoviews", "1.21.0", 358, 779),
     ],
 )
 def test_cache_population_levels(
