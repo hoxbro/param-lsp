@@ -66,6 +66,7 @@ class PythonEnvironment:
     def _query_python_exe(self) -> Path | None:
         try:
             # Use JSON output for reliable cross-platform path handling
+            logger.debug(f"Querying sys.path and uset_site from {self.python}")
             script = "import json, sys, site; print(json.dumps({'sys_path': sys.path, 'user_site': site.USER_SITE}))"
             output = subprocess.check_output(  # noqa: S603
                 [os.fspath(self.python), "-c", script], text=True, timeout=10
@@ -96,6 +97,7 @@ class PythonEnvironment:
         """
         try:
             # Convert library names list to JSON for safe passing to subprocess
+            logger.debug(f"Querying library info from {self.python}")
             libraries_json = json.dumps(library_names)
             script = f"""
 import json
