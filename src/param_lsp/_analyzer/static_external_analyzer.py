@@ -83,7 +83,7 @@ class ExternalClassInspector:
 
         # Store extra libraries and create combined allowed libraries set
         self.extra_libraries = extra_libraries if extra_libraries is not None else set()
-        self.allowed_libraries = ALLOWED_EXTERNAL_LIBRARIES | self.extra_libraries
+        self.allowed_libraries = set(ALLOWED_EXTERNAL_LIBRARIES) | self.extra_libraries
 
         # Eagerly populate library info cache for all allowed external libraries
         self._populate_all_library_info_cache()

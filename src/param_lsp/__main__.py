@@ -156,7 +156,8 @@ def main():
             return
 
         inspector = ExternalClassInspector(python_env=python_env, extra_libraries=extra_libraries)
-        all_libraries = ALLOWED_EXTERNAL_LIBRARIES | extra_libraries
+        # Combine libraries in dependency order: allowed libraries first, then extras
+        all_libraries = list(ALLOWED_EXTERNAL_LIBRARIES) + list(extra_libraries)
 
         if args.regenerate:
             external_library_cache.clear()
@@ -165,7 +166,7 @@ def main():
             return
 
         if args.generate:
-            for library in sorted(all_libraries):
+            for library in all_libraries:
                 inspector.populate_library_cache(library)
             return
 
