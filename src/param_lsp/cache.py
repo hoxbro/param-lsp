@@ -247,6 +247,43 @@ class ExternalLibraryCache:
         # Add the alias mapping in memory
         self._pending_cache[cache_key]["aliases"][alias_path] = full_path
 
+    def set_parameter_types(
+        self, library_name: str, parameter_types: set[str], version: str
+    ) -> None:
+        """Store detected Parameter type paths for a library in memory.
+
+        Args:
+            library_name: Name of the library
+            parameter_types: Set of full paths to detected Parameter types
+            version: Version of the library
+        """
+        if not self._caching_enabled:
+            return
+
+        if not version:
+            return
+
+        # Get or initialize pending cache for this library version
+        cache_key = f"{library_name}:{version}"
+        if cache_key not in self._pending_cache:
+            cache_path = self._get_cache_path(library_name, version)
+
+            # Load existing cache data or create new
+            cache_data = self._create_cache_structure(library_name, version)
+            if cache_path.exists():
+                try:
+                    with cache_path.open("r", encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                    if self._is_cache_valid(existing_data, library_name, version):
+                        cache_data = existing_data
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            self._pending_cache[cache_key] = cache_data
+
+        # Store parameter types as a sorted list for consistent output
+        self._pending_cache[cache_key]["parameter_types"] = sorted(parameter_types)
+
     def flush(self, library_name: str, version: str) -> None:
         """Write all pending cache changes for a library to disk.
 
@@ -288,6 +325,7 @@ class ExternalLibraryCache:
             },
             "classes": {},
             "aliases": {},  # Maps re-export paths to full paths (e.g., panel.widgets.TextInput -> panel.widgets.input.TextInput)
+            "parameter_types": [],  # List of detected Parameter type paths (e.g., ["param.Parameter", "panel.viewable.Children"])
         }
 
     def _is_cache_valid(self, cache_data: dict[str, Any], library_name: str, version: str) -> bool:

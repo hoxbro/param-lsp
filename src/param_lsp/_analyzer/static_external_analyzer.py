@@ -851,6 +851,9 @@ class ExternalClassInspector:
         # Store detected parameter types for use in parameter extraction
         self.detected_parameter_types = parameter_types
 
+        # Cache parameter types for this library
+        external_library_cache.set_parameter_types(library_name, parameter_types, version)
+
         # Resolve relative import paths in inheritance map before topological sort
         # The map may contain relative paths like ".dimension.ViewableElement" which need
         # to be resolved to full paths for proper dependency tracking
