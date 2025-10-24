@@ -2239,6 +2239,29 @@ class ExternalClassInspector:
 
         return False
 
+    def _is_parameter_base(self, base_path: str, library_name: str | None = None) -> bool:
+        """Check if a base class path is param.Parameter.
+
+        Args:
+            base_path: Base class path to check
+            library_name: Name of library being analyzed (for context-aware matching)
+
+        Returns:
+            True if base class is param.Parameter
+        """
+        # Common forms that work across all libraries
+        if base_path in (
+            "param.Parameter",
+            "param.parameterized.Parameter",
+        ):
+            return True
+
+        # Relative import form only valid within param library's own source
+        if base_path == ".parameterized.Parameter":
+            return library_name == "param"
+
+        return False
+
     def _base_matches_parameterized_class(
         self, base_name: str, parameterized_classes: set[str]
     ) -> bool:
@@ -2305,6 +2328,85 @@ class ExternalClassInspector:
 
             # Check if base_name components are a suffix of full_path
             # e.g., 'panel.layout.Feed' matches 'panel.layout.feed.Feed'
+            if len(base_parts) <= len(full_parts):
+                # Try matching from the end (suffix match)
+                matches = True
+                j = len(full_parts) - 1
+                for i in range(len(base_parts) - 1, -1, -1):
+                    if base_parts[i] != full_parts[j]:
+                        matches = False
+                        break
+                    j -= 1
+                if matches:
+                    return True
+
+                # Also try matching as a contiguous substring (for complex import patterns)
+                for offset in range(len(full_parts) - len(base_parts) + 1):
+                    if full_parts[offset : offset + len(base_parts)] == base_parts:
+                        return True
+
+        return False
+
+    def _base_matches_parameter_type(self, base_name: str, parameter_types: set[str]) -> bool:
+        """Check if a base class name matches any known Parameter type.
+
+        Handles matching both simple names (e.g., 'Children') and full paths
+        (e.g., 'panel.viewable.Children'), as well as relative imports and
+        partial qualified paths.
+
+        Args:
+            base_name: Base class name to check (may be simple or fully qualified)
+            parameter_types: Set of full paths to known Parameter types
+
+        Returns:
+            True if base_name matches a known Parameter type
+        """
+        # Direct/exact match: base_name is a full path
+        if base_name in parameter_types:
+            return True
+
+        # Simple name match: base_name has no dots (e.g., 'Children')
+        # This handles cases where a class is defined in the same file or imported without qualification
+        # Match: 'Children' matches 'panel.viewable.Children'
+        if "." not in base_name:
+            return any(full_path.endswith(f".{base_name}") for full_path in parameter_types)
+
+        # Handle relative imports (starting with dots)
+        if base_name.startswith("."):
+            # Extract the class name from the relative import
+            # e.g., '.viewable.Children' -> 'Children'
+            parts = base_name.lstrip(".").split(".")
+            if parts:
+                class_name = parts[-1]
+                # Try to match by class name and partial path
+                for full_path in parameter_types:
+                    if full_path.endswith(f".{class_name}"):
+                        # Also check if the relative path components match
+                        if len(parts) > 1:
+                            # Check if the module path components match
+                            rel_module_parts = parts[:-1]  # Exclude class name
+                            full_parts = full_path.split(".")
+                            # Try to find matching suffix
+                            for i in range(len(full_parts) - len(parts) + 1):
+                                if full_parts[i : i + len(rel_module_parts)] == rel_module_parts:
+                                    return True
+                        else:
+                            # Just class name, already matched
+                            return True
+            return False
+
+        # Partial qualified path match (e.g., 'viewable.Children' or 'panel.viewable.Children')
+        base_parts = base_name.split(".")
+        base_class = base_parts[-1]
+
+        for full_path in parameter_types:
+            full_parts = full_path.split(".")
+
+            # Check if the class names match
+            if full_parts[-1] != base_class:
+                continue
+
+            # Check if base_name components are a suffix of full_path
             if len(base_parts) <= len(full_parts):
                 # Try matching from the end (suffix match)
                 matches = True
