@@ -182,5 +182,3 @@ CALL COUNT
      4352    0.010    0.000    0.020    0.000 pathlib.py:387(_parse_path)
      4352    0.002    0.000    0.003    0.000 <frozen posixpath>:138(splitroot)
      4351    0.004    0.000    0.032    0.000 pathlib.py:407(_load_parts)
-
-

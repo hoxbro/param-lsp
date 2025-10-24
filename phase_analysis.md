@@ -36,23 +36,27 @@ Phase 2: Extract parameters
 ## Issues with Current Structure
 
 ### 1. **Inconsistent Naming**
-   - Phase -1, Phase 0, Phase 1, Phase 2 (confusing)
-   - Major steps unlabeled (dependency graph, sort, resolve)
+
+- Phase -1, Phase 0, Phase 1, Phase 2 (confusing)
+- Major steps unlabeled (dependency graph, sort, resolve)
 
 ### 2. **Duplicate File I/O** (PERFORMANCE)
-   - Phase -1 reads: `source_code = source_path.read_text()`
-   - Phase 0 re-reads: `source_code = source_path.read_text()`
-   - Could cache source_code in Phase -1
+
+- Phase -1 reads: `source_code = source_path.read_text()`
+- Phase 0 re-reads: `source_code = source_path.read_text()`
+- Could cache source_code in Phase -1
 
 ### 3. **Mixed Concerns in Phase 0**
-   - Extracts imports (already done for dependency graph)
-   - Extracts classes
-   - Processes re-exports
-   - All interleaved in one loop
+
+- Extracts imports (already done for dependency graph)
+- Extracts classes
+- Processes re-exports
+- All interleaved in one loop
 
 ### 4. **Unclear Phase Boundaries**
-   - When does "parsing" end and "analysis" begin?
-   - Hard to understand data flow
+
+- When does "parsing" end and "analysis" begin?
+- Hard to understand data flow
 
 ## Proposed New Phase Structure
 
@@ -89,21 +93,25 @@ Phase 5: Parameter Extraction
 ## Optimization Opportunities
 
 ### A. Cache source_code in Phase 1 ✅ HIGH PRIORITY
+
 **Impact**: Eliminate 187 file reads
 **Change**: Store `(tree, source_code, source_lines)` in Phase 1
 **Savings**: ~0.1-0.2s (187 reads × ~1ms each)
 
 ### B. Rename phases for clarity ✅ MEDIUM PRIORITY
+
 **Impact**: Improve code maintainability
 **Change**: Use consistent Phase 1-5 naming
 **Benefit**: Easier to understand and debug
 
 ### C. Extract Phase 2 imports once ⚠️ LOW PRIORITY
+
 **Note**: Imports are extracted twice (for dep graph + class analysis)
 **Challenge**: Different data structures needed
 **Recommendation**: Leave as-is for now (complexity not worth small gain)
 
 ### D. Combine Phase 4 steps ⚠️ LOW PRIORITY
+
 **Note**: Multiple sub-steps in Parameterized detection
 **Current**: Works well, clear logic
 **Recommendation**: Leave as-is
