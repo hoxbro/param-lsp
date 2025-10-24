@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from param_lsp import _treesitter
-from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES, PARAM_TYPES
+from param_lsp.constants import PARAM_TYPES
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -28,13 +28,15 @@ logger = logging.getLogger(__name__)
 class ParameterDetector:
     """Handles detection of parameter assignments and calls in AST."""
 
-    def __init__(self, imports: dict[str, str]):
+    def __init__(self, imports: dict[str, str], parameter_types: set[str] | None = None):
         """Initialize parameter detector.
 
         Args:
             imports: Dictionary mapping import aliases to full module names
+            parameter_types: Set of detected Parameter type paths from static analysis
         """
         self.imports = imports
+        self.parameter_types = parameter_types or set()
 
     def is_parameter_assignment(self, node: Node) -> bool:
         """Check if a tree-sitter assignment statement looks like a parameter definition.
@@ -91,25 +93,22 @@ class ParameterDetector:
                 func_name = _treesitter.get_value(attr_node)
 
         if func_name:
-            # Check if it's a direct param type
+            # Check if it's a direct param type (hardcoded for backward compatibility)
             if func_name in PARAM_TYPES:
                 return True
 
-            # Check if it's an imported param type
+            # Check if it's an imported type
             if func_name in self.imports:
                 imported_full_name = self.imports[func_name]
-                # Accept types from param module
+
+                # PRIMARY CHECK: Use statically detected parameter types
+                if self.parameter_types and imported_full_name in self.parameter_types:
+                    return True
+
+                # FALLBACK: Check if it's from param module (for local file analysis)
                 if imported_full_name.startswith("param."):
                     param_type = imported_full_name.split(".")[-1]
                     return param_type in PARAM_TYPES
-
-                # Accept custom parameter types from known external libraries
-                # (e.g., panel.viewable.Children, holoviews.core.dimension.Dimension)
-                for library in ALLOWED_EXTERNAL_LIBRARIES:
-                    if imported_full_name.startswith(f"{library}."):
-                        # Accept it as a potential parameter type
-                        # Custom types like Children inherit from param.Parameter
-                        return True
 
         return False
 
