@@ -24,16 +24,17 @@
 
 ---
 
-## Implementation Plan
+## Implementation Status
 
 ### ✅ Phase 0: Setup
 
 - [x] Write plan to file
 - [x] Create todo list for tracking
 
-### ⏳ Phase 1: Add Helper Methods for Parameter Base Detection
+### ✅ Phase 1: Add Helper Methods for Parameter Base Detection
 
 **File**: `src/param_lsp/_analyzer/static_external_analyzer.py`
+**Commit**: `9f42ff9`
 
 Add two helper methods (following the pattern of `_is_parameterized_base`):
 
@@ -84,14 +85,15 @@ def _base_matches_parameter_type(self, base: str, parameter_types: set[str]) -> 
     return False
 ```
 
-**Status**: Pending
+**Status**: ✅ Completed
 
 ---
 
-### Phase 2: Add Parameter Type Detection Loop
+### ✅ Phase 2: Add Parameter Type Detection Loop
 
 **File**: `src/param_lsp/_analyzer/static_external_analyzer.py`
 **Location**: After Parameterized detection (around line 811), before topological sort
+**Commit**: `d67d44d`
 
 Add new detection phase:
 
@@ -140,13 +142,14 @@ logger.debug(f"Final: Found {len(parameter_types)} total Parameter types")
 self.detected_parameter_types = parameter_types
 ```
 
-**Status**: Pending
+**Status**: ✅ Completed
 
 ---
 
-### Phase 3: Update ParameterDetector to Accept Parameter Types
+### ✅ Phase 3: Update ParameterDetector to Accept Parameter Types
 
 **File**: `src/param_lsp/_analyzer/ast_navigator.py`
+**Commit**: `8b38ae9`
 
 **3.1**: Update `__init__` method:
 
@@ -208,13 +211,14 @@ def is_parameter_call(self, node: Node) -> bool:
     return False
 ```
 
-**Status**: Pending
+**Status**: ✅ Completed
 
 ---
 
-### Phase 4: Thread Parameter Types Through Call Chain
+### ✅ Phase 4: Thread Parameter Types Through Call Chain
 
 **File**: `src/param_lsp/_analyzer/static_external_analyzer.py`
+**Commit**: `2e8e622`
 
 **4.1**: Store parameter_types as instance variable (add in detection loop):
 
@@ -259,11 +263,96 @@ class_info = self._convert_ast_to_class_info(
 )
 ```
 
-**Status**: Pending
+**Status**: ✅ Completed
+
+### ✅ Phase 4.5: Cache Parameter Types for External Libraries
+
+**File**: `src/param_lsp/cache.py`, `src/param_lsp/_analyzer/static_external_analyzer.py`
+**Commit**: `b70fe0f`
+
+Added:
+- `parameter_types` list to cache JSON structure
+- `set_parameter_types()` method to store detected types
+- Automatic storage after detection
+
+**Status**: ✅ Completed
+
+### ✅ Phase 4.6: Process Libraries in Dependency Order
+
+**Files**: `src/param_lsp/constants.py`, `src/param_lsp/__main__.py`, `src/param_lsp/_analyzer/static_external_analyzer.py`
+**Commits**: `e56357f`, `9679dee`
+
+Changed:
+- `ALLOWED_EXTERNAL_LIBRARIES` from set to ordered list: `["param", "panel", "holoviews"]`
+- Libraries now process dependencies first via recursive `populate_library_cache()`
+- Added loading of parameter_types from cached dependencies
+
+**Status**: ✅ Completed (but see Phase 5 blocker)
 
 ---
 
-### Phase 5: Test and Verify
+## ⚠️ BLOCKER: Cross-Library Parameter Type Sharing
+
+### Problem
+
+During cache regeneration (`--regenerate`), the cache is cleared first:
+```python
+external_library_cache.clear()  # Deletes all cache files
+for library in all_libraries:
+    inspector.populate_library_cache(library)  # Process each library
+```
+
+When processing Panel:
+1. Panel tries to load param's parameter_types from disk cache
+2. But param's cache hasn't been written to disk yet (only in memory)
+3. Result: Panel sees 0 parameter_types from dependencies
+4. Custom types like `panel.viewable.Children(param.List)` aren't detected
+
+### Current Behavior
+
+```bash
+$ param-lsp cache --regenerate
+# param processes: detects 38 parameter types ✓
+# panel processes: loads 0 parameter types from dependencies ✗
+# holoviews processes: loads 0 parameter types from dependencies ✗
+```
+
+### Solution
+
+Make `detected_parameter_types` a **session-wide accumulator** that persists across library processing:
+
+```python
+class ExternalClassInspector:
+    def __init__(self, ...):
+        # Session-wide registry of detected parameter types
+        self.session_parameter_types: set[str] = set()
+
+    def populate_library_cache(self, library_name: str):
+        # ... detection code ...
+
+        # Start with types from previous libraries in this session
+        parameter_types = set(self.session_parameter_types)
+
+        # Add newly detected types
+        # ... Round 0, 1, 2+ detection ...
+
+        # Update session registry for next library
+        self.session_parameter_types.update(parameter_types)
+
+        # Store detected types
+        self.detected_parameter_types = parameter_types
+```
+
+**Benefits:**
+- Works on first run (no existing cache needed)
+- Types accumulate: param → panel → holoviews
+- Panel can detect `Children(param.List)` because `param.parameters.List` is already in `session_parameter_types`
+
+**Status**: ⚠️ **BLOCKER** - Must implement before testing
+
+---
+
+### ❌ Phase 5: Test and Verify
 
 **5.1**: Test with Panel's custom types:
 
@@ -303,7 +392,28 @@ prek run --all-files
 basedpyright src tests
 ```
 
-**Status**: Pending
+**Status**: ❌ Blocked by cross-library sharing issue
+
+**Current Test Results:**
+```bash
+$ bash run.sh panel layout/base.py
+invalid-depends-parameter: Parameter 'objects' does not exist in class 'WidgetBox'
+```
+
+**Root Cause:** Panel's cache has 0 parameter_types because it can't load param's types during regeneration.
+
+---
+
+## Progress Tracking
+
+- [x] Phase 1: Add helper methods
+- [x] Phase 2: Add parameter type detection loop
+- [x] Phase 3: Update ParameterDetector
+- [x] Phase 4: Thread through call chain
+- [x] Phase 4.5: Cache parameter_types
+- [x] Phase 4.6: Process in dependency order
+- [ ] **Phase 4.7: Session-wide parameter type accumulator** ⚠️ BLOCKER
+- [ ] Phase 5: Test and verify
 
 ---
 
@@ -328,8 +438,41 @@ basedpyright src tests
 
 ---
 
-## Notes
+## Implementation Details
 
-- Keep `PARAM_TYPES` for backward compatibility with local file analysis (where we don't have inheritance_map)
-- Consider caching detected parameter_types per library in future optimization
-- This approach mirrors the proven Parameterized detection algorithm
+### Files Modified
+
+1. **`src/param_lsp/_analyzer/static_external_analyzer.py`**
+   - Added `_is_parameter_base()` and `_base_matches_parameter_type()` helper methods
+   - Added Parameter type detection loop (Phase 1.5)
+   - Updated `_convert_ast_to_class_info()` to accept `parameter_types` parameter
+   - Added loading of parameter_types from cached dependencies (needs fixing)
+
+2. **`src/param_lsp/_analyzer/ast_navigator.py`**
+   - Updated `ParameterDetector.__init__()` to accept `parameter_types` set
+   - Updated `is_parameter_call()` to check detected types first, fallback to hardcoded `PARAM_TYPES`
+
+3. **`src/param_lsp/cache.py`**
+   - Added `parameter_types` list to cache JSON structure
+   - Added `set_parameter_types()` method
+
+4. **`src/param_lsp/constants.py`**
+   - Changed `ALLOWED_EXTERNAL_LIBRARIES` from set to ordered list
+
+5. **`src/param_lsp/__main__.py`**
+   - Updated to preserve library processing order
+
+### Architecture Notes
+
+- Mirrors the proven Parameterized detection algorithm
+- Keep `PARAM_TYPES` for backward compatibility with local file analysis
+- Parameter types detected via static analysis, no runtime introspection needed
+- Each library's types build on previous libraries' types (param → panel → holoviews)
+
+### Next Steps
+
+1. Implement session-wide parameter type accumulator
+2. Test with Panel's `Children` parameter
+3. Verify original bug fix: `bash run.sh panel layout/base.py`
+4. Run full test suite
+5. Update plan with results
