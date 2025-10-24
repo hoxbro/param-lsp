@@ -814,6 +814,39 @@ class ExternalClassInspector:
         logger.debug("Phase 1.5: Iterative Parameter type detection")
         parameter_types: set[str] = set()
 
+        # Pre-populate with parameter types from cached dependency libraries
+        # This allows detecting custom Parameter types that inherit from param types
+        # For example, panel.viewable.Children extends param.parameters.List
+        for dep_lib in ["param", "holoviews", "panel"]:
+            if dep_lib != library_name:
+                try:
+                    # Import the dependency library to get its version
+                    dep_module = __import__(dep_lib)
+                    dep_version = getattr(dep_module, "__version__", None)
+                    if dep_version and external_library_cache.has_library_cache(dep_lib, dep_version):
+                        # Load from disk or memory cache
+                        cache_key = f"{dep_lib}:{dep_version}"
+                        if cache_key in external_library_cache._pending_cache:
+                            cached_types = external_library_cache._pending_cache[cache_key].get("parameter_types", [])
+                        else:
+                            # Load from disk
+                            cache_path = external_library_cache._get_cache_path(dep_lib, dep_version)
+                            if cache_path.exists():
+                                import json
+                                with cache_path.open("r") as f:
+                                    cache_data = json.load(f)
+                                    cached_types = cache_data.get("parameter_types", [])
+                            else:
+                                cached_types = []
+
+                        if cached_types:
+                            parameter_types.update(cached_types)
+                            logger.debug(f"Loaded {len(cached_types)} parameter types from cached {dep_lib}")
+                except (ImportError, Exception) as e:
+                    logger.debug(f"Could not load parameter types from {dep_lib}: {e}")
+
+        logger.debug(f"Starting with {len(parameter_types)} parameter types from dependencies")
+
         # Round 0: Find param.Parameter base class itself
         for class_path in inheritance_map:
             if self._is_parameter_base(class_path, library_name):
