@@ -693,23 +693,7 @@ class ExternalClassInspector:
         ] = {}  # full_class_path -> (ast_node, imports, source_file)
         reexport_map: dict[str, str] = {}  # short_path -> full_path
 
-        # Pre-compute site directories and library root path for module path resolution
-        search_dirs = list(self.python_env.site_packages)
-        if self.python_env.user_site:
-            search_dirs.append(self.python_env.user_site)
-
-        # Cache library root path to avoid repeated exists() and is_relative_to() checks
-        library_root_path = None
-        for site_dir in search_dirs:
-            lib_path = site_dir / library_name
-            if lib_path.exists():
-                library_root_path = lib_path
-                break
-
-        if not library_root_path:
-            logger.debug(f"Could not find library root path for {library_name}")
-            return 0
-
+        # library_root_path already computed at line 675 from actual source files
         for source_path in source_paths:
             try:
                 source_code = source_path.read_text(encoding="utf-8")
@@ -993,7 +977,9 @@ class ExternalClassInspector:
 
         logger.info(f"Populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
+        logger.debug(f"Flushing cache for {library_name} version {version}, count={count}")
         external_library_cache.flush(library_name, version)
+        logger.debug(f"Flush complete for {library_name}")
         # Clean up AST caches after population
         self._cleanup_ast_caches()
         return count
@@ -1941,11 +1927,18 @@ class ExternalClassInspector:
 
                 if parent_class_info_cached:
                     # Parent is already cached with ALL its inherited parameters - just use it!
+                    logger.debug(
+                        f"Found cached parent {resolved_parent_path} with {len(parent_class_info_cached.parameters)} parameters for {full_class_path}"
+                    )
                     for param_name, param_info in parent_class_info_cached.parameters.items():
                         if param_name not in class_info.parameters:
                             class_info.parameters[param_name] = param_info
                     # Don't recurse - cached parent already has everything
                     continue
+                else:
+                    logger.debug(
+                        f"Parent {base_class_path} (resolved: {resolved_parent_path}) not found in cache for {full_class_path}"
+                    )
 
                 # If not cached, try to find in AST nodes
                 if base_class_path in class_ast_nodes:
