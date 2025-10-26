@@ -284,6 +284,49 @@ class ExternalLibraryCache:
         # Store parameter types as a sorted list for consistent output
         self._pending_cache[cache_key]["parameter_types"] = sorted(parameter_types)
 
+    def get_parameter_types(self, library_name: str, version: str) -> set[str]:
+        """Get detected Parameter type paths for a library from cache.
+
+        Args:
+            library_name: Name of the library
+            version: Version of the library
+
+        Returns:
+            Set of full paths to detected Parameter types, empty set if not found
+        """
+        if not self._caching_enabled:
+            return set()
+
+        if not version:
+            return set()
+
+        # Check pending cache first (in-memory cache)
+        cache_key = f"{library_name}:{version}"
+        if cache_key in self._pending_cache:
+            param_types = self._pending_cache[cache_key].get("parameter_types", [])
+            return set(param_types)
+
+        # If not in pending cache, check disk cache
+        cache_path = self._get_cache_path(library_name, version)
+        if not cache_path.exists():
+            return set()
+
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            # Validate cache format and version compatibility
+            if not self._is_cache_valid(cache_data, library_name, version):
+                return set()
+
+            # Load the disk cache into memory for subsequent fast lookups
+            self._pending_cache[cache_key] = cache_data
+
+            param_types = cache_data.get("parameter_types", [])
+            return set(param_types)
+        except (json.JSONDecodeError, OSError):
+            return set()
+
     def flush(self, library_name: str, version: str) -> None:
         """Write all pending cache changes for a library to disk.
 

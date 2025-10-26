@@ -984,6 +984,26 @@ class ExternalClassInspector:
         self._cleanup_ast_caches()
         return count
 
+    def get_all_parameter_types(self) -> set[str]:
+        """Get all parameter types from all cached libraries.
+
+        Returns:
+            Set of all parameter type paths from all cached allowed libraries
+        """
+        all_param_types: set[str] = set()
+
+        for library_name in self.allowed_libraries:
+            lib_info = self.library_info_cache.get(library_name)
+            if lib_info:
+                version = lib_info["version"]
+                param_types = external_library_cache.get_parameter_types(library_name, version)
+                all_param_types.update(param_types)
+                logger.debug(
+                    f"Loaded {len(param_types)} parameter types from {library_name} cache"
+                )
+
+        return all_param_types
+
     def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
 
