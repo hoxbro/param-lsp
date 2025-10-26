@@ -361,6 +361,8 @@ class ExternalLibraryCache:
                 "default": param_info.default,
                 "location": param_info.location,
                 "objects": param_info.objects,
+                "item_type": param_info.item_type,
+                "length": param_info.length,
             }
 
         return {

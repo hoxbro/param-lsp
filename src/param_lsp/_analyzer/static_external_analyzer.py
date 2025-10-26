@@ -75,6 +75,9 @@ class ExternalClassInspector:
         self.populated_libraries: set[str] = set()
         # Cache library info (version and dependencies) to avoid repeated subprocess calls
         self.library_info_cache: dict[str, LibraryInfo] = {}
+        # Session-wide registry of detected parameter types across all libraries
+        # This allows types to accumulate as we process libraries in dependency order
+        self.session_parameter_types: set[str] = set()
 
         # Python environment for analysis
         if python_env is None:
@@ -103,20 +106,33 @@ class ExternalClassInspector:
 
         # Process and cache the results
         for library_name, info in all_results.items():
-            # Parse dependencies to extract only allowed libraries
-            dependencies: list[str] = []
-            requires = info.get("requires", [])
-            if isinstance(requires, list):
-                for req in requires:
-                    # Parse requirement string (e.g., "panel>=1.0" -> "panel")
-                    dep_name = (
-                        req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
-                    )
+            # Use hardcoded dependencies for core libraries to avoid circular references
+            # from dev/test dependencies in package metadata
+            CORE_LIBRARY_DEPENDENCIES = {
+                "param": [],  # Base library, no dependencies
+                "panel": ["param"],  # Panel depends on param
+                "holoviews": ["param"],  # HoloViews depends on param (not panel)
+            }
 
-                    # Only include if it's in our allowed list
-                    if dep_name in self.allowed_libraries and dep_name != library_name:
-                        dependencies.append(dep_name)
-                        logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+            if library_name in CORE_LIBRARY_DEPENDENCIES:
+                # Use hardcoded dependencies for core libraries
+                dependencies = CORE_LIBRARY_DEPENDENCIES[library_name]
+                logger.debug(f"Using hardcoded dependencies for {library_name}: {dependencies}")
+            else:
+                # Parse dependencies from package metadata for extra libraries
+                dependencies: list[str] = []
+                requires = info.get("requires", [])
+                if isinstance(requires, list):
+                    for req in requires:
+                        # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                        dep_name = (
+                            req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+                        )
+
+                        # Only include if it's in our allowed list
+                        if dep_name in self.allowed_libraries and dep_name != library_name:
+                            dependencies.append(dep_name)
+                            logger.debug(f"Found dependency: {library_name} -> {dep_name}")
 
             # Store processed info in cache
             version = info["version"]
@@ -812,40 +828,12 @@ class ExternalClassInspector:
 
         # Phase 1.5: Iterative Parameter type detection
         logger.debug("Phase 1.5: Iterative Parameter type detection")
-        parameter_types: set[str] = set()
 
-        # Pre-populate with parameter types from cached dependency libraries
-        # This allows detecting custom Parameter types that inherit from param types
-        # For example, panel.viewable.Children extends param.parameters.List
-        for dep_lib in ["param", "holoviews", "panel"]:
-            if dep_lib != library_name:
-                try:
-                    # Import the dependency library to get its version
-                    dep_module = __import__(dep_lib)
-                    dep_version = getattr(dep_module, "__version__", None)
-                    if dep_version and external_library_cache.has_library_cache(dep_lib, dep_version):
-                        # Load from disk or memory cache
-                        cache_key = f"{dep_lib}:{dep_version}"
-                        if cache_key in external_library_cache._pending_cache:
-                            cached_types = external_library_cache._pending_cache[cache_key].get("parameter_types", [])
-                        else:
-                            # Load from disk
-                            cache_path = external_library_cache._get_cache_path(dep_lib, dep_version)
-                            if cache_path.exists():
-                                import json
-                                with cache_path.open("r") as f:
-                                    cache_data = json.load(f)
-                                    cached_types = cache_data.get("parameter_types", [])
-                            else:
-                                cached_types = []
+        # Start with parameter types from previous libraries in this session
+        # This allows types to accumulate: param → panel → holoviews
+        parameter_types: set[str] = set(self.session_parameter_types)
 
-                        if cached_types:
-                            parameter_types.update(cached_types)
-                            logger.debug(f"Loaded {len(cached_types)} parameter types from cached {dep_lib}")
-                except (ImportError, Exception) as e:
-                    logger.debug(f"Could not load parameter types from {dep_lib}: {e}")
-
-        logger.debug(f"Starting with {len(parameter_types)} parameter types from dependencies")
+        logger.debug(f"Starting with {len(parameter_types)} parameter types from session")
 
         # Round 0: Find param.Parameter base class itself
         for class_path in inheritance_map:
@@ -883,6 +871,10 @@ class ExternalClassInspector:
 
         # Store detected parameter types for use in parameter extraction
         self.detected_parameter_types = parameter_types
+
+        # Update session-wide registry for next library to use
+        # This enables accumulation: param → panel → holoviews
+        self.session_parameter_types.update(parameter_types)
 
         # Cache parameter types for this library
         external_library_cache.set_parameter_types(library_name, parameter_types, version)
@@ -2482,6 +2474,15 @@ class ExternalClassInspector:
                             # Just class name, already matched
                             return True
             return False
+
+        # Handle param module shorthand: param.List -> param.parameters.List
+        # The param package re-exports parameter types at the package level
+        if base_name.startswith("param.") and not base_name.startswith("param.parameters."):
+            # Try matching with param.parameters prefix
+            class_name = base_name.split(".")[-1]
+            canonical_path = f"param.parameters.{class_name}"
+            if canonical_path in parameter_types:
+                return True
 
         # Partial qualified path match (e.g., 'viewable.Children' or 'panel.viewable.Children')
         base_parts = base_name.split(".")

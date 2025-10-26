@@ -102,8 +102,18 @@ class ParameterDetector:
                 imported_full_name = self.imports[func_name]
 
                 # PRIMARY CHECK: Use statically detected parameter types
-                if self.parameter_types and imported_full_name in self.parameter_types:
-                    return True
+                if self.parameter_types:
+                    # Direct match
+                    if imported_full_name in self.parameter_types:
+                        return True
+
+                    # Handle relative imports (..viewable.Children, .parameters.List, etc.)
+                    # Match by class name suffix
+                    if imported_full_name.startswith("."):
+                        class_name = imported_full_name.split(".")[-1]
+                        for param_type in self.parameter_types:
+                            if param_type.endswith(f".{class_name}"):
+                                return True
 
                 # FALLBACK: Check if it's from param module (for local file analysis)
                 if imported_full_name.startswith("param."):
