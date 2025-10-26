@@ -352,6 +352,14 @@ class ExternalLibraryCache:
         parameters_data = {}
 
         for param_name, param_info in param_class_info.parameters.items():
+            # Convert item_type to string for JSON serialization
+            item_type_str = None
+            if param_info.item_type is not None:
+                if isinstance(param_info.item_type, type):
+                    item_type_str = param_info.item_type.__name__
+                else:
+                    item_type_str = str(param_info.item_type)
+
             parameters_data[param_name] = {
                 "name": param_info.name,
                 "cls": param_info.cls,
@@ -361,7 +369,7 @@ class ExternalLibraryCache:
                 "default": param_info.default,
                 "location": param_info.location,
                 "objects": param_info.objects,
-                "item_type": param_info.item_type,
+                "item_type": item_type_str,
                 "length": param_info.length,
             }
 

@@ -18,7 +18,9 @@ class ParameterInfo:
     default: str | None = None
     location: dict[str, Any] | None = None
     objects: list[Any] | None = None  # For Selector parameters
-    item_type: type | None = None  # For List parameters
+    item_type: type | str | None = (
+        None  # For List parameters (type during extraction, str in cache)
+    )
     length: int | None = None  # For Tuple parameters
 
 

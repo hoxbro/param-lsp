@@ -393,7 +393,11 @@ class ParameterValidator:
         for i, item in enumerate(list_items):
             item_type_inferred = self._infer_value_type(item)
             if item_type_inferred and not self._is_type_compatible(item_type_inferred, item_type):
-                message = f"Item {i} in List parameter '{param_name}' has type {item_type_inferred.__name__}, expected {item_type.__name__}"
+                # Get type name - handle both type objects and strings from cache
+                expected_type_name = (
+                    item_type if isinstance(item_type, str) else item_type.__name__
+                )
+                message = f"Item {i} in List parameter '{param_name}' has type {item_type_inferred.__name__}, expected {expected_type_name}"
                 self._create_type_error(item, message, "list-item-type-mismatch")
 
     def _check_tuple_length_constructor(
@@ -922,8 +926,12 @@ class ParameterValidator:
             return None
         return self.external_inspector.analyze_external_class(full_class_path)
 
-    def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | None:
-        """Get the item_type constraint for a List parameter."""
+    def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | str | None:
+        """Get the item_type constraint for a List parameter.
+
+        Returns:
+            type object during fresh analysis, string when loaded from cache, or None
+        """
         # Check local classes first
         if class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
@@ -974,8 +982,21 @@ class ParameterValidator:
 
         return items if items else None
 
-    def _is_type_compatible(self, inferred_type: type, expected_type: type) -> bool:
-        """Check if inferred type is compatible with expected type."""
+    def _is_type_compatible(self, inferred_type: type, expected_type: type | str) -> bool:
+        """Check if inferred type is compatible with expected type.
+
+        Args:
+            inferred_type: The type inferred from the value
+            expected_type: The expected type (type object or string from cache)
+
+        Returns:
+            True if types are compatible
+        """
+        # Handle string expected_type from cache
+        if isinstance(expected_type, str):
+            # Compare by name
+            return inferred_type.__name__ == expected_type
+
         if inferred_type == expected_type:
             return True
 
