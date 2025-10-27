@@ -106,33 +106,26 @@ class ExternalClassInspector:
 
         # Process and cache the results
         for library_name, info in all_results.items():
-            # Use hardcoded dependencies for core libraries to avoid circular references
-            # from dev/test dependencies in package metadata
-            CORE_LIBRARY_DEPENDENCIES = {
-                "param": [],  # Base library, no dependencies
-                "panel": ["param"],  # Panel depends on param
-                "holoviews": ["param"],  # HoloViews depends on param (not panel)
-            }
+            # Parse dependencies from package metadata
+            dependencies: list[str] = []
+            requires = info.get("requires", [])
+            if isinstance(requires, list):
+                for req in requires:
+                    # Skip conditional dependencies (with environment markers)
+                    # Example: "watchfiles; extra == 'dev'" or "pytest; python_version >= '3.8'"
+                    if ";" in req:
+                        continue
 
-            if library_name in CORE_LIBRARY_DEPENDENCIES:
-                # Use hardcoded dependencies for core libraries
-                dependencies = CORE_LIBRARY_DEPENDENCIES[library_name]
-                logger.debug(f"Using hardcoded dependencies for {library_name}: {dependencies}")
-            else:
-                # Parse dependencies from package metadata for extra libraries
-                dependencies: list[str] = []
-                requires = info.get("requires", [])
-                if isinstance(requires, list):
-                    for req in requires:
-                        # Parse requirement string (e.g., "panel>=1.0" -> "panel")
-                        dep_name = (
-                            req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
-                        )
+                    # Parse requirement string to extract package name
+                    # Examples: "panel>=1.0" -> "panel", "param<3.0,>=2.0" -> "param"
+                    dep_name = (
+                        req.split(">=")[0].split("==")[0].split("<")[0].split("~=")[0].strip()
+                    )
 
-                        # Only include if it's in our allowed list
-                        if dep_name in self.allowed_libraries and dep_name != library_name:
-                            dependencies.append(dep_name)
-                            logger.debug(f"Found dependency: {library_name} -> {dep_name}")
+                    # Only include if it's in our allowed list and not self-referential
+                    if dep_name in self.allowed_libraries and dep_name != library_name:
+                        dependencies.append(dep_name)
+                        logger.debug(f"Found dependency: {library_name} -> {dep_name}")
 
             # Store processed info in cache
             version = info["version"]
