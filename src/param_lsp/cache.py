@@ -247,6 +247,86 @@ class ExternalLibraryCache:
         # Add the alias mapping in memory
         self._pending_cache[cache_key]["aliases"][alias_path] = full_path
 
+    def set_parameter_types(
+        self, library_name: str, parameter_types: set[str], version: str
+    ) -> None:
+        """Store detected Parameter type paths for a library in memory.
+
+        Args:
+            library_name: Name of the library
+            parameter_types: Set of full paths to detected Parameter types
+            version: Version of the library
+        """
+        if not self._caching_enabled:
+            return
+
+        if not version:
+            return
+
+        # Get or initialize pending cache for this library version
+        cache_key = f"{library_name}:{version}"
+        if cache_key not in self._pending_cache:
+            cache_path = self._get_cache_path(library_name, version)
+
+            # Load existing cache data or create new
+            cache_data = self._create_cache_structure(library_name, version)
+            if cache_path.exists():
+                try:
+                    with cache_path.open("r", encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                    if self._is_cache_valid(existing_data, library_name, version):
+                        cache_data = existing_data
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            self._pending_cache[cache_key] = cache_data
+
+        # Store parameter types as a sorted list for consistent output
+        self._pending_cache[cache_key]["parameter_types"] = sorted(parameter_types)
+
+    def get_parameter_types(self, library_name: str, version: str) -> set[str]:
+        """Get detected Parameter type paths for a library from cache.
+
+        Args:
+            library_name: Name of the library
+            version: Version of the library
+
+        Returns:
+            Set of full paths to detected Parameter types, empty set if not found
+        """
+        if not self._caching_enabled:
+            return set()
+
+        if not version:
+            return set()
+
+        # Check pending cache first (in-memory cache)
+        cache_key = f"{library_name}:{version}"
+        if cache_key in self._pending_cache:
+            param_types = self._pending_cache[cache_key].get("parameter_types", [])
+            return set(param_types)
+
+        # If not in pending cache, check disk cache
+        cache_path = self._get_cache_path(library_name, version)
+        if not cache_path.exists():
+            return set()
+
+        try:
+            with cache_path.open("r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            # Validate cache format and version compatibility
+            if not self._is_cache_valid(cache_data, library_name, version):
+                return set()
+
+            # Load the disk cache into memory for subsequent fast lookups
+            self._pending_cache[cache_key] = cache_data
+
+            param_types = cache_data.get("parameter_types", [])
+            return set(param_types)
+        except (json.JSONDecodeError, OSError):
+            return set()
+
     def flush(self, library_name: str, version: str) -> None:
         """Write all pending cache changes for a library to disk.
 
@@ -288,6 +368,7 @@ class ExternalLibraryCache:
             },
             "classes": {},
             "aliases": {},  # Maps re-export paths to full paths (e.g., panel.widgets.TextInput -> panel.widgets.input.TextInput)
+            "parameter_types": [],  # List of detected Parameter type paths (e.g., ["param.Parameter", "panel.viewable.Children"])
         }
 
     def _is_cache_valid(self, cache_data: dict[str, Any], library_name: str, version: str) -> bool:
@@ -314,6 +395,9 @@ class ExternalLibraryCache:
         parameters_data = {}
 
         for param_name, param_info in param_class_info.parameters.items():
+            # item_type is already a string (qualified name like "builtins.str")
+            item_type_str = param_info.item_type
+
             parameters_data[param_name] = {
                 "name": param_info.name,
                 "cls": param_info.cls,
@@ -323,6 +407,8 @@ class ExternalLibraryCache:
                 "default": param_info.default,
                 "location": param_info.location,
                 "objects": param_info.objects,
+                "item_type": item_type_str,
+                "length": param_info.length,
             }
 
         return {

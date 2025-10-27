@@ -126,7 +126,7 @@ class TestClass(param.Parameterized):
         tags_param = test_class.get_parameter("tags")
         assert tags_param is not None
         assert tags_param.cls == "List"
-        assert tags_param.item_type is str
+        assert tags_param.item_type == "builtins.str"
         assert tags_param.length is None
 
         # Check coordinates parameter
@@ -140,5 +140,5 @@ class TestClass(param.Parameterized):
         numbers_param = test_class.get_parameter("numbers")
         assert numbers_param is not None
         assert numbers_param.cls == "List"
-        assert numbers_param.item_type is int
+        assert numbers_param.item_type == "builtins.int"
         assert numbers_param.length is None

@@ -172,10 +172,15 @@ class TestIsParameterCall:
         assert result is True
 
     def test_is_direct_parameter_type_call(self):
-        """Test that direct parameter type calls (e.g., String()) are detected."""
+        """Test that direct parameter type calls without context cannot be detected.
+
+        Without import context, we cannot determine if String() is from param or another module.
+        Use ParameterDetector from ast_navigator for proper detection with imports.
+        """
         node = parse_expression("String(default='test')")
         result = is_parameter_call(node)
-        assert result is True
+        # Should return False without import context
+        assert result is False
 
     def test_is_not_pandas_dataframe_call(self):
         """Test that pd.DataFrame() is NOT detected as a parameter call.
