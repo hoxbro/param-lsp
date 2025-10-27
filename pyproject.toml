@@ -22,7 +22,6 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "param",
     "pygls >=2.0",
     "lsprotocol",
     "platformdirs",
