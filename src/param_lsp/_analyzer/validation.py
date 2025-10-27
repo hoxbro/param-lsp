@@ -173,7 +173,7 @@ class ParameterValidator:
 
             # Check if None is allowed for this parameter
             inferred_type = self._infer_value_type(param_value)
-            if inferred_type is type(None):  # None value
+            if inferred_type == "builtins.NoneType":  # None value
                 allow_None = self._get_parameter_allow_None(class_name, param_name)
                 if allow_None:
                     continue  # None is allowed, skip further validation
@@ -185,12 +185,10 @@ class ParameterValidator:
                 if not isinstance(expected_types, tuple):
                     expected_types = (expected_types,)
 
-                if inferred_type and not any(
-                    (isinstance(inferred_type, type) and issubclass(inferred_type, t))
-                    or inferred_type == t
-                    for t in expected_types
-                ):
-                    message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
+                if inferred_type and inferred_type not in expected_types:
+                    # Extract simple type name from qualified string for error message
+                    inferred_type_name = inferred_type.split(".")[-1]
+                    message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
                     self._create_type_error(keyword_arg_node, message, "constructor-type-mismatch")
 
             # Check bounds for numeric parameters in constructor calls
@@ -203,35 +201,38 @@ class ParameterValidator:
                 keyword_arg_node, class_name, param_name, cls, param_value
             )
 
-    def _infer_value_type(self, node: Node) -> type | None:
-        """Infer Python type from tree-sitter node."""
+    def _infer_value_type(self, node: Node) -> str | None:
+        """Infer Python type from tree-sitter node as a qualified string.
+
+        Returns qualified type names like "builtins.str", "builtins.int", etc.
+        """
         if node:
             if node.type in ("integer", "float"):
                 # Check if it's a float or int
                 if node.type == "float":
-                    return float
+                    return "builtins.float"
                 else:
-                    return int
+                    return "builtins.int"
             elif node.type == "string":
-                return str
+                return "builtins.str"
             elif node.type == "identifier":
                 value = get_value(node)
                 if value in {"True", "False"}:
-                    return bool
+                    return "builtins.bool"
                 elif value == "None":
-                    return type(None)
+                    return "builtins.NoneType"
                 # Could be a variable - would need more sophisticated analysis
                 return None
             elif node.type in ("true", "false"):
-                return bool
+                return "builtins.bool"
             elif node.type == "none":
-                return type(None)
+                return "builtins.NoneType"
             elif node.type == "list":
-                return list
+                return "builtins.list"
             elif node.type == "dictionary":
-                return dict
+                return "builtins.dict"
             elif node.type == "tuple":
-                return tuple
+                return "builtins.tuple"
         return None
 
     def _is_boolean_literal(self, node: Node) -> bool:
@@ -240,12 +241,23 @@ class ParameterValidator:
             node.type == "identifier" and get_value(node) in ("True", "False")
         )
 
-    def _format_expected_types(self, expected_types: tuple) -> str:
-        """Format expected types for error messages."""
+    def _format_expected_types(self, expected_types: tuple | str) -> str:
+        """Format expected types for error messages.
+
+        Args:
+            expected_types: Either a tuple of qualified type strings or a single string
+
+        Returns:
+            Formatted string like "str" or "int or float"
+        """
+        if isinstance(expected_types, str):
+            # Single type string like "builtins.str"
+            return expected_types.split(".")[-1]
+
         if len(expected_types) == 1:
-            return expected_types[0].__name__
+            return expected_types[0].split(".")[-1]
         else:
-            type_names = [t.__name__ for t in expected_types]
+            type_names = [t.split(".")[-1] for t in expected_types]
             return " or ".join(type_names)
 
     def _create_type_error(
@@ -393,11 +405,10 @@ class ParameterValidator:
         for i, item in enumerate(list_items):
             item_type_inferred = self._infer_value_type(item)
             if item_type_inferred and not self._is_type_compatible(item_type_inferred, item_type):
-                # Get type name - handle both type objects and strings from cache
-                expected_type_name = (
-                    item_type if isinstance(item_type, str) else item_type.__name__
-                )
-                message = f"Item {i} in List parameter '{param_name}' has type {item_type_inferred.__name__}, expected {expected_type_name}"
+                # Extract simple type names from qualified strings
+                inferred_type_name = item_type_inferred.split(".")[-1]
+                expected_type_name = item_type.split(".")[-1]
+                message = f"Item {i} in List parameter '{param_name}' has type {inferred_type_name}, expected {expected_type_name}"
                 self._create_type_error(item, message, "list-item-type-mismatch")
 
     def _check_tuple_length_constructor(
@@ -470,23 +481,21 @@ class ParameterValidator:
             inferred_type = self._infer_value_type(default_value)
 
             # Check if None is allowed for this parameter
-            if allow_None and inferred_type is type(None):
+            if allow_None and inferred_type == "builtins.NoneType":
                 return  # None is allowed, skip further validation
 
             # Special handling for Boolean parameters - they should only accept actual bool values
-            if cls == "Boolean" and inferred_type and inferred_type is not bool:
+            if cls == "Boolean" and inferred_type and inferred_type != "builtins.bool":
                 # For Boolean parameters, only accept actual boolean values
                 if not (
                     default_value.type == "name" and get_value(default_value) in ("True", "False")
                 ):
-                    message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type.__name__}"
+                    inferred_type_name = inferred_type.split(".")[-1]
+                    message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type_name}"
                     self._create_type_error(node, message, "boolean-type-mismatch")
-            elif inferred_type and not any(
-                (isinstance(inferred_type, type) and issubclass(inferred_type, t))
-                or inferred_type == t
-                for t in expected_types
-            ):
-                message = f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type.__name__}"
+            elif inferred_type and inferred_type not in expected_types:
+                inferred_type_name = inferred_type.split(".")[-1]
+                message = f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type_name}"
                 self._create_type_error(node, message, "type-mismatch")
 
         # Check for deprecated parameter types
@@ -579,17 +588,14 @@ class ParameterValidator:
             inferred_type = self._infer_value_type(assigned_value)
 
             # Check if None is allowed for this parameter
-            if inferred_type is type(None):  # None value
+            if inferred_type == "builtins.NoneType":  # None value
                 allow_None = self._get_parameter_allow_None(instance_class, param_name)
                 if allow_None:
                     return  # None is allowed, skip further validation
 
-            if inferred_type and not any(
-                (isinstance(inferred_type, type) and issubclass(inferred_type, t))
-                or inferred_type == t
-                for t in expected_types
-            ):
-                message = f"Cannot assign {inferred_type.__name__} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})"
+            if inferred_type and inferred_type not in expected_types:
+                inferred_type_name = inferred_type.split(".")[-1]
+                message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})"
                 self._create_type_error(node, message, "runtime-type-mismatch")
 
         # Check bounds for numeric parameters
@@ -926,11 +932,11 @@ class ParameterValidator:
             return None
         return self.external_inspector.analyze_external_class(full_class_path)
 
-    def _get_parameter_item_type(self, class_name: str, param_name: str) -> type | str | None:
+    def _get_parameter_item_type(self, class_name: str, param_name: str) -> str | None:
         """Get the item_type constraint for a List parameter.
 
         Returns:
-            type object during fresh analysis, string when loaded from cache, or None
+            Qualified type name string (e.g., "builtins.str") or None
         """
         # Check local classes first
         if class_name in self.param_classes:
@@ -982,32 +988,24 @@ class ParameterValidator:
 
         return items if items else None
 
-    def _is_type_compatible(self, inferred_type: type, expected_type: type | str) -> bool:
+    def _is_type_compatible(self, inferred_type: str, expected_type: str) -> bool:
         """Check if inferred type is compatible with expected type.
 
+        Both types are now qualified strings like "builtins.str", "builtins.int", etc.
+
         Args:
-            inferred_type: The type inferred from the value
-            expected_type: The expected type (type object or string from cache)
+            inferred_type: The type inferred from the value (qualified string)
+            expected_type: The expected type (qualified string)
 
         Returns:
             True if types are compatible
         """
-        # Handle string expected_type from cache
-        if isinstance(expected_type, str):
-            # Compare by name
-            return inferred_type.__name__ == expected_type
-
+        # Direct string comparison since both are qualified type names
         if inferred_type == expected_type:
             return True
 
-        # Handle subclass relationships
-        if isinstance(inferred_type, type) and isinstance(expected_type, type):
-            try:
-                return issubclass(inferred_type, expected_type)
-            except TypeError:
-                return False
-
-        return False
+        # Handle numeric compatibility: int is compatible with float
+        return expected_type == "builtins.float" and inferred_type == "builtins.int"
 
     def _check_param_depends_decorators(self, tree: Node) -> None:
         """Check @param.depends decorators for invalid parameter references.

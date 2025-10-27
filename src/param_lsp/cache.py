@@ -395,13 +395,8 @@ class ExternalLibraryCache:
         parameters_data = {}
 
         for param_name, param_info in param_class_info.parameters.items():
-            # Convert item_type to string for JSON serialization
-            item_type_str = None
-            if param_info.item_type is not None:
-                if isinstance(param_info.item_type, type):
-                    item_type_str = param_info.item_type.__name__
-                else:
-                    item_type_str = str(param_info.item_type)
+            # item_type is already a string (qualified name like "builtins.str")
+            item_type_str = param_info.item_type
 
             parameters_data[param_name] = {
                 "name": param_info.name,

@@ -24,25 +24,38 @@ EXCLUDED_DIRS = {
 }
 
 # Parameter type mapping for type checking and validation
+# Maps param type names to qualified Python type strings
 PARAM_TYPE_MAP = {
-    "Number": (int, float),
-    "Integer": int,
-    "String": str,
-    "Boolean": bool,
-    "List": list,
-    "Tuple": tuple,
-    "Dict": dict,
-    "Array": (list, tuple),
-    "Range": tuple,
-    "Date": str,
-    "CalendarDate": str,
-    "Filename": str,
-    "Foldername": str,
-    "Path": str,
-    "Color": str,
-    "Selector": object,
-    "ObjectSelector": object,
-    "ListSelector": list,
+    "Number": ("builtins.int", "builtins.float"),
+    "Integer": "builtins.int",
+    "String": "builtins.str",
+    "Boolean": "builtins.bool",
+    "List": "builtins.list",
+    "Tuple": "builtins.tuple",
+    "Dict": "builtins.dict",
+    "Array": ("builtins.list", "builtins.tuple"),
+    "Range": "builtins.tuple",
+    "Date": "builtins.str",
+    "CalendarDate": "builtins.str",
+    "Filename": "builtins.str",
+    "Foldername": "builtins.str",
+    "Path": "builtins.str",
+    "Color": "builtins.str",
+    "Selector": "builtins.object",
+    "ObjectSelector": "builtins.object",
+    "ListSelector": "builtins.list",
+}
+
+# Mapping from Python type names to qualified type strings for item_type
+# Used when extracting item_type from parameter definitions
+PYTHON_TYPE_TO_QUALIFIED_NAME = {
+    "str": "builtins.str",
+    "int": "builtins.int",
+    "float": "builtins.float",
+    "bool": "builtins.bool",
+    "list": "builtins.list",
+    "dict": "builtins.dict",
+    "tuple": "builtins.tuple",
 }
 
 # Parameter types that are considered to be numeric

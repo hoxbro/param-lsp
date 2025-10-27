@@ -67,11 +67,11 @@ class LSPServerBase(LanguageServer):
         if cls in PARAM_TYPE_MAP:
             python_types = PARAM_TYPE_MAP[cls]
             if isinstance(python_types, tuple):
-                # Multiple types like (int, float) -> "int or float"
-                type_names = [t.__name__ for t in python_types]
+                # Multiple types like ("builtins.int", "builtins.float") -> "int or float"
+                type_names = [t.split(".")[-1] for t in python_types]
             else:
-                # Single type like int -> "int"
-                type_names = [python_types.__name__]
+                # Single type like "builtins.int" -> "int"
+                type_names = [python_types.split(".")[-1]]
 
             # Add None if allow_None is True
             if allow_None:

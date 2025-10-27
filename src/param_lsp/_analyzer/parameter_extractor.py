@@ -16,6 +16,7 @@ from param_lsp._treesitter import (
     get_children,
     get_value,
 )
+from param_lsp.constants import PYTHON_TYPE_TO_QUALIFIED_NAME
 
 from .ast_navigator import SourceAnalyzer
 
@@ -253,8 +254,11 @@ def extract_objects_from_call(call_node: Node) -> list[Any] | None:
     return None
 
 
-def extract_item_type_from_call(call_node: Node) -> type | None:
-    """Extract item_type from List parameter call."""
+def extract_item_type_from_call(call_node: Node) -> str | None:
+    """Extract item_type from List parameter call as a qualified string.
+
+    Returns qualified type names like "builtins.str", "builtins.int", etc.
+    """
     kwargs = get_keyword_arguments(call_node)
     if "item_type" in kwargs:
         # Extract the type from the item_type argument
@@ -276,25 +280,19 @@ def extract_length_from_call(call_node: Node) -> int | None:
     return None
 
 
-def _extract_type_value(type_node: Node) -> type | None:
-    """Extract a type from a tree-sitter node (e.g., str, int, float)."""
+def _extract_type_value(type_node: Node) -> str | None:
+    """Extract a type name from a tree-sitter node as a qualified string.
+
+    Returns qualified type names like "builtins.str", "builtins.int", etc.
+    This avoids needing to serialize type objects and keeps everything as strings.
+    """
     if not type_node:
         return None
 
     if type_node.type == "identifier":
         type_name = get_value(type_node)
         if type_name is not None:
-            # Map common type names to Python types
-            type_mapping = {
-                "str": str,
-                "int": int,
-                "float": float,
-                "bool": bool,
-                "list": list,
-                "dict": dict,
-                "tuple": tuple,
-            }
-            return type_mapping.get(type_name)
+            return PYTHON_TYPE_TO_QUALIFIED_NAME.get(type_name)
 
     return None
 
