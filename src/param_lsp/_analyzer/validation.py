@@ -185,7 +185,10 @@ class ParameterValidator:
                 if not isinstance(expected_types, tuple):
                     expected_types = (expected_types,)
 
-                if inferred_type and inferred_type not in expected_types:
+                if inferred_type and not any(
+                    self._is_type_compatible(inferred_type, exp_type)
+                    for exp_type in expected_types
+                ):
                     # Extract simple type name from qualified string for error message
                     inferred_type_name = inferred_type.split(".")[-1]
                     message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
@@ -595,7 +598,9 @@ class ParameterValidator:
                 if allow_None:
                     return  # None is allowed, skip further validation
 
-            if inferred_type and inferred_type not in expected_types:
+            if inferred_type and not any(
+                self._is_type_compatible(inferred_type, exp_type) for exp_type in expected_types
+            ):
                 inferred_type_name = inferred_type.split(".")[-1]
                 message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} (expects {self._format_expected_types(expected_types)})"
                 self._create_type_error(node, message, "runtime-type-mismatch")
