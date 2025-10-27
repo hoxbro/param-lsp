@@ -46,18 +46,6 @@ PARAM_TYPE_MAP = {
     "ListSelector": "builtins.list",
 }
 
-# Mapping from Python type names to qualified type strings for item_type
-# Used when extracting item_type from parameter definitions
-PYTHON_TYPE_TO_QUALIFIED_NAME = {
-    "str": "builtins.str",
-    "int": "builtins.int",
-    "float": "builtins.float",
-    "bool": "builtins.bool",
-    "list": "builtins.list",
-    "dict": "builtins.dict",
-    "tuple": "builtins.tuple",
-}
-
 # Parameter types that are considered to be numeric
 NUMERIC_PARAMETER_TYPES = {"Integer", "Number", "Float"}
 

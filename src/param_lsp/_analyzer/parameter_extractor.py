@@ -16,7 +16,6 @@ from param_lsp._treesitter import (
     get_children,
     get_value,
 )
-from param_lsp.constants import PYTHON_TYPE_TO_QUALIFIED_NAME
 
 from .ast_navigator import SourceAnalyzer
 
@@ -291,8 +290,8 @@ def _extract_type_value(type_node: Node) -> str | None:
 
     if type_node.type == "identifier":
         type_name = get_value(type_node)
-        if type_name is not None:
-            return PYTHON_TYPE_TO_QUALIFIED_NAME.get(type_name)
+        if type_name in {"str", "int", "float", "bool", "list", "dict", "tuple"}:
+            return f"builtins.{type_name}"
 
     return None
 
