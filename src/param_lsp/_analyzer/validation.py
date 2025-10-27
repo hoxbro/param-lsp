@@ -493,7 +493,9 @@ class ParameterValidator:
                     inferred_type_name = inferred_type.split(".")[-1]
                     message = f"Parameter '{param_name}' of type Boolean expects bool but got {inferred_type_name}"
                     self._create_type_error(node, message, "boolean-type-mismatch")
-            elif inferred_type and inferred_type not in expected_types:
+            elif inferred_type and not any(
+                self._is_type_compatible(inferred_type, exp_type) for exp_type in expected_types
+            ):
                 inferred_type_name = inferred_type.split(".")[-1]
                 message = f"Parameter '{param_name}' of type {cls} expects {self._format_expected_types(expected_types)} but got {inferred_type_name}"
                 self._create_type_error(node, message, "type-mismatch")
@@ -1002,6 +1004,10 @@ class ParameterValidator:
         """
         # Direct string comparison since both are qualified type names
         if inferred_type == expected_type:
+            return True
+
+        # All types are compatible with object (for Selector parameters)
+        if expected_type == "builtins.object":
             return True
 
         # Handle numeric compatibility: int is compatible with float
