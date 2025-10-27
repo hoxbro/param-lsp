@@ -51,36 +51,6 @@ NUMERIC_PARAMETER_TYPES = {"Integer", "Number", "Float"}
 # Parameter types that are considered containers
 CONTAINER_PARAMETER_TYPES = {"List", "Tuple"}
 
-# Common param parameter types
-PARAM_TYPES = {
-    "Parameter",
-    "Number",
-    "Integer",
-    "String",
-    "Boolean",
-    "List",
-    "Tuple",
-    "Dict",
-    "Array",
-    "DataFrame",
-    "Series",
-    "Range",
-    "Date",
-    "CalendarDate",
-    "Filename",
-    "Foldername",
-    "Path",
-    "Color",
-    "Composite",
-    "Dynamic",
-    "Event",
-    "Action",
-    "FileSelector",
-    "ListSelector",
-    "ObjectSelector",
-    "Selector",
-}
-
 # Selector parameter types that support objects
 SELECTOR_PARAM_TYPES = ("Selector", "ObjectSelector", "ListSelector")
 

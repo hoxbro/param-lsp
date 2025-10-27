@@ -17,7 +17,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from param_lsp import _treesitter
-from param_lsp.constants import PARAM_TYPES
 
 if TYPE_CHECKING:
     from tree_sitter import Node
@@ -92,33 +91,40 @@ class ParameterDetector:
             if attr_node:
                 func_name = _treesitter.get_value(attr_node)
 
-        if func_name:
-            # Check if it's a direct param type (hardcoded for backward compatibility)
-            if func_name in PARAM_TYPES:
+        if func_name and func_name in self.imports:
+            # Check if it's an imported type
+            imported_full_name = self.imports[func_name]
+
+            # PRIMARY CHECK: Use statically detected parameter types
+            if self.parameter_types:
+                # Direct match
+                if imported_full_name in self.parameter_types:
+                    return True
+
+                # Handle relative imports (..viewable.Children, .parameters.List, etc.)
+                # Match by class name suffix
+                if imported_full_name.startswith("."):
+                    class_name = imported_full_name.split(".")[-1]
+                    for param_type in self.parameter_types:
+                        if param_type.endswith(f".{class_name}"):
+                            return True
+
+            # FALLBACK: If no parameter_types provided, accept anything from param module
+            # This maintains backward compatibility for tests and cold starts
+            if imported_full_name.startswith("param."):
                 return True
 
-            # Check if it's an imported type
-            if func_name in self.imports:
-                imported_full_name = self.imports[func_name]
-
-                # PRIMARY CHECK: Use statically detected parameter types
-                if self.parameter_types:
-                    # Direct match
-                    if imported_full_name in self.parameter_types:
+        # Also check direct param.* calls (not through imports)
+        # e.g., param.String() when param is imported
+        if func_node.type == "attribute":
+            obj_node = func_node.child_by_field_name("object")
+            if obj_node and obj_node.type == "identifier":
+                module_name = _treesitter.get_value(obj_node)
+                if module_name in self.imports:
+                    imported_module = self.imports[module_name]
+                    # Accept if the module is "param"
+                    if imported_module == "param":
                         return True
-
-                    # Handle relative imports (..viewable.Children, .parameters.List, etc.)
-                    # Match by class name suffix
-                    if imported_full_name.startswith("."):
-                        class_name = imported_full_name.split(".")[-1]
-                        for param_type in self.parameter_types:
-                            if param_type.endswith(f".{class_name}"):
-                                return True
-
-                # FALLBACK: Check if it's from param module (for local file analysis)
-                if imported_full_name.startswith("param."):
-                    param_type = imported_full_name.split(".")[-1]
-                    return param_type in PARAM_TYPES
 
         return False
 

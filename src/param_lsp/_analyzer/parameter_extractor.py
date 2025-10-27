@@ -8,8 +8,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from param_lsp.constants import PARAM_TYPES
-
 logger = logging.getLogger(__name__)
 
 from param_lsp._treesitter import (
@@ -64,17 +62,15 @@ def is_parameter_assignment(node: Node) -> bool:
 def is_parameter_call(node: Node) -> bool:
     """Check if a tree-sitter call node represents a parameter type call.
 
+    DEPRECATED: Use ParameterDetector.is_parameter_call() instead, which uses
+    dynamically detected parameter types rather than a hardcoded list.
+
     Args:
         node: A tree-sitter node of type 'call'
 
     Returns:
-        True if the node represents a call to a known parameter type (e.g., param.String()),
+        True if the node represents a call to param.* (e.g., param.String()),
         False otherwise
-
-    Note:
-        This function checks that the call is specifically to param.ParameterType or just
-        ParameterType (direct import). It rejects calls like pd.DataFrame() even though
-        DataFrame is in PARAM_TYPES, because it's not from the param module.
     """
     if node.type != "call":
         return False
@@ -102,21 +98,14 @@ def is_parameter_call(node: Node) -> bool:
     if not parts:
         return False
 
-    # Check if this is a parameter type call
-    # Accept: param.String, String (if just the type name)
-    # Reject: pd.DataFrame, other.String
+    # Only check if it's from param module
+    if len(parts) == 2:
+        # Dotted call like "param.String()"
+        module, _func_name = parts
+        return module == "param"
 
-    if len(parts) == 1:
-        # Direct call like "String()" - accept if it's a param type
-        return parts[0] in PARAM_TYPES
-    elif len(parts) == 2:
-        # Dotted call like "param.String()" or "pd.DataFrame()"
-        # Only accept if the module part is "param"
-        module, func_name = parts
-        return module == "param" and func_name in PARAM_TYPES
-    else:
-        # More complex chains - not a simple parameter type
-        return False
+    # Single identifier - can't determine without imports context
+    return False
 
 
 def extract_parameters(
@@ -446,18 +435,26 @@ def resolve_parameter_class(param_call: Node, imports: dict[str, str]) -> dict[s
             module_name = get_value(obj_node)
             func_name = get_value(attr_node)
 
-    if func_name:
-        # Check if it's a direct param type
-        if func_name in PARAM_TYPES:
-            return {"type": func_name, "module": module_name or "param"}
+    if not func_name:
+        return None
 
-        # Check if it's an imported param type
-        if func_name in imports:
-            imported_full_name = imports[func_name]
-            if imported_full_name.startswith("param."):
-                param_type = imported_full_name.split(".")[-1]
-                if param_type in PARAM_TYPES:
-                    return {"type": param_type, "module": "param"}
+    # Check if module is "param" or an alias to "param" (e.g., "import param as p")
+    if module_name and (
+        module_name == "param" or (module_name in imports and imports[module_name] == "param")
+    ):
+        return {"type": func_name, "module": "param"}
+
+    # Check if func_name itself is an imported param type (e.g., from param import String)
+    if func_name in imports:
+        imported_full_name = imports[func_name]
+        if imported_full_name.startswith("param."):
+            param_type = imported_full_name.split(".")[-1]
+            return {"type": param_type, "module": "param"}
+
+    # If no module specified, assume it's a param type if we got here
+    # (this function is only called after is_parameter_assignment validates it)
+    if module_name is None:
+        return {"type": func_name, "module": "param"}
 
     return None
 
