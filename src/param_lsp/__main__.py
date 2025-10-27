@@ -162,7 +162,6 @@ def main():
         if args.regenerate:
             external_library_cache.clear()
             for library in all_libraries:
-                print(f"[DEBUG] Processing library: {library}")
                 inspector.populate_library_cache(library)
             return
 
