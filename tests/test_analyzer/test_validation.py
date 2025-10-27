@@ -613,3 +613,58 @@ def test2():
         errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
         depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
         assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
+
+    def test_selector_accepts_any_type_in_default(self, validator):
+        """Test that Selector parameter accepts any type in default value (object compatibility)."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.Selector(default="b", objects=[1, "b", "c"])
+    b = param.Selector(default=1, objects=[1, "b", "c"])
+    c = param.ObjectSelector(default=2.5, objects=[1.5, 2.5, "x"])
+"""
+        tree = parser.parse(code)
+
+        # Should not create any type errors - Selector accepts object type (any type)
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        type_errors = [e for e in errors if "type-mismatch" in e.get("code", "")]
+        assert len(type_errors) == 0, f"Expected no type errors, got: {type_errors}"
+
+    def test_selector_runtime_assignment_accepts_any_type(self, validator):
+        """Test that Selector parameter accepts any type in runtime assignments."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.Selector(default="b", objects=[1, "b", "c"])
+
+Test().a = 2
+Test().a = "c"
+Test().a = 1
+"""
+        tree = parser.parse(code)
+
+        # Should not create any type errors for runtime assignments
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        type_errors = [e for e in errors if "runtime-type-mismatch" in e.get("code", "")]
+        assert len(type_errors) == 0, f"Expected no runtime type errors, got: {type_errors}"
+
+    def test_selector_constructor_accepts_any_type(self, validator):
+        """Test that Selector parameter accepts any type in constructor calls."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.Selector(default="b", objects=[1, "b", "c"])
+
+Test(a=1)
+Test(a="c")
+Test(a="b")
+"""
+        tree = parser.parse(code)
+
+        # Should not create any type errors for constructor calls
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        type_errors = [e for e in errors if "constructor-type-mismatch" in e.get("code", "")]
+        assert len(type_errors) == 0, f"Expected no constructor type errors, got: {type_errors}"
