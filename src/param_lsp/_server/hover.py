@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 import textwrap
 
-import param
-
 from param_lsp.constants import PARAM_NAMESPACE_METHODS, RX_METHODS_DOCS, SELECTOR_PARAM_TYPES
 
 from .base import LSPServerBase
@@ -41,10 +39,6 @@ class HoverMixin(LSPServerBase):
 
             # Check if it's a parameter type
             if hasattr(self, "classes") and word in self.classes:
-                if param:
-                    param_class = getattr(param, word, None)
-                    if param_class and hasattr(param_class, "__doc__"):
-                        return param_class.__doc__
                 return f"Param parameter type: {word}"
 
             # Check if it's a parameter in a local class
