@@ -1907,12 +1907,12 @@ class ExternalClassInspector:
                 library_name = full_class_path.split(".")[0]
                 lib_info = self.library_info_cache.get(library_name)
                 parent_class_info_cached = None
+                resolved_parent_path = base_class_path
                 if lib_info:
                     version = lib_info["version"]
 
                     # Resolve relative import paths to full paths
                     # base_class_path might be like ".dimension.ViewableElement" or "..element.Element"
-                    resolved_parent_path = base_class_path
                     if base_class_path.startswith("."):
                         # Relative import - resolve to full path
                         # e.g., full_class_path = "holoviews.core.element.Element"
