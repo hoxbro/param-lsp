@@ -8,11 +8,11 @@ from __future__ import annotations
 
 # Global configuration for allowed external libraries for runtime introspection
 # Listed in dependency order: param is the base, panel and holoviews depend on param
-ALLOWED_EXTERNAL_LIBRARIES = [
+ALLOWED_EXTERNAL_LIBRARIES = {
     "param",
     "panel",
     "holoviews",
-]
+}
 
 # Directories to exclude when recursively searching for Python files
 EXCLUDED_DIRS = {
