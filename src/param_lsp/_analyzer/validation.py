@@ -555,14 +555,12 @@ class ParameterValidator:
                 instance_class = self._get_instance_class(call_node)
         else:
             # Case: instance_var.param = value
-            # Try to find which param class has this parameter
-            for class_name, class_info in self.param_classes.items():
-                if param_name in class_info.parameters:
-                    instance_class = class_name
-                    break
-
-            # If not found in local classes, check external param classes
-            if not instance_class:
+            # Find the class in the same scope and use line number for unique identification
+            class_in_scope = self._find_class_in_scope(node, param_name)
+            if class_in_scope:
+                instance_class = class_in_scope
+            else:
+                # Fallback: check external param classes
                 for class_name, class_info in self.external_param_classes.items():
                     if class_info and param_name in class_info.parameters:
                         instance_class = class_name
@@ -995,6 +993,54 @@ class ParameterValidator:
         items = [child for child in get_children(node) if child.type not in ("(", ")", ",")]
 
         return items if items else None
+
+    def _find_class_in_scope(self, assignment_node: Node, param_name: str) -> str | None:
+        """Find a Parameterized class in the same scope that has the given parameter.
+
+        Walks up the AST to find the containing function or module, then searches for class
+        definitions within that scope that have the specified parameter.
+
+        Args:
+            assignment_node: The assignment AST node
+            param_name: The parameter name to search for
+
+        Returns:
+            Unique class key "ClassName:line" if found, None otherwise
+        """
+        # Walk up to find the containing function or use module (root)
+        current = assignment_node.parent
+        scope_node = None
+        while current:
+            if current.type == "function_definition":
+                scope_node = current
+                break
+            if current.type == "module":
+                scope_node = current
+                break
+            current = current.parent
+
+        if not scope_node:
+            return None
+
+        # Find all class definitions in this scope
+        from param_lsp._treesitter.queries import find_classes
+
+        for class_node, _ in find_classes(scope_node):
+            class_name = get_class_name(class_node)
+            if not class_name:
+                continue
+
+            # Create unique key with line number
+            line_number = class_node.start_point[0]
+            unique_key = f"{class_name}:{line_number}"
+
+            # Check if this class has the parameter
+            if unique_key in self.param_classes:
+                class_info = self.param_classes[unique_key]
+                if param_name in class_info.parameters:
+                    return unique_key
+
+        return None
 
     def _is_type_compatible(self, inferred_type: str, expected_type: str) -> bool:
         """Check if inferred type is compatible with expected type.
