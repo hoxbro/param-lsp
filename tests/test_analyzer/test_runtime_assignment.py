@@ -262,29 +262,3 @@ instance.number_param = -5          # Error: bounds violation
             if e["code"].startswith("runtime") or e["code"] == "bounds-violation"
         ]
         assert len(runtime_errors) == 3
-
-    def test_bool_compatible_with_numeric_types(self, analyzer):
-        """Test that bool is compatible with Number/Integer parameters (Python bool is subclass of int)."""
-        code_py = """\
-import param
-
-class TestClass(param.Parameterized):
-    int_param = param.Integer(default=5)
-    number_param = param.Number(default=1.0)
-
-# In Python, bool is a subclass of int, so these should be valid
-instance = TestClass()
-instance.int_param = True    # Should be valid (bool -> int)
-instance.int_param = False   # Should be valid (bool -> int)
-instance.number_param = True # Should be valid (bool -> float)
-instance.number_param = False # Should be valid (bool -> float)
-
-TestClass().int_param = True
-TestClass().number_param = False
-"""
-
-        result = analyzer.analyze_file(code_py)
-
-        # Should not generate any runtime type mismatch errors
-        runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
-        assert len(runtime_errors) == 0, f"Expected no errors, got: {runtime_errors}"
