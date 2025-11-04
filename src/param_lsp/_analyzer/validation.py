@@ -209,34 +209,35 @@ class ParameterValidator:
 
         Returns qualified type names like "builtins.str", "builtins.int", etc.
         """
-        if node:
-            if node.type in ("integer", "float"):
-                # Check if it's a float or int
-                if node.type == "float":
-                    return "builtins.float"
-                else:
-                    return "builtins.int"
-            elif node.type == "string":
+        if not node:
+            return None
+
+        match node.type:
+            case "integer":
+                return "builtins.int"
+            case "float":
+                return "builtins.float"
+            case "string":
                 return "builtins.str"
-            elif node.type == "identifier":
+            case "true" | "false":
+                return "builtins.bool"
+            case "none":
+                return "builtins.NoneType"
+            case "list":
+                return "builtins.list"
+            case "dictionary":
+                return "builtins.dict"
+            case "tuple":
+                return "builtins.tuple"
+            case "identifier":
                 value = get_value(node)
                 if value in {"True", "False"}:
                     return "builtins.bool"
                 elif value == "None":
                     return "builtins.NoneType"
-                # Could be a variable - would need more sophisticated analysis
                 return None
-            elif node.type in ("true", "false"):
-                return "builtins.bool"
-            elif node.type == "none":
-                return "builtins.NoneType"
-            elif node.type == "list":
-                return "builtins.list"
-            elif node.type == "dictionary":
-                return "builtins.dict"
-            elif node.type == "tuple":
-                return "builtins.tuple"
-        return None
+            case _:
+                return None
 
     def _is_boolean_literal(self, node: Node) -> bool:
         """Check if a tree-sitter node represents a boolean literal (True/False)."""
