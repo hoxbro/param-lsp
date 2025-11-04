@@ -614,6 +614,38 @@ def test2():
         depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
         assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
 
+    def test_check_param_depends_many_duplicate_class_names(self, validator):
+        """Test @param.depends with many duplicate class names (reproduces Panel bug)."""
+        code = """
+import param
+
+def test1():
+    class Test(param.Parameterized):
+        a = param.String()
+
+def test2():
+    class Test(param.Parameterized):
+        b = param.String()
+
+        @param.depends('b')
+        def method(self):
+            return self.b
+
+def test3():
+    class Test(param.Parameterized):
+        s = param.String(default='A')
+
+        @param.depends('s')
+        def ref(self):
+            return [self.s] + ['B']
+"""
+        tree = parser.parse(code)
+
+        # Should not create errors - each class is unique by position
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
+
     def test_selector_accepts_any_type_in_default(self, validator):
         """Test that Selector parameter accepts any type in default value (object compatibility)."""
         code = """

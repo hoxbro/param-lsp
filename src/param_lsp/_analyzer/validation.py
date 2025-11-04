@@ -1033,12 +1033,14 @@ class ParameterValidator:
 
         for decorator_node, _captures in decorators:
             # Find the containing class for this decorator
-            containing_class = self._find_containing_class_for_decorator(decorator_node)
-            if not containing_class:
+            class_info = self._find_containing_class_for_decorator(decorator_node)
+            if not class_info:
                 continue
 
+            class_name, class_node = class_info
+
             # Get all valid parameter names for this class
-            valid_params = self._get_class_parameters(containing_class)
+            valid_params = self._get_class_parameters_from_node(class_name, class_node)
             if not valid_params:
                 continue
 
@@ -1048,21 +1050,21 @@ class ParameterValidator:
             # Check each parameter name
             for param_name, param_node in depends_params:
                 if param_name not in valid_params:
-                    message = (
-                        f"Parameter '{param_name}' does not exist in class '{containing_class}'"
-                    )
+                    message = f"Parameter '{param_name}' does not exist in class '{class_name}'"
                     self._create_type_error(
                         param_node, message, "invalid-depends-parameter", "error"
                     )
 
-    def _find_containing_class_for_decorator(self, decorator_node: Node) -> str | None:
+    def _find_containing_class_for_decorator(
+        self, decorator_node: Node
+    ) -> tuple[str, Node] | None:
         """Find the class containing a decorator.
 
         Args:
             decorator_node: A tree-sitter decorator node
 
         Returns:
-            The name of the containing class, or None if not found
+            A tuple of (class_name, class_node), or None if not found
         """
         # Walk up the tree to find the class definition
         current = decorator_node.parent
@@ -1073,9 +1075,46 @@ class ParameterValidator:
                 if class_name and (
                     class_name in self.param_classes or class_name in self.external_param_classes
                 ):
-                    return class_name
+                    return (class_name, current)
             current = current.parent
         return None
+
+    def _get_class_parameters_from_node(self, class_name: str, class_node: Node) -> set[str]:
+        """Get all valid parameter names for a class using its AST node.
+
+        This method uses the class node's position to uniquely identify the class,
+        which is necessary when there are multiple classes with the same name.
+
+        Args:
+            class_name: The name of the class
+            class_node: The tree-sitter AST node for the class
+
+        Returns:
+            Set of parameter names
+        """
+        params = set()
+
+        # Check if this is an external class (no node position needed)
+        if class_name in self.external_param_classes:
+            class_info = self.external_param_classes[class_name]
+            if class_info:
+                params.update(class_info.get_parameter_names())
+                return params
+
+        # For local classes with duplicate names, use node position to identify
+        # the correct class by checking all classes with the same name
+        if class_name in self.param_classes:
+            class_info = self.param_classes[class_name]
+            # Use the line number to create a unique key for this specific class
+            key_with_line = f"{class_name}:{class_node.start_point[0]}"
+
+            # Check if we have a uniquely keyed version
+            if key_with_line in self.param_classes:
+                class_info = self.param_classes[key_with_line]
+
+            params.update(class_info.get_parameter_names())
+
+        return params
 
     def _get_class_parameters(self, class_name: str) -> set[str]:
         """Get all valid parameter names for a class (including inherited).
