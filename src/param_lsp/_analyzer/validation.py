@@ -7,7 +7,7 @@ class parameter defaults and runtime assignments.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,19 @@ class ParameterValidator:
         imports: Import mappings for resolving parameter types
         type_errors: List of validation errors found during analysis
     """
+
+    # Mapping from tree-sitter node types to Python qualified type names
+    NODE_TYPE_MAP: ClassVar[dict[str, str]] = {
+        "integer": "builtins.int",
+        "float": "builtins.float",
+        "string": "builtins.str",
+        "true": "builtins.bool",
+        "false": "builtins.bool",
+        "none": "builtins.NoneType",
+        "list": "builtins.list",
+        "dictionary": "builtins.dict",
+        "tuple": "builtins.tuple",
+    }
 
     def __init__(
         self,
@@ -212,32 +225,19 @@ class ParameterValidator:
         if not node:
             return None
 
-        match node.type:
-            case "integer":
-                return "builtins.int"
-            case "float":
-                return "builtins.float"
-            case "string":
-                return "builtins.str"
-            case "true" | "false":
+        # Check simple type mappings first
+        if node.type in self.NODE_TYPE_MAP:
+            return self.NODE_TYPE_MAP[node.type]
+
+        # Handle identifier case (True, False, None as identifiers)
+        if node.type == "identifier":
+            value = get_value(node)
+            if value in {"True", "False"}:
                 return "builtins.bool"
-            case "none":
+            if value == "None":
                 return "builtins.NoneType"
-            case "list":
-                return "builtins.list"
-            case "dictionary":
-                return "builtins.dict"
-            case "tuple":
-                return "builtins.tuple"
-            case "identifier":
-                value = get_value(node)
-                if value in {"True", "False"}:
-                    return "builtins.bool"
-                elif value == "None":
-                    return "builtins.NoneType"
-                return None
-            case _:
-                return None
+
+        return None
 
     def _is_boolean_literal(self, node: Node) -> bool:
         """Check if a tree-sitter node represents a boolean literal (True/False)."""
