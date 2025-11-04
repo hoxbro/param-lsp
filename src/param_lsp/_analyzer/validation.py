@@ -556,7 +556,10 @@ class ParameterValidator:
         else:
             # Case: instance_var.param = value
             # Try to find which param class has this parameter
+            # Filter out unique keys (name:line) to avoid matching wrong duplicate classes
             for class_name, class_info in self.param_classes.items():
+                if ":" in class_name:  # Skip unique keys
+                    continue
                 if param_name in class_info.parameters:
                     instance_class = class_name
                     break
@@ -1017,7 +1020,14 @@ class ParameterValidator:
             return True
 
         # Handle numeric compatibility: int is compatible with float
-        return expected_type == "builtins.float" and inferred_type == "builtins.int"
+        if expected_type == "builtins.float" and inferred_type == "builtins.int":
+            return True
+
+        # In Python, bool is a subclass of int, so bool is compatible with int and float
+        return inferred_type == "builtins.bool" and expected_type in (
+            "builtins.int",
+            "builtins.float",
+        )
 
     def _check_param_depends_decorators(self, tree: Node) -> None:
         """Check @param.depends decorators for invalid parameter references.
