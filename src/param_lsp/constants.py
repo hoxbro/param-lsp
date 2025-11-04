@@ -7,10 +7,11 @@ from __future__ import annotations
 # =============================================================================
 
 # Global configuration for allowed external libraries for runtime introspection
+# Listed in dependency order: param is the base, panel and holoviews depend on param
 ALLOWED_EXTERNAL_LIBRARIES = {
+    "param",
     "panel",
     "holoviews",
-    "param",
 }
 
 # Directories to exclude when recursively searching for Python files
@@ -23,25 +24,26 @@ EXCLUDED_DIRS = {
 }
 
 # Parameter type mapping for type checking and validation
+# Maps param type names to qualified Python type strings
 PARAM_TYPE_MAP = {
-    "Number": (int, float),
-    "Integer": int,
-    "String": str,
-    "Boolean": bool,
-    "List": list,
-    "Tuple": tuple,
-    "Dict": dict,
-    "Array": (list, tuple),
-    "Range": tuple,
-    "Date": str,
-    "CalendarDate": str,
-    "Filename": str,
-    "Foldername": str,
-    "Path": str,
-    "Color": str,
-    "Selector": object,
-    "ObjectSelector": object,
-    "ListSelector": list,
+    "Number": ("builtins.int", "builtins.float"),
+    "Integer": "builtins.int",
+    "String": "builtins.str",
+    "Boolean": "builtins.bool",
+    "List": "builtins.list",
+    "Tuple": "builtins.tuple",
+    "Dict": "builtins.dict",
+    "Array": ("builtins.list", "builtins.tuple"),
+    "Range": "builtins.tuple",
+    "Date": "builtins.str",
+    "CalendarDate": "builtins.str",
+    "Filename": "builtins.str",
+    "Foldername": "builtins.str",
+    "Path": "builtins.str",
+    "Color": "builtins.str",
+    "Selector": "builtins.object",
+    "ObjectSelector": "builtins.object",
+    "ListSelector": "builtins.list",
 }
 
 # Parameter types that are considered to be numeric
@@ -49,36 +51,6 @@ NUMERIC_PARAMETER_TYPES = {"Integer", "Number", "Float"}
 
 # Parameter types that are considered containers
 CONTAINER_PARAMETER_TYPES = {"List", "Tuple"}
-
-# Common param parameter types
-PARAM_TYPES = {
-    "Parameter",
-    "Number",
-    "Integer",
-    "String",
-    "Boolean",
-    "List",
-    "Tuple",
-    "Dict",
-    "Array",
-    "DataFrame",
-    "Series",
-    "Range",
-    "Date",
-    "CalendarDate",
-    "Filename",
-    "Foldername",
-    "Path",
-    "Color",
-    "Composite",
-    "Dynamic",
-    "Event",
-    "Action",
-    "FileSelector",
-    "ListSelector",
-    "ObjectSelector",
-    "Selector",
-}
 
 # Selector parameter types that support objects
 SELECTOR_PARAM_TYPES = ("Selector", "ObjectSelector", "ListSelector")

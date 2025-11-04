@@ -75,6 +75,9 @@ class ExternalClassInspector:
         self.populated_libraries: set[str] = set()
         # Cache library info (version and dependencies) to avoid repeated subprocess calls
         self.library_info_cache: dict[str, LibraryInfo] = {}
+        # Session-wide registry of detected parameter types across all libraries
+        # This allows types to accumulate as we process libraries in dependency order
+        self.session_parameter_types: set[str] = set()
 
         # Python environment for analysis
         if python_env is None:
@@ -103,17 +106,23 @@ class ExternalClassInspector:
 
         # Process and cache the results
         for library_name, info in all_results.items():
-            # Parse dependencies to extract only allowed libraries
+            # Parse dependencies from package metadata
             dependencies: list[str] = []
             requires = info.get("requires", [])
             if isinstance(requires, list):
                 for req in requires:
-                    # Parse requirement string (e.g., "panel>=1.0" -> "panel")
+                    # Skip conditional dependencies (with environment markers)
+                    # Example: "watchfiles; extra == 'dev'" or "pytest; python_version >= '3.8'"
+                    if ";" in req:
+                        continue
+
+                    # Parse requirement string to extract package name
+                    # Examples: "panel>=1.0" -> "panel", "param<3.0,>=2.0" -> "param"
                     dep_name = (
-                        req.split(";")[0].split(">=")[0].split("==")[0].split("<")[0].strip()
+                        req.split(">=")[0].split("==")[0].split("<")[0].split("~=")[0].strip()
                     )
 
-                    # Only include if it's in our allowed list
+                    # Only include if it's in our allowed list and not self-referential
                     if dep_name in self.allowed_libraries and dep_name != library_name:
                         dependencies.append(dep_name)
                         logger.debug(f"Found dependency: {library_name} -> {dep_name}")
@@ -677,23 +686,7 @@ class ExternalClassInspector:
         ] = {}  # full_class_path -> (ast_node, imports, source_file)
         reexport_map: dict[str, str] = {}  # short_path -> full_path
 
-        # Pre-compute site directories and library root path for module path resolution
-        search_dirs = list(self.python_env.site_packages)
-        if self.python_env.user_site:
-            search_dirs.append(self.python_env.user_site)
-
-        # Cache library root path to avoid repeated exists() and is_relative_to() checks
-        library_root_path = None
-        for site_dir in search_dirs:
-            lib_path = site_dir / library_name
-            if lib_path.exists():
-                library_root_path = lib_path
-                break
-
-        if not library_root_path:
-            logger.debug(f"Could not find library root path for {library_name}")
-            return 0
-
+        # library_root_path already computed at line 675 from actual source files
         for source_path in source_paths:
             try:
                 source_code = source_path.read_text(encoding="utf-8")
@@ -810,6 +803,59 @@ class ExternalClassInspector:
 
         logger.debug(f"Final: Found {len(parameterized_classes)} total Parameterized classes")
 
+        # Phase 1.5: Iterative Parameter type detection
+        logger.debug("Phase 1.5: Iterative Parameter type detection")
+
+        # Start with parameter types from previous libraries in this session
+        # This allows types to accumulate: param → panel → holoviews
+        parameter_types: set[str] = set(self.session_parameter_types)
+
+        logger.debug(f"Starting with {len(parameter_types)} parameter types from session")
+
+        # Round 0: Find param.Parameter base class itself
+        for class_path in inheritance_map:
+            if self._is_parameter_base(class_path, library_name):
+                parameter_types.add(class_path)
+
+        logger.debug(f"Round 0: Found {len(parameter_types)} Parameter root classes")
+
+        # Round 1: Find direct Parameter subclasses
+        for class_path, bases in inheritance_map.items():
+            if any(self._is_parameter_base(base, library_name) for base in bases):
+                parameter_types.add(class_path)
+
+        logger.debug(f"Round 1: Found {len(parameter_types)} direct Parameter subclasses")
+
+        # Round 2+: Propagate iteratively through inheritance hierarchy
+        round_num = 2
+        changed = True
+        while changed:
+            changed = False
+            for class_path, bases in inheritance_map.items():
+                if class_path not in parameter_types:
+                    # Check if any base class is already marked as Parameter type
+                    for base in bases:
+                        if self._base_matches_parameter_type(base, parameter_types):
+                            parameter_types.add(class_path)
+                            changed = True
+                            break
+
+            if changed:
+                logger.debug(f"Round {round_num}: Total {len(parameter_types)} Parameter types")
+                round_num += 1
+
+        logger.debug(f"Final: Found {len(parameter_types)} total Parameter types")
+
+        # Store detected parameter types for use in parameter extraction
+        self.detected_parameter_types = parameter_types
+
+        # Update session-wide registry for next library to use
+        # This enables accumulation: param → panel → holoviews
+        self.session_parameter_types.update(parameter_types)
+
+        # Cache parameter types for this library
+        external_library_cache.set_parameter_types(library_name, parameter_types, version)
+
         # Resolve relative import paths in inheritance map before topological sort
         # The map may contain relative paths like ".dimension.ViewableElement" which need
         # to be resolved to full paths for proper dependency tracking
@@ -904,6 +950,7 @@ class ExternalClassInspector:
                     source_path,
                     inheritance_map,
                     class_ast_nodes,
+                    self.detected_parameter_types,
                 )
                 if class_info:
                     # Cache under the full path
@@ -923,10 +970,32 @@ class ExternalClassInspector:
 
         logger.info(f"Populated {count} classes for {library_name}")
         # Flush all pending cache changes to disk
+        logger.debug(f"Flushing cache for {library_name} version {version}, count={count}")
         external_library_cache.flush(library_name, version)
+        logger.debug(f"Flush complete for {library_name}")
         # Clean up AST caches after population
         self._cleanup_ast_caches()
         return count
+
+    def get_all_parameter_types(self) -> set[str]:
+        """Get all parameter types from all cached libraries.
+
+        Returns:
+            Set of all parameter type paths from all cached allowed libraries
+        """
+        all_param_types: set[str] = set()
+
+        for library_name in self.allowed_libraries:
+            lib_info = self.library_info_cache.get(library_name)
+            if lib_info:
+                version = lib_info["version"]
+                param_types = external_library_cache.get_parameter_types(library_name, version)
+                all_param_types.update(param_types)
+                logger.debug(
+                    f"Loaded {len(param_types)} parameter types from {library_name} cache"
+                )
+
+        return all_param_types
 
     def analyze_external_class(self, full_class_path: str) -> ParameterizedInfo | None:
         """Analyze an external class using static analysis.
@@ -1044,8 +1113,14 @@ class ExternalClassInspector:
                     # Verify this is actually a Parameterized class
                     if self._inherits_from_parameterized(class_definition, class_imports):
                         # Convert AST node to ParameterizedInfo
+                        # For local files, parameter_types may not be available (None is fine)
+                        parameter_types = getattr(self, "detected_parameter_types", None)
                         result = self._convert_ast_to_class_info(
-                            class_definition, class_imports, full_class_path, source_path
+                            class_definition,
+                            class_imports,
+                            full_class_path,
+                            source_path,
+                            parameter_types=parameter_types,
                         )
                         # Clean up AST caches after successful conversion
                         self._cleanup_ast_caches()
@@ -1353,7 +1428,9 @@ class ExternalClassInspector:
         class_info = ParameterizedInfo(name=class_name)
 
         # Find parameter assignments in class body
-        parameter_detector = ParameterDetector(imports)
+        # For local analysis, parameter_types may not be available
+        parameter_types = getattr(self, "detected_parameter_types", None)
+        parameter_detector = ParameterDetector(imports, parameter_types)
         self._extract_class_parameters(
             class_node, parameter_detector, class_info, source_lines, imports
         )
@@ -1675,6 +1752,7 @@ class ExternalClassInspector:
         file_path: Path,
         inheritance_map: dict[str, list[str]] | None = None,
         class_ast_nodes: dict[str, tuple[Node, dict[str, str], Path]] | None = None,
+        parameter_types: set[str] | None = None,
     ) -> ParameterizedInfo:
         """Convert an AST class node to ParameterizedInfo.
 
@@ -1685,6 +1763,7 @@ class ExternalClassInspector:
             file_path: Path to the source file
             inheritance_map: Optional map of full_class_path -> [base_class_paths]
             class_ast_nodes: Optional map of full_class_path -> (ast_node, imports, file_path)
+            parameter_types: Set of detected Parameter type paths from static analysis
 
         Returns:
             ParameterizedInfo with extracted parameters
@@ -1700,7 +1779,7 @@ class ExternalClassInspector:
         # Find parameter assignments in class body
         from param_lsp._analyzer.ast_navigator import ParameterDetector
 
-        parameter_detector = ParameterDetector(imports)
+        parameter_detector = ParameterDetector(imports, parameter_types)
 
         # Get the actual source lines for parameter extraction
         source_lines = self.file_source_cache.get(file_path)
@@ -1828,12 +1907,12 @@ class ExternalClassInspector:
                 library_name = full_class_path.split(".")[0]
                 lib_info = self.library_info_cache.get(library_name)
                 parent_class_info_cached = None
+                resolved_parent_path = base_class_path
                 if lib_info:
                     version = lib_info["version"]
 
                     # Resolve relative import paths to full paths
                     # base_class_path might be like ".dimension.ViewableElement" or "..element.Element"
-                    resolved_parent_path = base_class_path
                     if base_class_path.startswith("."):
                         # Relative import - resolve to full path
                         # e.g., full_class_path = "holoviews.core.element.Element"
@@ -1861,11 +1940,18 @@ class ExternalClassInspector:
 
                 if parent_class_info_cached:
                     # Parent is already cached with ALL its inherited parameters - just use it!
+                    logger.debug(
+                        f"Found cached parent {resolved_parent_path} with {len(parent_class_info_cached.parameters)} parameters for {full_class_path}"
+                    )
                     for param_name, param_info in parent_class_info_cached.parameters.items():
                         if param_name not in class_info.parameters:
                             class_info.parameters[param_name] = param_info
                     # Don't recurse - cached parent already has everything
                     continue
+                else:
+                    logger.debug(
+                        f"Parent {base_class_path} (resolved: {resolved_parent_path}) not found in cache for {full_class_path}"
+                    )
 
                 # If not cached, try to find in AST nodes
                 if base_class_path in class_ast_nodes:
@@ -2239,6 +2325,29 @@ class ExternalClassInspector:
 
         return False
 
+    def _is_parameter_base(self, base_path: str, library_name: str | None = None) -> bool:
+        """Check if a base class path is param.Parameter.
+
+        Args:
+            base_path: Base class path to check
+            library_name: Name of library being analyzed (for context-aware matching)
+
+        Returns:
+            True if base class is param.Parameter
+        """
+        # Common forms that work across all libraries
+        if base_path in (
+            "param.Parameter",
+            "param.parameterized.Parameter",
+        ):
+            return True
+
+        # Relative import form only valid within param library's own source
+        if base_path == ".parameterized.Parameter":
+            return library_name == "param"
+
+        return False
+
     def _base_matches_parameterized_class(
         self, base_name: str, parameterized_classes: set[str]
     ) -> bool:
@@ -2305,6 +2414,94 @@ class ExternalClassInspector:
 
             # Check if base_name components are a suffix of full_path
             # e.g., 'panel.layout.Feed' matches 'panel.layout.feed.Feed'
+            if len(base_parts) <= len(full_parts):
+                # Try matching from the end (suffix match)
+                matches = True
+                j = len(full_parts) - 1
+                for i in range(len(base_parts) - 1, -1, -1):
+                    if base_parts[i] != full_parts[j]:
+                        matches = False
+                        break
+                    j -= 1
+                if matches:
+                    return True
+
+                # Also try matching as a contiguous substring (for complex import patterns)
+                for offset in range(len(full_parts) - len(base_parts) + 1):
+                    if full_parts[offset : offset + len(base_parts)] == base_parts:
+                        return True
+
+        return False
+
+    def _base_matches_parameter_type(self, base_name: str, parameter_types: set[str]) -> bool:
+        """Check if a base class name matches any known Parameter type.
+
+        Handles matching both simple names (e.g., 'Children') and full paths
+        (e.g., 'panel.viewable.Children'), as well as relative imports and
+        partial qualified paths.
+
+        Args:
+            base_name: Base class name to check (may be simple or fully qualified)
+            parameter_types: Set of full paths to known Parameter types
+
+        Returns:
+            True if base_name matches a known Parameter type
+        """
+        # Direct/exact match: base_name is a full path
+        if base_name in parameter_types:
+            return True
+
+        # Simple name match: base_name has no dots (e.g., 'Children')
+        # This handles cases where a class is defined in the same file or imported without qualification
+        # Match: 'Children' matches 'panel.viewable.Children'
+        if "." not in base_name:
+            return any(full_path.endswith(f".{base_name}") for full_path in parameter_types)
+
+        # Handle relative imports (starting with dots)
+        if base_name.startswith("."):
+            # Extract the class name from the relative import
+            # e.g., '.viewable.Children' -> 'Children'
+            parts = base_name.lstrip(".").split(".")
+            if parts:
+                class_name = parts[-1]
+                # Try to match by class name and partial path
+                for full_path in parameter_types:
+                    if full_path.endswith(f".{class_name}"):
+                        # Also check if the relative path components match
+                        if len(parts) > 1:
+                            # Check if the module path components match
+                            rel_module_parts = parts[:-1]  # Exclude class name
+                            full_parts = full_path.split(".")
+                            # Try to find matching suffix
+                            for i in range(len(full_parts) - len(parts) + 1):
+                                if full_parts[i : i + len(rel_module_parts)] == rel_module_parts:
+                                    return True
+                        else:
+                            # Just class name, already matched
+                            return True
+            return False
+
+        # Handle param module shorthand: param.List -> param.parameters.List
+        # The param package re-exports parameter types at the package level
+        if base_name.startswith("param.") and not base_name.startswith("param.parameters."):
+            # Try matching with param.parameters prefix
+            class_name = base_name.split(".")[-1]
+            canonical_path = f"param.parameters.{class_name}"
+            if canonical_path in parameter_types:
+                return True
+
+        # Partial qualified path match (e.g., 'viewable.Children' or 'panel.viewable.Children')
+        base_parts = base_name.split(".")
+        base_class = base_parts[-1]
+
+        for full_path in parameter_types:
+            full_parts = full_path.split(".")
+
+            # Check if the class names match
+            if full_parts[-1] != base_class:
+                continue
+
+            # Check if base_name components are a suffix of full_path
             if len(base_parts) <= len(full_parts):
                 # Try matching from the end (suffix match)
                 matches = True

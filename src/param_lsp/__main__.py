@@ -165,7 +165,7 @@ def main():
             return
 
         if args.generate:
-            for library in sorted(all_libraries):
+            for library in all_libraries:
                 inspector.populate_library_cache(library)
             return
 

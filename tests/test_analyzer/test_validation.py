@@ -102,7 +102,7 @@ class TestParameterValidator:
         assert len(string_nodes) == 1
 
         inferred_type = validator._infer_value_type(string_nodes[0])
-        assert inferred_type is str
+        assert inferred_type == "builtins.str"
 
     def test_infer_value_type_integer(self, validator):
         """Test _infer_value_type with integer literals."""
@@ -113,7 +113,7 @@ class TestParameterValidator:
         assert len(integer_nodes) == 1
 
         inferred_type = validator._infer_value_type(integer_nodes[0])
-        assert inferred_type is int
+        assert inferred_type == "builtins.int"
 
     def test_infer_value_type_float(self, validator):
         """Test _infer_value_type with float literals."""
@@ -124,7 +124,7 @@ class TestParameterValidator:
         assert len(float_nodes) == 1
 
         inferred_type = validator._infer_value_type(float_nodes[0])
-        assert inferred_type is float
+        assert inferred_type == "builtins.float"
 
     def test_infer_value_type_boolean_true(self, validator):
         """Test _infer_value_type with boolean True."""
@@ -135,7 +135,7 @@ class TestParameterValidator:
         assert len(true_nodes) == 1
 
         inferred_type = validator._infer_value_type(true_nodes[0])
-        assert inferred_type is bool
+        assert inferred_type == "builtins.bool"
 
     def test_infer_value_type_boolean_false(self, validator):
         """Test _infer_value_type with boolean False."""
@@ -146,7 +146,7 @@ class TestParameterValidator:
         assert len(false_nodes) == 1
 
         inferred_type = validator._infer_value_type(false_nodes[0])
-        assert inferred_type is bool
+        assert inferred_type == "builtins.bool"
 
     def test_infer_value_type_none(self, validator):
         """Test _infer_value_type with None."""
@@ -157,7 +157,7 @@ class TestParameterValidator:
         assert len(none_nodes) == 1
 
         inferred_type = validator._infer_value_type(none_nodes[0])
-        assert inferred_type is type(None)
+        assert inferred_type == "builtins.NoneType"
 
     def test_infer_value_type_list(self, validator):
         """Test _infer_value_type with list literals."""
@@ -168,7 +168,7 @@ class TestParameterValidator:
         assert len(list_nodes) == 1
 
         inferred_type = validator._infer_value_type(list_nodes[0])
-        assert inferred_type is list
+        assert inferred_type == "builtins.list"
 
     def test_infer_value_type_tuple(self, validator):
         """Test _infer_value_type with tuple literals."""
@@ -179,7 +179,7 @@ class TestParameterValidator:
         assert len(tuple_nodes) == 1
 
         inferred_type = validator._infer_value_type(tuple_nodes[0])
-        assert inferred_type is tuple
+        assert inferred_type == "builtins.tuple"
 
     def test_infer_value_type_dict(self, validator):
         """Test _infer_value_type with dict literals."""
@@ -190,7 +190,7 @@ class TestParameterValidator:
         assert len(dict_nodes) == 1
 
         inferred_type = validator._infer_value_type(dict_nodes[0])
-        assert inferred_type is dict
+        assert inferred_type == "builtins.dict"
 
     def test_is_boolean_literal_true(self, validator):
         """Test _is_boolean_literal with True."""
@@ -223,13 +223,13 @@ class TestParameterValidator:
         assert validator._is_boolean_literal(string_nodes[0]) is False
 
     def test_format_expected_types_single(self, validator):
-        """Test _format_expected_types with single type."""
-        formatted = validator._format_expected_types((str,))
+        """Test _format_expected_types with single type (qualified string)."""
+        formatted = validator._format_expected_types(("builtins.str",))
         assert formatted == "str"
 
     def test_format_expected_types_multiple(self, validator):
-        """Test _format_expected_types with multiple types."""
-        formatted = validator._format_expected_types((str, int))
+        """Test _format_expected_types with multiple types (qualified strings)."""
+        formatted = validator._format_expected_types(("builtins.str", "builtins.int"))
         assert "str" in formatted
         assert "int" in formatted
 
@@ -613,3 +613,58 @@ def test2():
         errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
         depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
         assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
+
+    def test_selector_accepts_any_type_in_default(self, validator):
+        """Test that Selector parameter accepts any type in default value (object compatibility)."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.Selector(default="b", objects=[1, "b", "c"])
+    b = param.Selector(default=1, objects=[1, "b", "c"])
+    c = param.ObjectSelector(default=2.5, objects=[1.5, 2.5, "x"])
+"""
+        tree = parser.parse(code)
+
+        # Should not create any type errors - Selector accepts object type (any type)
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        type_errors = [e for e in errors if "type-mismatch" in e.get("code", "")]
+        assert len(type_errors) == 0, f"Expected no type errors, got: {type_errors}"
+
+    def test_selector_runtime_assignment_accepts_any_type(self, validator):
+        """Test that Selector parameter accepts any type in runtime assignments."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.Selector(default="b", objects=[1, "b", "c"])
+
+Test().a = 2
+Test().a = "c"
+Test().a = 1
+"""
+        tree = parser.parse(code)
+
+        # Should not create any type errors for runtime assignments
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        type_errors = [e for e in errors if "runtime-type-mismatch" in e.get("code", "")]
+        assert len(type_errors) == 0, f"Expected no runtime type errors, got: {type_errors}"
+
+    def test_selector_constructor_accepts_any_type(self, validator):
+        """Test that Selector parameter accepts any type in constructor calls."""
+        code = """
+import param
+
+class Test(param.Parameterized):
+    a = param.Selector(default="b", objects=[1, "b", "c"])
+
+Test(a=1)
+Test(a="c")
+Test(a="b")
+"""
+        tree = parser.parse(code)
+
+        # Should not create any type errors for constructor calls
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        type_errors = [e for e in errors if "constructor-type-mismatch" in e.get("code", "")]
+        assert len(type_errors) == 0, f"Expected no constructor type errors, got: {type_errors}"

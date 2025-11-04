@@ -104,8 +104,12 @@ class ParamAnalyzer:
         # The static analyzer doesn't need pre-caching, so this can be empty
         self.external_param_classes: dict[str, ParameterizedInfo | None] = {}
 
+        # Get parameter types from all cached libraries for local file analysis
+        parameter_types = self.external_inspector.get_all_parameter_types()
+        logger.debug(f"Loaded {len(parameter_types)} total parameter types for local analysis")
+
         # Use modular AST navigation components (must be created before validator)
-        self.parameter_detector = ParameterDetector(self.imports)
+        self.parameter_detector = ParameterDetector(self.imports, parameter_types)
         self.import_handler = ImportHandler(self.imports)
 
         # Use modular parameter validator

@@ -6,7 +6,6 @@ import re
 import textwrap
 from typing import TYPE_CHECKING
 
-import param
 from lsprotocol.types import (
     CompletionItem,
     CompletionItemKind,
@@ -87,18 +86,6 @@ class CompletionMixin(LSPServerBase):
             completions = []
             for cls in self.classes:
                 documentation = f"Param parameter type: {cls}"
-
-                # Try to get actual documentation from param module
-                if param:
-                    try:
-                        param_class = getattr(param, cls, None)
-                        if param_class and hasattr(param_class, "__doc__") and param_class.__doc__:
-                            # Extract first line of docstring for concise documentation
-                            doc_lines = param_class.__doc__.strip().split("\n")
-                            if doc_lines:
-                                documentation = doc_lines[0].strip()
-                    except (AttributeError, TypeError):
-                        pass
 
                 completions.append(
                     CompletionItem(
