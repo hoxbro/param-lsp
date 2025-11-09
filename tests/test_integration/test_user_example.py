@@ -5,6 +5,14 @@ from __future__ import annotations
 from param_lsp.analyzer import ParamAnalyzer
 
 
+def get_class(param_classes, base_name):
+    """Get class by base name from param_classes dict with unique keys."""
+    for key in param_classes:
+        if key.startswith(f"{base_name}:"):
+            return param_classes[key]
+    return None
+
+
 class TestUserExample:
     """Test the exact user example that was requested."""
 
@@ -48,8 +56,10 @@ S().x = "a"  # This should now trigger a type error!
         result = analyzer.analyze_file(content, str(example_file))
 
         # Verify S is detected as a param class
-        assert "S" in result["param_classes"], "Class S should be detected as a param class"
-        s_class = result["param_classes"]["S"]
+        assert get_class(result["param_classes"], "S") is not None, (
+            "Class S should be detected as a param class"
+        )
+        s_class = get_class(result["param_classes"], "S")
 
         # Verify S inherits parameters from P
         assert "x" in s_class.parameters, "S should inherit parameter 'x' from P"
@@ -96,8 +106,10 @@ S().b = "a"
         result = analyzer.analyze_file(content, str(child_file))
 
         # Verify the inheritance works
-        assert "S" in result["param_classes"], "Class S should be detected as a param class"
-        s_class = result["param_classes"]["S"]
+        assert get_class(result["param_classes"], "S") is not None, (
+            "Class S should be detected as a param class"
+        )
+        s_class = get_class(result["param_classes"], "S")
         assert "b" in s_class.parameters, "S should have parameter 'b'"
         assert s_class.parameters["b"].cls == "Boolean", "Parameter 'b' should be Boolean type"
 
@@ -155,10 +167,10 @@ obj.final_bool = "xyz"  # Error: Boolean parameter
         result = analyzer.analyze_file(content, str(final_file))
 
         # Verify complete inheritance chain
-        assert "Final" in result["param_classes"], (
+        assert get_class(result["param_classes"], "Final") is not None, (
             "Class Final should be detected as a param class"
         )
-        final_class = result["param_classes"]["Final"]
+        final_class = get_class(result["param_classes"], "Final")
 
         # Check all inherited parameters
         expected_params = {"base_str", "middle_int", "final_bool"}
@@ -226,11 +238,11 @@ D().d_param = "wrong"   # Error: Number
         result = analyzer.analyze_file(content, str(test_file))
 
         # Verify both classes are detected
-        assert "C" in result["param_classes"], "Class C should be detected"
-        assert "D" in result["param_classes"], "Class D should be detected"
+        assert get_class(result["param_classes"], "C") is not None, "Class C should be detected"
+        assert get_class(result["param_classes"], "D") is not None, "Class D should be detected"
 
-        c_class = result["param_classes"]["C"]
-        d_class = result["param_classes"]["D"]
+        c_class = get_class(result["param_classes"], "C")
+        d_class = get_class(result["param_classes"], "D")
 
         # Verify inheritance for C
         assert set(c_class.parameters.keys()) == {"a_param", "c_param"}, "C should inherit from A"

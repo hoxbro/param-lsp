@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 
+def get_class(param_classes, base_name):
+    """Get class by base name from param_classes dict with unique keys."""
+    for key in param_classes:
+        if key.startswith(f"{base_name}:"):
+            return param_classes[key]
+    return None
+
+
 class TestParameterInheritance:
     """Test parameter inheritance in class hierarchies."""
 
@@ -23,11 +31,11 @@ S().b = "a"
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "P" in param_classes
-        assert "S" in param_classes
-        assert len(param_classes["P"].parameters) == 0
-        assert list(param_classes["S"].parameters.keys()) == ["b"]
-        assert param_classes["S"].parameters["b"].cls == "Boolean"
+        assert get_class(param_classes, "P") is not None
+        assert get_class(param_classes, "S") is not None
+        assert len(get_class(param_classes, "P").parameters) == 0
+        assert list(get_class(param_classes, "S").parameters.keys()) == ["b"]
+        assert get_class(param_classes, "S").parameters["b"].cls == "Boolean"
 
         # Should detect type error
         assert len(result["type_errors"]) == 1
@@ -58,19 +66,19 @@ T().name = 123
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "P" in param_classes
-        assert "S" in param_classes
-        assert "T" in param_classes
+        assert get_class(param_classes, "P") is not None
+        assert get_class(param_classes, "S") is not None
+        assert get_class(param_classes, "T") is not None
 
         # Check parameter inheritance
-        assert list(param_classes["P"].parameters.keys()) == ["x"]
-        assert set(param_classes["S"].parameters.keys()) == {"x", "b"}
-        assert set(param_classes["T"].parameters.keys()) == {"x", "b", "name"}
+        assert list(get_class(param_classes, "P").parameters.keys()) == ["x"]
+        assert set(get_class(param_classes, "S").parameters.keys()) == {"x", "b"}
+        assert set(get_class(param_classes, "T").parameters.keys()) == {"x", "b", "name"}
 
         # Check type inheritance
-        assert param_classes["T"].parameters["x"].cls == "Integer"
-        assert param_classes["T"].parameters["b"].cls == "Boolean"
-        assert param_classes["T"].parameters["name"].cls == "String"
+        assert get_class(param_classes, "T").parameters["x"].cls == "Integer"
+        assert get_class(param_classes, "T").parameters["b"].cls == "Boolean"
+        assert get_class(param_classes, "T").parameters["name"].cls == "String"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -95,12 +103,12 @@ S().value = 123  # Should error - expecting string now
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "P" in param_classes
-        assert "S" in param_classes
+        assert get_class(param_classes, "P") is not None
+        assert get_class(param_classes, "S") is not None
 
         # Child class should override parent parameter type
-        assert param_classes["P"].parameters["value"].cls == "Integer"
-        assert param_classes["S"].parameters["value"].cls == "String"
+        assert get_class(param_classes, "P").parameters["value"].cls == "Integer"
+        assert get_class(param_classes, "S").parameters["value"].cls == "String"
 
         # Should detect type error based on child class type
         assert len(result["type_errors"]) == 1
@@ -126,12 +134,12 @@ S().y = 10  # Should violate local bounds
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "P" in param_classes
-        assert "S" in param_classes
+        assert get_class(param_classes, "P") is not None
+        assert get_class(param_classes, "S") is not None
 
         # Check bounds inheritance
-        assert param_classes["S"].parameters["x"].bounds is not None
-        assert param_classes["S"].parameters["y"].bounds is not None
+        assert get_class(param_classes, "S").parameters["x"].bounds is not None
+        assert get_class(param_classes, "S").parameters["y"].bounds is not None
 
         # Should detect 2 bounds violations
         bounds_errors = [e for e in result["type_errors"] if e["code"] == "bounds-violation"]
@@ -152,12 +160,12 @@ class S(P):
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "P" in param_classes
-        assert "S" in param_classes
+        assert get_class(param_classes, "P") is not None
+        assert get_class(param_classes, "S") is not None
 
         # Check doc inheritance
-        assert param_classes["S"].parameters["x"].doc == "Parent parameter"
-        assert param_classes["S"].parameters["y"].doc == "Child parameter"
+        assert get_class(param_classes, "S").parameters["x"].doc == "Parent parameter"
+        assert get_class(param_classes, "S").parameters["y"].doc == "Child parameter"
 
     def test_complex_inheritance_chain(self, analyzer):
         """Test complex inheritance with multiple parents and parameters."""
@@ -184,19 +192,21 @@ C().c_param = "not_num"   # Should error
 
         result = analyzer.analyze_file(code_py)
 
-        # All classes should be recognized
+        # All classes should be recognized with unique keys (name:line_number)
         param_classes = result["param_classes"]
+        class_base_names = {name.split(":")[0] for name in param_classes}
         expected_classes = {"Base", "A", "B", "C"}
-        assert set(param_classes.keys()) == expected_classes
+        assert class_base_names == expected_classes
 
         # Check parameter inheritance for class C
-        c_params = set(param_classes["C"].parameters.keys())
+        c_key = next(k for k in param_classes if k.startswith("C:"))
+        c_params = set(param_classes[c_key].parameters.keys())
         assert c_params == {"base_param", "a_param", "c_param"}
 
         # Check type inheritance
-        assert param_classes["C"].parameters["base_param"].cls == "String"
-        assert param_classes["C"].parameters["a_param"].cls == "Integer"
-        assert param_classes["C"].parameters["c_param"].cls == "Number"
+        assert param_classes[c_key].parameters["base_param"].cls == "String"
+        assert param_classes[c_key].parameters["a_param"].cls == "Integer"
+        assert param_classes[c_key].parameters["c_param"].cls == "Number"
 
         # Should detect 3 type errors
         assert len(result["type_errors"]) == 3
@@ -219,12 +229,12 @@ S().x = "not_int"  # Should detect error for inherited parameter
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "P" in param_classes
-        assert "S" in param_classes
+        assert get_class(param_classes, "P") is not None
+        assert get_class(param_classes, "S") is not None
 
         # Child should inherit parent's parameter
-        assert "x" in param_classes["S"].parameters
-        assert param_classes["S"].parameters["x"].cls == "Integer"
+        assert "x" in get_class(param_classes, "S").parameters
+        assert get_class(param_classes, "S").parameters["x"].cls == "Integer"
 
         # Should detect type error
         assert len(result["type_errors"]) == 1

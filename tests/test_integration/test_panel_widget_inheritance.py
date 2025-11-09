@@ -7,6 +7,14 @@ import pytest
 from param_lsp.analyzer import ParamAnalyzer
 
 
+def get_class(param_classes, base_name):
+    """Get class by base name from param_classes dict with unique keys."""
+    for key in param_classes:
+        if key.startswith(f"{base_name}:"):
+            return param_classes[key]
+    return None
+
+
 class TestPanelWidgetInheritance:
     """Test parameter inheritance from Panel widgets."""
 
@@ -28,8 +36,8 @@ class T(pn.widgets.IntSlider):
         result = analyzer.analyze_file(code_py)
 
         # Verify class is detected as Parameterized
-        assert "T" in result["param_classes"]
-        t_class = result["param_classes"]["T"]
+        assert get_class(result["param_classes"], "T") is not None
+        t_class = get_class(result["param_classes"], "T")
 
         # Verify T inherits Panel IntSlider parameters
         t_params = list(t_class.parameters.keys())
@@ -64,11 +72,11 @@ class MyWidget(CustomSlider):
         result = analyzer.analyze_file(code_py)
 
         # Both classes should be detected
-        assert "CustomSlider" in result["param_classes"]
-        assert "MyWidget" in result["param_classes"]
+        assert get_class(result["param_classes"], "CustomSlider") is not None
+        assert get_class(result["param_classes"], "MyWidget") is not None
 
-        custom_slider_class = result["param_classes"]["CustomSlider"]
-        my_widget_class = result["param_classes"]["MyWidget"]
+        custom_slider_class = get_class(result["param_classes"], "CustomSlider")
+        my_widget_class = get_class(result["param_classes"], "MyWidget")
 
         # CustomSlider should have Panel IntSlider params + custom_param
         custom_params = list(custom_slider_class.parameters.keys())

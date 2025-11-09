@@ -141,13 +141,24 @@ class ParameterValidator:
     def _check_class_parameter_defaults(self, class_node: Node, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
         class_name = get_class_name(class_node)
-        if not class_name or class_name not in self.param_classes:
+        if not class_name:
+            return
+
+        # Create unique key with line number
+        line_number = class_node.start_point[0]
+        unique_key = f"{class_name}:{line_number}"
+
+        if unique_key not in self.param_classes:
             return
 
         for assignment_node, target_name in find_all_parameter_assignments(
             class_node, self.is_parameter_assignment
         ):
             self._check_parameter_default_type(assignment_node, target_name, lines)
+
+    def _has_class_with_base_name(self, base_name: str) -> bool:
+        """Check if any class with the given base name exists (ignoring line numbers)."""
+        return any(key.startswith(f"{base_name}:") for key in self.param_classes)
 
     def _check_constructor_parameter_types(self, node: Node, lines: list[str]) -> None:
         """Check for type errors in constructor parameter calls like MyClass(x="A") (tree-sitter version)."""
@@ -157,7 +168,7 @@ class ParameterValidator:
             return
 
         # Check if this is a valid param class (local or external)
-        is_valid_param_class = class_name in self.param_classes or (
+        is_valid_param_class = self._has_class_with_base_name(class_name) or (
             class_name in self.external_param_classes and self.external_param_classes[class_name]
         )
 
@@ -662,9 +673,11 @@ class ParameterValidator:
     def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
         """Get parameter bounds from a class definition."""
         # Check local classes first
-        if class_name in self.param_classes:
-            param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.bounds if param_info else None
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                param_info = self.param_classes[key].get_parameter(param_name)
+                if param_info:
+                    return param_info.bounds
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -775,10 +788,12 @@ class ParameterValidator:
 
     def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
         """Get the parameter type from a class definition."""
-        # Check local classes first
-        if class_name in self.param_classes:
-            param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.cls if param_info else None
+        # Check local classes first - try to find by base name (searches all unique keys)
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                param_info = self.param_classes[key].get_parameter(param_name)
+                if param_info:
+                    return param_info.cls
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -791,9 +806,11 @@ class ParameterValidator:
     def _get_parameter_allow_None(self, class_name: str, param_name: str) -> bool:
         """Get the allow_None setting for a parameter from a class definition."""
         # Check local classes first
-        if class_name in self.param_classes:
-            param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.allow_None if param_info else False
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                param_info = self.param_classes[key].get_parameter(param_name)
+                if param_info:
+                    return param_info.allow_None
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -945,9 +962,11 @@ class ParameterValidator:
             Qualified type name string (e.g., "builtins.str") or None
         """
         # Check local classes first
-        if class_name in self.param_classes:
-            param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.item_type if param_info else None
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                param_info = self.param_classes[key].get_parameter(param_name)
+                if param_info:
+                    return param_info.item_type
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -960,9 +979,11 @@ class ParameterValidator:
     def _get_parameter_length(self, class_name: str, param_name: str) -> int | None:
         """Get the length constraint for a Tuple parameter."""
         # Check local classes first
-        if class_name in self.param_classes:
-            param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.length if param_info else None
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                param_info = self.param_classes[key].get_parameter(param_name)
+                if param_info:
+                    return param_info.length
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -1147,17 +1168,12 @@ class ParameterValidator:
                 params.update(class_info.get_parameter_names())
                 return params
 
-        # For local classes with duplicate names, use node position to identify
-        # the correct class by checking all classes with the same name
-        if class_name in self.param_classes:
-            class_info = self.param_classes[class_name]
-            # Use the line number to create a unique key for this specific class
-            key_with_line = f"{class_name}:{class_node.start_point[0]}"
+        # For local classes, use the unique key with line number
+        line_number = class_node.start_point[0]
+        unique_key = f"{class_name}:{line_number}"
 
-            # Check if we have a uniquely keyed version
-            if key_with_line in self.param_classes:
-                class_info = self.param_classes[key_with_line]
-
+        if unique_key in self.param_classes:
+            class_info = self.param_classes[unique_key]
             params.update(class_info.get_parameter_names())
 
         return params
@@ -1173,14 +1189,18 @@ class ParameterValidator:
         """
         params = set()
 
-        # Check local classes
-        if class_name in self.param_classes:
-            class_info = self.param_classes[class_name]
-            params.update(class_info.get_parameter_names())
+        # Check local classes - search by base name
+        found_local = False
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                class_info = self.param_classes[key]
+                params.update(class_info.get_parameter_names())
+                found_local = True
+                break  # Use first match
 
-        # Check external classes
-        elif class_name in self.external_param_classes:
-            class_info = self.external_param_classes[class_name]
+        # Check external classes if not found locally
+        if not found_local:
+            class_info = self.external_param_classes.get(class_name)
             if class_info:
                 params.update(class_info.get_parameter_names())
 

@@ -238,15 +238,8 @@ class ParamAnalyzer:
             tree.root_node, content.split("\n")
         )
 
-        # Filter out internal unique keys (name:line_number) from the public result
-        public_param_classes = {
-            name: info
-            for name, info in self.param_classes.items()
-            if ":" not in name  # Exclude unique keys with line numbers
-        }
-
         return {
-            "param_classes": public_param_classes,
+            "param_classes": self.param_classes,
             "imports": self.imports,
             "type_errors": self.type_errors,
         }
@@ -291,9 +284,7 @@ class ParamAnalyzer:
             for param_info in current_parameters:
                 class_info.add_parameter(param_info)
 
-            # Store with both plain name and unique key (name:line_number)
-            # This handles duplicate class names while maintaining backward compatibility
-            self.param_classes[class_name] = class_info
+            # Store with unique key (name:line_number) to handle duplicate class names
             line_number = node.start_point[0]
             unique_key = f"{class_name}:{line_number}"
             self.param_classes[unique_key] = class_info

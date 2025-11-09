@@ -45,6 +45,14 @@ def parse_expression(code: str):
     return tree.root_node.children[0] if tree.root_node.children else tree.root_node
 
 
+def get_class(param_classes, base_name):
+    """Get class by base name from param_classes dict with unique keys."""
+    for key in param_classes:
+        if key.startswith(f"{base_name}:"):
+            return param_classes[key]
+    return None
+
+
 class TestExtractNumericValue:
     """Test numeric value extraction."""
 

@@ -5,6 +5,14 @@ from __future__ import annotations
 from param_lsp.analyzer import ParamAnalyzer
 
 
+def get_class(param_classes, base_name):
+    """Get class by base name from param_classes dict with unique keys."""
+    for key in param_classes:
+        if key.startswith(f"{base_name}:"):
+            return param_classes[key]
+    return None
+
+
 class TestCrossFileInheritance:
     """Test parameter inheritance across multiple files."""
 
@@ -44,8 +52,8 @@ S().name = 123         # Should error - inherited String
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "S" in result["param_classes"]
-        s_class = result["param_classes"]["S"]
+        assert get_class(result["param_classes"], "S") is not None
+        s_class = get_class(result["param_classes"], "S")
         assert set(s_class.parameters.keys()) == {"x", "name", "b"}
         assert s_class.parameters["x"].cls == "Integer"
         assert s_class.parameters["name"].cls == "String"
@@ -102,8 +110,8 @@ obj.final_bool = "invalid"  # Error - Boolean
 
         result = analyzer.analyze_file(content, str(final_file))
 
-        assert "Final" in result["param_classes"]
-        final_class = result["param_classes"]["Final"]
+        assert get_class(result["param_classes"], "Final") is not None
+        final_class = get_class(result["param_classes"], "Final")
         assert set(final_class.parameters.keys()) == {
             "base_value",
             "intermediate_num",
@@ -151,8 +159,8 @@ Child().value = 123  # Should error - expecting string now
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "Child" in result["param_classes"]
-        child_class = result["param_classes"]["Child"]
+        assert get_class(result["param_classes"], "Child") is not None
+        child_class = get_class(result["param_classes"], "Child")
         # Child should override parent parameter type
         assert child_class.parameters["value"].cls == "String"
 
@@ -191,8 +199,8 @@ Child().y = 10  # Should violate local bounds
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "Child" in result["param_classes"]
-        child_class = result["param_classes"]["Child"]
+        assert get_class(result["param_classes"], "Child") is not None
+        child_class = get_class(result["param_classes"], "Child")
 
         # Check bounds inheritance
         assert child_class.parameters["x"].bounds is not None
@@ -230,8 +238,8 @@ class Child(Parent):
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "Child" in result["param_classes"]
-        child_class = result["param_classes"]["Child"]
+        assert get_class(result["param_classes"], "Child") is not None
+        child_class = get_class(result["param_classes"], "Child")
 
         # Check doc inheritance
         assert child_class.parameters["x"].doc == "Parent parameter documentation"
