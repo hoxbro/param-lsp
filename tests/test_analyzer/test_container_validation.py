@@ -127,8 +127,8 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code, "test_file.py")
         param_classes = result.get("param_classes", {})
 
-        assert "TestClass" in param_classes
-        test_class = param_classes["TestClass"]
+        test_class = get_class(param_classes, "TestClass")
+        assert test_class is not None
 
         # Check tags parameter
         tags_param = test_class.get_parameter("tags")

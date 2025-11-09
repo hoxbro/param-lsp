@@ -118,7 +118,7 @@ class CompletionMixin(LSPServerBase):
             return False
 
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = set(analysis.get("param_classes", {}).keys())
+        param_classes = analysis.get("param_classes", {})
 
         # Find which param class constructor is being called
         before_cursor = line[:character]
@@ -131,8 +131,8 @@ class CompletionMixin(LSPServerBase):
         if match:
             class_name = match.group(2)
 
-            # Check if this is a known param class
-            if class_name in param_classes:
+            # Check if this is a known param class - search by base name since keys are "ClassName:line_number"
+            if any(key.startswith(f"{class_name}:") for key in param_classes):
                 return True
 
             # Check if this is an external param class
@@ -174,7 +174,7 @@ class CompletionMixin(LSPServerBase):
             return False, None
 
         analysis = self.document_cache[uri]["analysis"]
-        param_classes = set(analysis.get("param_classes", {}).keys())
+        param_classes = analysis.get("param_classes", {})
         analyzer = self.document_cache[uri]["analyzer"]
 
         # Look backwards from current position to find constructor call (max 10 lines)
@@ -216,10 +216,10 @@ class CompletionMixin(LSPServerBase):
 
         return False, None
 
-    def _is_param_class(self, class_name: str, param_classes: set, analyzer) -> bool:
+    def _is_param_class(self, class_name: str, param_classes: dict, analyzer) -> bool:
         """Helper to check if a class is a param class."""
-        # Check if this is a known param class
-        if class_name in param_classes:
+        # Check if this is a known param class - search by base name since keys are "ClassName:line_number"
+        if any(key.startswith(f"{class_name}:") for key in param_classes):
             return True
 
         # Check if this is an external param class
@@ -468,8 +468,10 @@ class CompletionMixin(LSPServerBase):
 
     def _get_class_info(self, class_name: str, param_classes_dict: dict, analyzer):
         """Get class info for local or external param classes."""
-        if class_name in param_classes_dict:
-            return param_classes_dict[class_name]
+        # Check local classes first - search by base name since keys are "ClassName:line_number"
+        for key, value in param_classes_dict.items():
+            if key.startswith(f"{class_name}:"):
+                return value
 
         # Handle external param classes
         full_class_path = self._resolve_external_class_path(class_name, analyzer)
@@ -826,7 +828,7 @@ class CompletionMixin(LSPServerBase):
 
         # First, try to resolve the class name (could be a variable or class name)
         resolved_class_name = self._resolve_class_name_from_context(
-            uri, class_name, set(param_classes_dict.keys())
+            uri, class_name, param_classes_dict
         )
 
         if resolved_class_name and resolved_class_name in param_classes_dict:
@@ -1191,7 +1193,7 @@ class CompletionMixin(LSPServerBase):
 
         # First, try to resolve the class name (could be a variable or class name)
         resolved_class_name = self._resolve_class_name_from_context(
-            uri, class_name, set(param_classes_dict.keys())
+            uri, class_name, param_classes_dict
         )
 
         if resolved_class_name and resolved_class_name in param_classes_dict:
@@ -1335,11 +1337,16 @@ class CompletionMixin(LSPServerBase):
             return default_value  # Return as-is for numbers, booleans, etc.
 
     def _resolve_class_name_from_context(
-        self, uri: str, class_name: str, param_classes: set[str]
+        self, uri: str, class_name: str, param_classes: dict | set
     ) -> str | None:
         """Resolve a class name from context, handling both direct class names and variable names."""
-        # If it's already a known param class, return it
-        if class_name in param_classes:
+        # If it's already a known param class, return the unique key - search by base name
+        if isinstance(param_classes, dict):
+            for key in param_classes:
+                if key.startswith(f"{class_name}:"):
+                    return key
+        # Legacy: param_classes is a set
+        elif class_name in param_classes:
             return class_name
 
         # Use analyzer's new method if available
@@ -1348,7 +1355,12 @@ class CompletionMixin(LSPServerBase):
             analyzer = self.document_cache[uri]["analyzer"]
 
             if hasattr(analyzer, "resolve_class_name_from_context"):
-                return analyzer.resolve_class_name_from_context(class_name, param_classes, content)
+                # Pass the keys as a set for the analyzer method
+                if isinstance(param_classes, dict):
+                    keys_set = set(param_classes.keys())
+                else:
+                    keys_set = param_classes
+                return analyzer.resolve_class_name_from_context(class_name, keys_set, content)
 
         return None
 
