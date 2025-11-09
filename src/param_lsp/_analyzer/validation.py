@@ -671,13 +671,24 @@ class ParameterValidator:
             self._create_type_error(node, message, "bounds-violation")
 
     def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
-        """Get parameter bounds from a class definition."""
-        # Check local classes first
-        for key in self.param_classes:
-            if key.startswith(f"{class_name}:"):
-                param_info = self.param_classes[key].get_parameter(param_name)
-                if param_info:
-                    return param_info.bounds
+        """Get parameter bounds from a class definition.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            if param_info:
+                return param_info.bounds
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.bounds
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -787,13 +798,24 @@ class ParameterValidator:
         return None
 
     def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
-        """Get the parameter type from a class definition."""
-        # Check local classes first - try to find by base name (searches all unique keys)
-        for key in self.param_classes:
-            if key.startswith(f"{class_name}:"):
-                param_info = self.param_classes[key].get_parameter(param_name)
-                if param_info:
-                    return param_info.cls
+        """Get the parameter type from a class definition.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            if param_info:
+                return param_info.cls
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.cls
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -804,13 +826,24 @@ class ParameterValidator:
         return None
 
     def _get_parameter_allow_None(self, class_name: str, param_name: str) -> bool:
-        """Get the allow_None setting for a parameter from a class definition."""
-        # Check local classes first
-        for key in self.param_classes:
-            if key.startswith(f"{class_name}:"):
-                param_info = self.param_classes[key].get_parameter(param_name)
-                if param_info:
-                    return param_info.allow_None
+        """Get the allow_None setting for a parameter from a class definition.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            if param_info:
+                return param_info.allow_None
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.allow_None
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -958,15 +991,25 @@ class ParameterValidator:
     def _get_parameter_item_type(self, class_name: str, param_name: str) -> str | None:
         """Get the item_type constraint for a List parameter.
 
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+
         Returns:
             Qualified type name string (e.g., "builtins.str") or None
         """
-        # Check local classes first
-        for key in self.param_classes:
-            if key.startswith(f"{class_name}:"):
-                param_info = self.param_classes[key].get_parameter(param_name)
-                if param_info:
-                    return param_info.item_type
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            if param_info:
+                return param_info.item_type
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.item_type
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -977,13 +1020,24 @@ class ParameterValidator:
         return None
 
     def _get_parameter_length(self, class_name: str, param_name: str) -> int | None:
-        """Get the length constraint for a Tuple parameter."""
-        # Check local classes first
-        for key in self.param_classes:
-            if key.startswith(f"{class_name}:"):
-                param_info = self.param_classes[key].get_parameter(param_name)
-                if param_info:
-                    return param_info.length
+        """Get the length constraint for a Tuple parameter.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
+            param_info = self.param_classes[class_name].get_parameter(param_name)
+            if param_info:
+                return param_info.length
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.length
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
