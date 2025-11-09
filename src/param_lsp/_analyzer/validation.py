@@ -1139,8 +1139,10 @@ class ParameterValidator:
             if current.type == "class_definition":
                 class_name = get_class_name(current)
                 # Only return if this is a Parameterized class we know about
+                # Check by base name since param_classes uses unique keys "ClassName:line_number"
                 if class_name and (
-                    class_name in self.param_classes or class_name in self.external_param_classes
+                    self._has_class_with_base_name(class_name)
+                    or class_name in self.external_param_classes
                 ):
                     return (class_name, current)
             current = current.parent
