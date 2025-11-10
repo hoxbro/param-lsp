@@ -77,7 +77,8 @@ class InheritanceResolver:
             ):
                 return True
             # Check if it's a known param class (from inheritance)
-            if base_name in self.param_classes:
+            # Search by base name since param_classes uses unique keys "ClassName:line_number"
+            if any(key.startswith(f"{base_name}:") for key in self.param_classes):
                 return True
             # Check if it's an imported param class
             imported_class_info = self.get_imported_param_class_info(
@@ -139,9 +140,15 @@ class InheritanceResolver:
                     continue
 
                 # First check if it's a local class in the same file
-                if parent_class_name in self.param_classes:
+                # Search by base name since param_classes uses unique keys "ClassName:line_number"
+                parent_class_info = None
+                for key in self.param_classes:
+                    if key.startswith(f"{parent_class_name}:"):
+                        parent_class_info = self.param_classes[key]
+                        break
+
+                if parent_class_info:
                     # Get parameters from the parent class
-                    parent_class_info = self.param_classes[parent_class_name]
                     for param_name, param_info in parent_class_info.parameters.items():
                         inherited_parameters[param_name] = param_info  # noqa: PERF403
 
