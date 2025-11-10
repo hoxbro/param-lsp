@@ -142,6 +142,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         # Check simple bounds
         assert "simple_bounds" in test_class.parameters
@@ -172,6 +173,7 @@ class TestClass(param.Parameterized):
 
         assert len(result["type_errors"]) == 0
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
         negative_bounds = test_class.parameters["negative_bounds"].bounds
         assert negative_bounds[0] == -5
         assert negative_bounds[1] == 0
