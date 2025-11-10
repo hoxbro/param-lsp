@@ -1375,17 +1375,13 @@ class CompletionMixin(LSPServerBase):
             return default_value  # Return as-is for numbers, booleans, etc.
 
     def _resolve_class_name_from_context(
-        self, uri: str, class_name: str, param_classes: dict | set
+        self, uri: str, class_name: str, param_classes: dict
     ) -> str | None:
         """Resolve a class name from context, handling both direct class names and variable names."""
         # If it's already a known param class, return the unique key - search by base name
-        if isinstance(param_classes, dict):
-            for key in param_classes:
-                if key.startswith(f"{class_name}:"):
-                    return key
-        # Legacy: param_classes is a set
-        elif class_name in param_classes:
-            return class_name
+        for key in param_classes:
+            if key.startswith(f"{class_name}:"):
+                return key
 
         # Use analyzer's new method if available
         if hasattr(self, "document_cache") and uri in self.document_cache:
@@ -1393,13 +1389,7 @@ class CompletionMixin(LSPServerBase):
             analyzer = self.document_cache[uri]["analyzer"]
 
             if hasattr(analyzer, "resolve_class_name_from_context"):
-                # Pass the dict directly (or convert set to dict)
-                if isinstance(param_classes, dict):
-                    classes_dict = param_classes
-                else:
-                    # Legacy: convert set to dict with empty values
-                    classes_dict = dict.fromkeys(param_classes)
-                return analyzer.resolve_class_name_from_context(class_name, classes_dict, content)
+                return analyzer.resolve_class_name_from_context(class_name, param_classes, content)
 
         return None
 
