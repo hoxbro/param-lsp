@@ -106,9 +106,13 @@ class TestClass(param.Parameterized):
         # Access analysis results from analyzer
         result = server.analyzer.param_classes
 
-        # Verify that both parameters are detected
-        assert "TestClass" in result, "Should detect TestClass"
-        test_class = result["TestClass"]
+        # Verify that both parameters are detected (search by base name for unique keys)
+        test_class = None
+        for key in result:
+            if key.startswith("TestClass:"):
+                test_class = result[key]
+                break
+        assert test_class is not None, "Should detect TestClass"
 
         assert "mode" in test_class.parameters, "Should detect mode parameter"
         assert "threshold" in test_class.parameters, "Should detect threshold parameter"

@@ -420,9 +420,13 @@ class ParamAnalyzer:
         self, class_name: str, param_classes: dict[str, ParameterizedInfo], document_content: str
     ) -> str | None:
         """Resolve a class name from context, handling both direct class names and variable names using tree-sitter."""
-        # If it's already a known param class, return it
+        # If it's already a known param class, return it (search by unique key or base name)
         if class_name in param_classes:
             return class_name
+        # Search by base name if not found directly
+        for key in param_classes:
+            if key.startswith(f"{class_name}:"):
+                return key
 
         # If it's a variable name, try to find its assignment in the document using tree-sitter
         if document_content:
@@ -459,9 +463,13 @@ class ParamAnalyzer:
                 if not assigned_class:
                     continue
 
-                # Check if the assigned class is a known param class
+                # Check if the assigned class is a known param class (search by unique key or base name)
                 if assigned_class in param_classes:
                     return assigned_class
+                # Search by base name if not found directly
+                for key in param_classes:
+                    if key.startswith(f"{assigned_class}:"):
+                        return key
 
                 # Check if it's an external class
                 if "." in assigned_class:

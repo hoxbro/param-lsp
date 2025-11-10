@@ -602,7 +602,13 @@ class CompletionMixin(LSPServerBase):
         completions = []
 
         # Get parameters from the containing class
-        class_info = param_classes_dict.get(containing_class)
+        # Search by base name since keys are "ClassName:line_number"
+        class_info = None
+        for key in param_classes_dict:
+            if key.startswith(f"{containing_class}:"):
+                class_info = param_classes_dict[key]
+                break
+
         if not class_info:
             return []
 
@@ -831,10 +837,18 @@ class CompletionMixin(LSPServerBase):
             uri, class_name, param_classes_dict
         )
 
-        if resolved_class_name and resolved_class_name in param_classes_dict:
-            # Local class
-            class_info = param_classes_dict[resolved_class_name]
-        else:
+        if resolved_class_name:
+            # Check if it's a direct unique key first
+            if resolved_class_name in param_classes_dict:
+                class_info = param_classes_dict[resolved_class_name]
+            else:
+                # Try to find local class by searching with base name prefix
+                for key in param_classes_dict:
+                    if key.startswith(f"{resolved_class_name}:"):
+                        class_info = param_classes_dict[key]
+                        break
+
+        if not class_info:
             # Check if it's an external param class or if resolved_class_name is external
             # Use resolved_class_name if available, otherwise fall back to class_name
             check_class_name = resolved_class_name if resolved_class_name else class_name
@@ -951,16 +965,24 @@ class CompletionMixin(LSPServerBase):
         param_classes_dict = analysis.get("param_classes", {})
 
         resolved_class_name = self._resolve_class_name_from_context(
-            uri, class_name, set(param_classes_dict.keys())
+            uri, class_name, param_classes_dict
         )
 
         # Check if this is a valid parameter of a known class
         class_info = None
 
-        if resolved_class_name and resolved_class_name in param_classes_dict:
-            # Local class
-            class_info = param_classes_dict[resolved_class_name]
-        else:
+        if resolved_class_name:
+            # Check if it's a direct unique key first
+            if resolved_class_name in param_classes_dict:
+                class_info = param_classes_dict[resolved_class_name]
+            else:
+                # Try to find local class by searching with base name prefix
+                for key in param_classes_dict:
+                    if key.startswith(f"{resolved_class_name}:"):
+                        class_info = param_classes_dict[key]
+                        break
+
+        if not class_info:
             # Check if it's an external param class
             check_class_name = resolved_class_name if resolved_class_name else class_name
             full_class_path = None
@@ -1080,16 +1102,24 @@ class CompletionMixin(LSPServerBase):
         param_classes_dict = analysis.get("param_classes", {})
 
         resolved_class_name = self._resolve_class_name_from_context(
-            uri, class_name, set(param_classes_dict.keys())
+            uri, class_name, param_classes_dict
         )
 
         # Check if this is a valid parameter of a known class
         class_info = None
 
-        if resolved_class_name and resolved_class_name in param_classes_dict:
-            # Local class
-            class_info = param_classes_dict[resolved_class_name]
-        else:
+        if resolved_class_name:
+            # Check if it's a direct unique key first
+            if resolved_class_name in param_classes_dict:
+                class_info = param_classes_dict[resolved_class_name]
+            else:
+                # Try to find local class by searching with base name prefix
+                for key in param_classes_dict:
+                    if key.startswith(f"{resolved_class_name}:"):
+                        class_info = param_classes_dict[key]
+                        break
+
+        if not class_info:
             # Check if it's an external param class
             check_class_name = resolved_class_name if resolved_class_name else class_name
             full_class_path = None
@@ -1196,10 +1226,18 @@ class CompletionMixin(LSPServerBase):
             uri, class_name, param_classes_dict
         )
 
-        if resolved_class_name and resolved_class_name in param_classes_dict:
-            # Local class
-            class_info = param_classes_dict[resolved_class_name]
-        else:
+        if resolved_class_name:
+            # Check if it's a direct unique key first
+            if resolved_class_name in param_classes_dict:
+                class_info = param_classes_dict[resolved_class_name]
+            else:
+                # Try to find local class by searching with base name prefix
+                for key in param_classes_dict:
+                    if key.startswith(f"{resolved_class_name}:"):
+                        class_info = param_classes_dict[key]
+                        break
+
+        if not class_info:
             # Check if it's an external param class
             check_class_name = resolved_class_name if resolved_class_name else class_name
             full_class_path = None
@@ -1355,12 +1393,13 @@ class CompletionMixin(LSPServerBase):
             analyzer = self.document_cache[uri]["analyzer"]
 
             if hasattr(analyzer, "resolve_class_name_from_context"):
-                # Pass the keys as a set for the analyzer method
+                # Pass the dict directly (or convert set to dict)
                 if isinstance(param_classes, dict):
-                    keys_set = set(param_classes.keys())
+                    classes_dict = param_classes
                 else:
-                    keys_set = param_classes
-                return analyzer.resolve_class_name_from_context(class_name, keys_set, content)
+                    # Legacy: convert set to dict with empty values
+                    classes_dict = dict.fromkeys(param_classes)
+                return analyzer.resolve_class_name_from_context(class_name, classes_dict, content)
 
         return None
 
