@@ -581,10 +581,20 @@ class ParameterValidator:
             return
 
         # Check if this is a valid param class
-        is_valid_param_class = instance_class in self.param_classes or (
-            instance_class in self.external_param_classes
-            and self.external_param_classes[instance_class]
-        )
+        # instance_class can be either:
+        # - A unique key like "ClassName:line_number" (from _find_class_in_scope)
+        # - A base name like "ClassName" (from _get_instance_class)
+        if ":" in instance_class:
+            # Already a unique key, check directly
+            is_valid_param_class = instance_class in self.param_classes
+        else:
+            # Base name, search by prefix
+            is_valid_param_class = any(
+                key.startswith(f"{instance_class}:") for key in self.param_classes
+            ) or (
+                instance_class in self.external_param_classes
+                and self.external_param_classes[instance_class]
+            )
 
         if not is_valid_param_class:
             return
