@@ -387,7 +387,9 @@ class ParameterValidator:
             bound_description = self._format_bounds_description(
                 min_val, max_val, left_inclusive, right_inclusive
             )
-            message = f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}"
+            # Extract base class name for error message (remove line number if present)
+            display_class_name = class_name.split(":")[0] if ":" in class_name else class_name
+            message = f"Value {assigned_numeric} for parameter '{param_name}' in {display_class_name}() constructor is outside bounds {bound_description}"
             self._create_type_error(node, message, "constructor-bounds-violation")
 
     def _check_constructor_container_constraints(
@@ -733,8 +735,17 @@ class ParameterValidator:
                 # If not found locally, return the base name (might be external)
                 return class_name
 
-            # Attribute case: module.Class(...) or pn.widgets.IntSlider(...)
+            # Attribute case: module.Class(...) or pn.widgets.IntSlider(...) or Outer.Inner(...)
             elif function_node.type == "attribute":
+                # Get the final class name from the attribute
+                attr_node = function_node.child_by_field_name("attribute")
+                if attr_node:
+                    class_name = get_value(attr_node)
+                    # Try to find this class in param_classes with unique key (e.g., Outer.Inner)
+                    for key in self.param_classes:
+                        if key.startswith(f"{class_name}:"):
+                            return key
+
                 # Try to resolve the full path for external classes
                 full_class_path = self._resolve_full_class_path_from_attribute(function_node)
                 # Check if this is an external Parameterized class
@@ -744,7 +755,6 @@ class ParameterValidator:
                     return full_class_path
 
                 # Otherwise return just the final attribute name
-                attr_node = function_node.child_by_field_name("attribute")
                 if attr_node:
                     return get_value(attr_node)
         return None
