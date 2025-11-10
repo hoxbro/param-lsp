@@ -146,6 +146,7 @@ DocumentedClass(x="bad", y=123, z="false")
         param_classes = result.get("param_classes", {})
         assert get_class(param_classes, "DocumentedClass") is not None
         documented_class = get_class(param_classes, "DocumentedClass")
+        assert documented_class is not None
         assert documented_class.parameters["x"].doc == "An integer parameter"
         assert documented_class.parameters["y"].doc == "A string parameter with documentation"
         assert documented_class.parameters["z"].doc == "Boolean flag"

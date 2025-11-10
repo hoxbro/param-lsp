@@ -38,6 +38,7 @@ class T(pn.widgets.IntSlider):
         # Verify class is detected as Parameterized
         assert get_class(result["param_classes"], "T") is not None
         t_class = get_class(result["param_classes"], "T")
+        assert t_class is not None
 
         # Verify T inherits Panel IntSlider parameters
         t_params = list(t_class.parameters.keys())
@@ -76,7 +77,9 @@ class MyWidget(CustomSlider):
         assert get_class(result["param_classes"], "MyWidget") is not None
 
         custom_slider_class = get_class(result["param_classes"], "CustomSlider")
+        assert custom_slider_class is not None
         my_widget_class = get_class(result["param_classes"], "MyWidget")
+        assert my_widget_class is not None
 
         # CustomSlider should have Panel IntSlider params + custom_param
         custom_params = list(custom_slider_class.parameters.keys())

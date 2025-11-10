@@ -68,6 +68,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         assert test_class.parameters["single_quotes"].doc == "Single quoted documentation"
         assert test_class.parameters["double_quotes"].doc == "Double quoted documentation"
@@ -93,6 +94,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         assert "special_chars" in test_class.parameters
         assert "!@#$%^&*()_+-=" in test_class.parameters["special_chars"].doc
@@ -127,6 +129,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         assert test_class.parameters["doc_first"].doc == "Documentation comes first"
         assert test_class.parameters["doc_middle"].doc == "Documentation in the middle"
@@ -152,6 +155,7 @@ class TestClass(param.Parameterized):
 
         # Check that doc is extracted
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
         assert "comprehensive_param" in test_class.parameters
         assert (
             test_class.parameters["comprehensive_param"].doc
@@ -176,6 +180,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         # Empty string doc should still be recorded
         assert "empty_doc" in test_class.parameters
@@ -200,6 +205,7 @@ class TestClass(p.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         assert "param_alias" in test_class.parameters
         assert test_class.parameters["param_alias"].doc == "Using param alias"
@@ -261,6 +267,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         test_class = get_class(result["param_classes"], "TestClass")
+        assert test_class is not None
 
         # Only simple string literal should be extracted
         assert "simple_doc" in test_class.parameters

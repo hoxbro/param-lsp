@@ -70,6 +70,7 @@ example.ratio = 0               # Exclusive bounds violation
         # Verify class detection
         assert get_class(result["param_classes"], "CompleteExample") is not None
         complete_class = get_class(result["param_classes"], "CompleteExample")
+        assert complete_class is not None
 
         # Verify parameter extraction
         params = list(complete_class.parameters.keys())
@@ -183,6 +184,7 @@ processor.use_gpu = 1              # Boolean type error
         # Verify comprehensive analysis
         assert get_class(result["param_classes"], "DataProcessor") is not None
         data_processor_class = get_class(result["param_classes"], "DataProcessor")
+        assert data_processor_class is not None
 
         # Check all parameter types are detected
         expected_types = {
@@ -255,6 +257,7 @@ edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
         # Verify all edge cases are handled
         assert get_class(result["param_classes"], "EdgeCases") is not None
         edge_cases_class = get_class(result["param_classes"], "EdgeCases")
+        assert edge_cases_class is not None
 
         # Check documentation extraction handles long text and special characters
         long_doc_param = edge_cases_class.parameters["long_doc"]
@@ -289,4 +292,5 @@ class ValidClass(param.Parameterized):
         # Should still extract the valid parts
         assert get_class(result["param_classes"], "ValidClass") is not None
         valid_class = get_class(result["param_classes"], "ValidClass")
+        assert valid_class is not None
         assert valid_class.parameters["valid_param"].cls == "String"

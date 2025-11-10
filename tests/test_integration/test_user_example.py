@@ -60,6 +60,7 @@ S().x = "a"  # This should now trigger a type error!
             "Class S should be detected as a param class"
         )
         s_class = get_class(result["param_classes"], "S")
+        assert s_class is not None
 
         # Verify S inherits parameters from P
         assert "x" in s_class.parameters, "S should inherit parameter 'x' from P"
@@ -110,6 +111,7 @@ S().b = "a"
             "Class S should be detected as a param class"
         )
         s_class = get_class(result["param_classes"], "S")
+        assert s_class is not None
         assert "b" in s_class.parameters, "S should have parameter 'b'"
         assert s_class.parameters["b"].cls == "Boolean", "Parameter 'b' should be Boolean type"
 
@@ -171,6 +173,7 @@ obj.final_bool = "xyz"  # Error: Boolean parameter
             "Class Final should be detected as a param class"
         )
         final_class = get_class(result["param_classes"], "Final")
+        assert final_class is not None
 
         # Check all inherited parameters
         expected_params = {"base_str", "middle_int", "final_bool"}
@@ -242,7 +245,9 @@ D().d_param = "wrong"   # Error: Number
         assert get_class(result["param_classes"], "D") is not None, "Class D should be detected"
 
         c_class = get_class(result["param_classes"], "C")
+        assert c_class is not None
         d_class = get_class(result["param_classes"], "D")
+        assert d_class is not None
 
         # Verify inheritance for C
         assert set(c_class.parameters.keys()) == {"a_param", "c_param"}, "C should inherit from A"

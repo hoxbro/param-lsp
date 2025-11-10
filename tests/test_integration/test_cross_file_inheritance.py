@@ -54,6 +54,7 @@ S().name = 123         # Should error - inherited String
 
         assert get_class(result["param_classes"], "S") is not None
         s_class = get_class(result["param_classes"], "S")
+        assert s_class is not None
         assert set(s_class.parameters.keys()) == {"x", "name", "b"}
         assert s_class.parameters["x"].cls == "Integer"
         assert s_class.parameters["name"].cls == "String"
@@ -112,6 +113,7 @@ obj.final_bool = "invalid"  # Error - Boolean
 
         assert get_class(result["param_classes"], "Final") is not None
         final_class = get_class(result["param_classes"], "Final")
+        assert final_class is not None
         assert set(final_class.parameters.keys()) == {
             "base_value",
             "intermediate_num",
@@ -161,6 +163,7 @@ Child().value = 123  # Should error - expecting string now
 
         assert get_class(result["param_classes"], "Child") is not None
         child_class = get_class(result["param_classes"], "Child")
+        assert child_class is not None
         # Child should override parent parameter type
         assert child_class.parameters["value"].cls == "String"
 
@@ -201,6 +204,7 @@ Child().y = 10  # Should violate local bounds
 
         assert get_class(result["param_classes"], "Child") is not None
         child_class = get_class(result["param_classes"], "Child")
+        assert child_class is not None
 
         # Check bounds inheritance
         assert child_class.parameters["x"].bounds is not None
@@ -240,6 +244,7 @@ class Child(Parent):
 
         assert get_class(result["param_classes"], "Child") is not None
         child_class = get_class(result["param_classes"], "Child")
+        assert child_class is not None
 
         # Check doc inheritance
         assert child_class.parameters["x"].doc == "Parent parameter documentation"

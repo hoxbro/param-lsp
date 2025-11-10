@@ -160,6 +160,7 @@ Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer val
 
         # Verify the analyzer chose one consistent type for 'shared'
         combined_class = get_class(result["param_classes"], "Combined")
+        assert combined_class is not None
         assert "shared" in combined_class.parameters
 
         # Currently uses "last wins" - MixinB's Integer type should win
@@ -189,6 +190,7 @@ ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        #
 
         # Verify bounds are correctly extracted including None bounds
         complex_bounds_class = get_class(result["param_classes"], "ComplexBounds")
+        assert complex_bounds_class is not None
         p = complex_bounds_class.parameters
         assert p["percentage"].bounds == (0, 100, False, True)  # (0, 100]
         assert p["angle"].bounds == (-180, 180, True, False)  # [-180, 180)
@@ -318,7 +320,9 @@ Outer.Inner(inner_param="bad")                # Should error
 
         # Verify parameters are correctly identified
         outer_class = get_class(param_classes, "Outer")
+        assert outer_class is not None
         inner_class = get_class(param_classes, "Inner")
+        assert inner_class is not None
         assert list(outer_class.parameters.keys()) == ["outer_param"]
         assert list(inner_class.parameters.keys()) == ["inner_param"]
 
