@@ -699,7 +699,12 @@ class ParameterValidator:
         return None
 
     def _get_instance_class(self, call_node) -> str | None:
-        """Get the class name from an instance creation call."""
+        """Get the class name from an instance creation call.
+
+        Returns:
+            For local classes: unique key like "ClassName:line_number"
+            For external classes: full path like "panel.widgets.IntSlider"
+        """
         # For tree-sitter call nodes like TestClass(...) or pn.widgets.IntSlider(...)
         if call_node.type == "call":
             # Get the function/class being called (first child, before argument_list)
@@ -711,7 +716,13 @@ class ParameterValidator:
 
             # Simple case: TestClass(...)
             if function_node.type == "identifier":
-                return get_value(function_node)
+                class_name = get_value(function_node)
+                # Try to find this class in param_classes with unique key
+                for key in self.param_classes:
+                    if key.startswith(f"{class_name}:"):
+                        return key
+                # If not found locally, return the base name (might be external)
+                return class_name
 
             # Attribute case: module.Class(...) or pn.widgets.IntSlider(...)
             elif function_node.type == "attribute":
