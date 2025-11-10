@@ -163,12 +163,14 @@ class ParameterValidator:
     def _check_constructor_parameter_types(self, node: Node, lines: list[str]) -> None:
         """Check for type errors in constructor parameter calls like MyClass(x="A") (tree-sitter version)."""
         # Get the class name from the call
+        # This will be either a unique key like "ClassName:line" for local classes
+        # or a full path like "panel.widgets.IntSlider" for external classes
         class_name = self._get_instance_class(node)
         if not class_name:
             return
 
         # Check if this is a valid param class (local or external)
-        is_valid_param_class = self._has_class_with_base_name(class_name) or (
+        is_valid_param_class = class_name in self.param_classes or (
             class_name in self.external_param_classes and self.external_param_classes[class_name]
         )
 
@@ -215,7 +217,11 @@ class ParameterValidator:
                 ):
                     # Extract simple type name from qualified string for error message
                     inferred_type_name = inferred_type.split(".")[-1]
-                    message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
+                    # Extract base class name for error message (remove line number if present)
+                    display_class_name = (
+                        class_name.split(":")[0] if ":" in class_name else class_name
+                    )
+                    message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} in {display_class_name}() constructor (expects {self._format_expected_types(expected_types)})"
                     self._create_type_error(keyword_arg_node, message, "constructor-type-mismatch")
 
             # Check bounds for numeric parameters in constructor calls
@@ -581,20 +587,13 @@ class ParameterValidator:
             return
 
         # Check if this is a valid param class
-        # instance_class can be either:
-        # - A unique key like "ClassName:line_number" (from _find_class_in_scope)
-        # - A base name like "ClassName" (from _get_instance_class)
-        if ":" in instance_class:
-            # Already a unique key, check directly
-            is_valid_param_class = instance_class in self.param_classes
-        else:
-            # Base name, search by prefix
-            is_valid_param_class = any(
-                key.startswith(f"{instance_class}:") for key in self.param_classes
-            ) or (
-                instance_class in self.external_param_classes
-                and self.external_param_classes[instance_class]
-            )
+        # instance_class is now always:
+        # - A unique key like "ClassName:line_number" for local classes
+        # - A full path like "panel.widgets.IntSlider" for external classes
+        is_valid_param_class = instance_class in self.param_classes or (
+            instance_class in self.external_param_classes
+            and self.external_param_classes[instance_class]
+        )
 
         if not is_valid_param_class:
             return
@@ -709,7 +708,12 @@ class ParameterValidator:
         return None
 
     def _get_instance_class(self, call_node) -> str | None:
-        """Get the class name from an instance creation call."""
+        """Get the class name from an instance creation call.
+
+        Returns:
+            For local classes: unique key like "ClassName:line_number"
+            For external classes: full path like "panel.widgets.IntSlider" or base name
+        """
         # For tree-sitter call nodes like TestClass(...) or pn.widgets.IntSlider(...)
         if call_node.type == "call":
             # Get the function/class being called (first child, before argument_list)
@@ -721,7 +725,13 @@ class ParameterValidator:
 
             # Simple case: TestClass(...)
             if function_node.type == "identifier":
-                return get_value(function_node)
+                class_name = get_value(function_node)
+                # Try to find this class in param_classes with unique key
+                for key in self.param_classes:
+                    if key.startswith(f"{class_name}:"):
+                        return key
+                # If not found locally, return the base name (might be external)
+                return class_name
 
             # Attribute case: module.Class(...) or pn.widgets.IntSlider(...)
             elif function_node.type == "attribute":
