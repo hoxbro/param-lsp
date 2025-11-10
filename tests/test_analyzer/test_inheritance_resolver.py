@@ -42,9 +42,10 @@ class TestInheritanceResolver:
             )
         )
 
+        # Use unique keys with line numbers
         return {
-            "Parent": parent_class,
-            "LocalParam": local_class,
+            "Parent:0": parent_class,
+            "LocalParam:0": local_class,
         }
 
     @pytest.fixture
