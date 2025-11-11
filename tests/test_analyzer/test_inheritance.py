@@ -26,7 +26,6 @@ S().b = "a"
 
         param_classes = result["param_classes"]
         p_class = get_class(param_classes, "P", raise_if_none=True)
-
         s_class = get_class(param_classes, "S", raise_if_none=True)
 
         assert len(p_class.parameters) == 0
@@ -63,9 +62,7 @@ T().name = 123
 
         param_classes = result["param_classes"]
         p_class = get_class(param_classes, "P", raise_if_none=True)
-
         s_class = get_class(param_classes, "S", raise_if_none=True)
-
         t_class = get_class(param_classes, "T", raise_if_none=True)
 
         # Check parameter inheritance
@@ -102,7 +99,6 @@ S().value = 123  # Should error - expecting string now
 
         param_classes = result["param_classes"]
         p_class = get_class(param_classes, "P", raise_if_none=True)
-
         s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Child class should override parent parameter type
@@ -134,7 +130,6 @@ S().y = 10  # Should violate local bounds
 
         param_classes = result["param_classes"]
         get_class(param_classes, "P", raise_if_none=True)
-
         s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Check bounds inheritance
@@ -161,7 +156,6 @@ class S(P):
 
         param_classes = result["param_classes"]
         get_class(param_classes, "P", raise_if_none=True)
-
         s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Check doc inheritance
@@ -231,7 +225,6 @@ S().x = "not_int"  # Should detect error for inherited parameter
 
         param_classes = result["param_classes"]
         get_class(param_classes, "P", raise_if_none=True)
-
         s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Child should inherit parent's parameter

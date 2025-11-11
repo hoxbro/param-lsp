@@ -313,7 +313,6 @@ Outer.Inner(inner_param="bad")                # Should error
 
         # Verify parameters are correctly identified
         outer_class = get_class(param_classes, "Outer", raise_if_none=True)
-
         inner_class = get_class(param_classes, "Inner", raise_if_none=True)
 
         assert list(outer_class.parameters.keys()) == ["outer_param"]

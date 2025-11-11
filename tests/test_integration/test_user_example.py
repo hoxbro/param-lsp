@@ -221,9 +221,7 @@ D().d_param = "wrong"   # Error: Number
         result = analyzer.analyze_file(content, str(test_file))
 
         # Verify both classes are detected
-
         c_class = get_class(result["param_classes"], "C", raise_if_none=True)
-
         d_class = get_class(result["param_classes"], "D", raise_if_none=True)
 
         # Verify inheritance for C
