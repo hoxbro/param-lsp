@@ -43,6 +43,14 @@ class TestParameterValidator:
                 doc="Boolean parameter",
             )
         )
+        test_class.add_parameter(
+            ParameterInfo(
+                name="pam",
+                cls="Parameter",
+                default=None,
+                doc="Parameter that can hold Parameterized objects",
+            )
+        )
 
         # Use unique key format with line number
         # Add entries for both line 1 and line 3 since different tests have TestClass at different lines
@@ -702,3 +710,152 @@ Test(a="b")
         errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
         type_errors = [e for e in errors if "constructor-type-mismatch" in e.get("code", "")]
         assert len(type_errors) == 0, f"Expected no constructor type errors, got: {type_errors}"
+
+    def test_check_param_depends_method_dependency(self, validator):
+        """Test @param.depends with method dependency."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("test_param", watch=True)
+    def dep_a(self):
+        print("a")
+
+    @param.depends("dep_a", watch=True)
+    def dep_ab(self):
+        print("dep_a")
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors for method dependency
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
+
+    def test_check_param_depends_nested_parameter(self, validator):
+        """Test @param.depends with nested parameter dependency."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+    pam = param.Parameter()
+
+    @param.depends("pam.a", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors for nested parameter dependency
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
+
+    def test_check_param_depends_nested_param_namespace(self, validator):
+        """Test @param.depends with nested .param namespace dependency."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+    pam = param.Parameter()
+
+    @param.depends("pam.param", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors for nested .param namespace dependency
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
+
+    def test_check_param_depends_nested_on_non_parameter_type_fails(self, validator):
+        """Test @param.depends with nested reference on non-Parameter type should fail."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("test_param.a", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create error - String parameters don't support nested references
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 1, f"Expected 1 depends error, got: {depends_errors}"
+        assert "test_param.a" in depends_errors[0]["message"]
+
+    def test_check_param_depends_parameter_metadata(self, validator):
+        """Test @param.depends with parameter metadata dependency."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("test_param:constant", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors for parameter metadata dependency
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
+
+    def test_check_param_depends_invalid_nested_parameter(self, validator):
+        """Test @param.depends with invalid nested parameter (base param doesn't exist)."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("invalid_base.a", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create error for invalid base parameter
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 1, f"Expected 1 depends error, got: {depends_errors}"
+        assert "invalid_base.a" in depends_errors[0]["message"]
+
+    def test_check_param_depends_invalid_metadata(self, validator):
+        """Test @param.depends with invalid parameter metadata (base param doesn't exist)."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+
+    @param.depends("invalid_param:constant", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should create error for invalid base parameter
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 1, f"Expected 1 depends error, got: {depends_errors}"
+        assert "invalid_param:constant" in depends_errors[0]["message"]
