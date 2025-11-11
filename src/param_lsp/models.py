@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
+import msgspec
 
-@dataclass
-class ParameterInfo:
+
+class ParameterInfo(msgspec.Struct):
     """Information about a single parameter."""
 
     name: str
@@ -22,12 +22,11 @@ class ParameterInfo:
     length: int | None = None  # For Tuple parameters
 
 
-@dataclass
-class ParameterizedInfo:
+class ParameterizedInfo(msgspec.Struct):
     """Information about a Parameterized class."""
 
     name: str
-    parameters: dict[str, ParameterInfo] = field(default_factory=dict)
+    parameters: dict[str, ParameterInfo] = msgspec.field(default_factory=dict)
 
     def get_parameter_names(self) -> list[str]:
         """Get list of parameter names."""

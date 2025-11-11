@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import msgspec
 import pytest
 
 from param_lsp.cache import ExternalLibraryCache, external_library_cache
@@ -443,8 +443,8 @@ def test_cache_population_levels(
         f"Cache file does not exist for {library_name} version {library_version}"
     )
 
-    with open(cache_path) as f:
-        cache_data = json.load(f)
+    with open(cache_path, "rb") as f:
+        cache_data = msgspec.msgpack.decode(f.read())
 
     classes = cache_data.get("classes", {})
     aliases = cache_data.get("aliases", {})

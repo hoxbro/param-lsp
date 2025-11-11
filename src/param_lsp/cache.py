@@ -2,24 +2,40 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import time
 from functools import cache
 from pathlib import Path
-from typing import Any
 
+import msgspec
 import platformdirs
 
 from ._logging import get_logger
-from .models import ParameterInfo, ParameterizedInfo
+from .models import ParameterizedInfo  # noqa: TC001
 
 logger = get_logger(__name__, "cache")
 
-# Current cache version
-CACHE_VERSION = (1, 1, 1)
+CACHE_VERSION = (1, 2, 0)
 _re_no = re.compile(r"\d+")
+
+
+class CacheMetadata(msgspec.Struct):
+    """Metadata for a library cache."""
+
+    library_name: str
+    library_version: tuple[int, ...]
+    created_at: int
+    cache_version: tuple[int, int, int]
+
+
+class LibraryCache(msgspec.Struct):
+    """Complete cache structure for a library."""
+
+    metadata: CacheMetadata
+    classes: dict[str, ParameterizedInfo] = msgspec.field(default_factory=dict)
+    aliases: dict[str, str] = msgspec.field(default_factory=dict)
+    parameter_types: list[str] = msgspec.field(default_factory=list)
 
 
 @cache
@@ -44,14 +60,14 @@ class ExternalLibraryCache:
             "true",
         )
         # Pending cache changes that will be written on flush()
-        self._pending_cache: dict[str, dict[str, Any]] = {}
+        self._pending_cache: dict[str, LibraryCache] = {}
 
     def _get_cache_path(self, library_name: str, version: str) -> Path:
         """Get the cache file path for a library."""
         parsed_version = parse_version(version)
         version_str = string_version(parsed_version, "_")
         cache_str = string_version(CACHE_VERSION, "_")
-        filename = f"{library_name}-{version_str}-{cache_str}.json"
+        filename = f"{library_name}-{version_str}-{cache_str}.msgpack"
         return self.cache_dir / filename
 
     def has_library_cache(self, library_name: str, version: str) -> bool:
@@ -65,8 +81,7 @@ class ExternalLibraryCache:
         # Check in-memory pending cache first (fast path)
         cache_key = f"{library_name}:{version}"
         if cache_key in self._pending_cache:
-            classes_data = self._pending_cache[cache_key].get("classes", {})
-            return len(classes_data) > 0
+            return len(self._pending_cache[cache_key].classes) > 0
 
         # Check disk cache (slower path)
         cache_path = self._get_cache_path(library_name, version)
@@ -74,8 +89,8 @@ class ExternalLibraryCache:
             return False
 
         try:
-            with cache_path.open("r", encoding="utf-8") as f:
-                cache_data = json.load(f)
+            with cache_path.open("rb") as f:
+                cache_data = msgspec.msgpack.decode(f.read(), type=LibraryCache)
 
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
@@ -85,9 +100,8 @@ class ExternalLibraryCache:
             self._pending_cache[cache_key] = cache_data
 
             # Check if cache has any classes
-            classes_data = cache_data.get("classes", {})
-            return len(classes_data) > 0
-        except (json.JSONDecodeError, OSError):
+            return len(cache_data.classes) > 0
+        except (msgspec.DecodeError, msgspec.ValidationError, OSError):
             return False
 
     def get(self, library_name: str, class_path: str, version: str) -> ParameterizedInfo | None:
@@ -104,21 +118,19 @@ class ExternalLibraryCache:
             cache_data = self._pending_cache[cache_key]
 
             # Check if this specific class path is in the pending cache
-            classes_data = cache_data.get("classes", {})
-            class_data = classes_data.get(class_path)
-            if class_data:
-                return self._deserialize_param_class_info(class_data)
+            param_info = cache_data.classes.get(class_path)
+            if param_info:
+                return param_info
 
             # Check if this is an alias for another class (follow alias chain)
-            aliases = cache_data.get("aliases", {})
             current_path = class_path
             seen = set()  # Prevent infinite loops
-            while current_path in aliases and current_path not in seen:
+            while current_path in cache_data.aliases and current_path not in seen:
                 seen.add(current_path)
-                current_path = aliases[current_path]
-                class_data = classes_data.get(current_path)
-                if class_data:
-                    return self._deserialize_param_class_info(class_data)
+                current_path = cache_data.aliases[current_path]
+                param_info = cache_data.classes.get(current_path)
+                if param_info:
+                    return param_info
 
         # If not in pending cache, check disk cache
         cache_path = self._get_cache_path(library_name, version)
@@ -126,8 +138,8 @@ class ExternalLibraryCache:
             return None
 
         try:
-            with cache_path.open("r", encoding="utf-8") as f:
-                cache_data = json.load(f)
+            with cache_path.open("rb") as f:
+                cache_data = msgspec.msgpack.decode(f.read(), type=LibraryCache)
 
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
@@ -138,24 +150,22 @@ class ExternalLibraryCache:
             self._pending_cache[cache_key] = cache_data
 
             # Check if this specific class path is in the cache
-            classes_data = cache_data.get("classes", {})
-            class_data = classes_data.get(class_path)
-            if class_data:
-                return self._deserialize_param_class_info(class_data)
+            param_info = cache_data.classes.get(class_path)
+            if param_info:
+                return param_info
 
             # Check if this is an alias for another class (follow alias chain)
-            aliases = cache_data.get("aliases", {})
             current_path = class_path
             seen = set()  # Prevent infinite loops
-            while current_path in aliases and current_path not in seen:
+            while current_path in cache_data.aliases and current_path not in seen:
                 seen.add(current_path)
-                current_path = aliases[current_path]
-                class_data = classes_data.get(current_path)
-                if class_data:
-                    return self._deserialize_param_class_info(class_data)
+                current_path = cache_data.aliases[current_path]
+                param_info = cache_data.classes.get(current_path)
+                if param_info:
+                    return param_info
 
             return None
-        except (json.JSONDecodeError, OSError) as e:
+        except (msgspec.DecodeError, msgspec.ValidationError, OSError) as e:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
@@ -185,27 +195,20 @@ class ExternalLibraryCache:
             cache_data = self._create_cache_structure(library_name, version)
             if cache_path.exists():
                 try:
-                    with cache_path.open("r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
+                    with cache_path.open("rb") as f:
+                        existing_data = msgspec.msgpack.decode(f.read(), type=LibraryCache)
                     # Validate and migrate existing cache if needed
                     if self._is_cache_valid(existing_data, library_name, version):
                         cache_data = existing_data
                     # If invalid, cache_data keeps the new structure
-                except (json.JSONDecodeError, OSError):
+                except (msgspec.DecodeError, msgspec.ValidationError, OSError):
                     # If we can't read existing cache, start fresh
                     pass
 
-            # Ensure aliases dict exists (for backward compatibility)
-            if "aliases" not in cache_data:
-                cache_data["aliases"] = {}
-
             self._pending_cache[cache_key] = cache_data
 
-        # Serialize the dataclass to dict format
-        serialized_data = self._serialize_param_class_info(data)
-
-        # Update with new data in memory
-        self._pending_cache[cache_key]["classes"][class_path] = serialized_data
+        # Update with new data in memory (data is already a ParameterizedInfo Struct)
+        self._pending_cache[cache_key].classes[class_path] = data
 
     def set_alias(self, library_name: str, alias_path: str, full_path: str, version: str) -> None:
         """Register an alias (re-export) for a class in memory.
@@ -231,21 +234,17 @@ class ExternalLibraryCache:
             cache_data = self._create_cache_structure(library_name, version)
             if cache_path.exists():
                 try:
-                    with cache_path.open("r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
+                    with cache_path.open("rb") as f:
+                        existing_data = msgspec.msgpack.decode(f.read(), type=LibraryCache)
                     if self._is_cache_valid(existing_data, library_name, version):
                         cache_data = existing_data
-                except (json.JSONDecodeError, OSError):
+                except (msgspec.DecodeError, msgspec.ValidationError, OSError):
                     pass
-
-            # Ensure aliases dict exists
-            if "aliases" not in cache_data:
-                cache_data["aliases"] = {}
 
             self._pending_cache[cache_key] = cache_data
 
         # Add the alias mapping in memory
-        self._pending_cache[cache_key]["aliases"][alias_path] = full_path
+        self._pending_cache[cache_key].aliases[alias_path] = full_path
 
     def set_parameter_types(
         self, library_name: str, parameter_types: set[str], version: str
@@ -272,17 +271,17 @@ class ExternalLibraryCache:
             cache_data = self._create_cache_structure(library_name, version)
             if cache_path.exists():
                 try:
-                    with cache_path.open("r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
+                    with cache_path.open("rb") as f:
+                        existing_data = msgspec.msgpack.decode(f.read(), type=LibraryCache)
                     if self._is_cache_valid(existing_data, library_name, version):
                         cache_data = existing_data
-                except (json.JSONDecodeError, OSError):
+                except (msgspec.DecodeError, msgspec.ValidationError, OSError):
                     pass
 
             self._pending_cache[cache_key] = cache_data
 
         # Store parameter types as a sorted list for consistent output
-        self._pending_cache[cache_key]["parameter_types"] = sorted(parameter_types)
+        self._pending_cache[cache_key].parameter_types = sorted(parameter_types)
 
     def get_parameter_types(self, library_name: str, version: str) -> set[str]:
         """Get detected Parameter type paths for a library from cache.
@@ -303,8 +302,7 @@ class ExternalLibraryCache:
         # Check pending cache first (in-memory cache)
         cache_key = f"{library_name}:{version}"
         if cache_key in self._pending_cache:
-            param_types = self._pending_cache[cache_key].get("parameter_types", [])
-            return set(param_types)
+            return set(self._pending_cache[cache_key].parameter_types)
 
         # If not in pending cache, check disk cache
         cache_path = self._get_cache_path(library_name, version)
@@ -312,8 +310,8 @@ class ExternalLibraryCache:
             return set()
 
         try:
-            with cache_path.open("r", encoding="utf-8") as f:
-                cache_data = json.load(f)
+            with cache_path.open("rb") as f:
+                cache_data = msgspec.msgpack.decode(f.read(), type=LibraryCache)
 
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
@@ -322,9 +320,8 @@ class ExternalLibraryCache:
             # Load the disk cache into memory for subsequent fast lookups
             self._pending_cache[cache_key] = cache_data
 
-            param_types = cache_data.get("parameter_types", [])
-            return set(param_types)
-        except (json.JSONDecodeError, OSError):
+            return set(cache_data.parameter_types)
+        except (msgspec.DecodeError, msgspec.ValidationError, OSError):
             return set()
 
     def flush(self, library_name: str, version: str) -> None:
@@ -348,8 +345,8 @@ class ExternalLibraryCache:
         cache_data = self._pending_cache[cache_key]
 
         try:
-            with cache_path.open("w", encoding="utf-8") as f:
-                json.dump(cache_data, f, indent=2)
+            with cache_path.open("wb") as f:
+                f.write(msgspec.msgpack.encode(cache_data))
             logger.debug(f"Flushed cache for {library_name} to {cache_path}")
         except OSError as e:
             logger.debug(f"Failed to write cache for {library_name}: {e}")
@@ -357,96 +354,35 @@ class ExternalLibraryCache:
         # Clear pending cache for this library version after writing
         del self._pending_cache[cache_key]
 
-    def _create_cache_structure(self, library_name: str, version: str) -> dict[str, Any]:
+    def _create_cache_structure(self, library_name: str, version: str) -> LibraryCache:
         """Create a new cache structure with metadata."""
-        return {
-            "metadata": {
-                "library_name": library_name,
-                "library_version": parse_version(version),
-                "created_at": int(time.time()),
-                "cache_version": CACHE_VERSION,
-            },
-            "classes": {},
-            "aliases": {},  # Maps re-export paths to full paths (e.g., panel.widgets.TextInput -> panel.widgets.input.TextInput)
-            "parameter_types": [],  # List of detected Parameter type paths (e.g., ["param.Parameter", "panel.viewable.Children"])
-        }
+        metadata = CacheMetadata(
+            library_name=library_name,
+            library_version=parse_version(version),
+            created_at=int(time.time()),
+            cache_version=CACHE_VERSION,
+        )
+        return LibraryCache(
+            metadata=metadata,
+            classes={},
+            aliases={},
+            parameter_types=[],
+        )
 
-    def _is_cache_valid(self, cache_data: dict[str, Any], library_name: str, version: str) -> bool:
+    def _is_cache_valid(self, cache_data: LibraryCache, library_name: str, version: str) -> bool:
         """Validate cache data format and version compatibility."""
-        # Only accept new format with metadata
-        if "metadata" not in cache_data:
-            return False
-
-        metadata = cache_data.get("metadata", {})
+        metadata = cache_data.metadata
 
         # Check library name match
-        if metadata.get("library_name") != library_name:
+        if metadata.library_name != library_name:
             return False
 
         # Check library version match
-        if tuple(metadata.get("library_version", ())) != parse_version(version):
+        if tuple(metadata.library_version) != parse_version(version):
             return False
 
         # Only accept exact cache version match (no backward compatibility)
-        return tuple(metadata.get("cache_version", ())) == CACHE_VERSION
-
-    def _serialize_param_class_info(self, param_class_info: ParameterizedInfo) -> dict[str, Any]:
-        """Serialize ParameterizedInfo to dictionary format for JSON storage."""
-        parameters_data = {}
-
-        for param_name, param_info in param_class_info.parameters.items():
-            # item_type is already a string (qualified name like "builtins.str")
-            item_type_str = param_info.item_type
-
-            parameters_data[param_name] = {
-                "name": param_info.name,
-                "cls": param_info.cls,
-                "bounds": param_info.bounds,
-                "doc": param_info.doc,
-                "allow_None": param_info.allow_None,
-                "default": param_info.default,
-                "location": param_info.location,
-                "objects": param_info.objects,
-                "item_type": item_type_str,
-                "length": param_info.length,
-            }
-
-        return {
-            "class_name": param_class_info.name,
-            "parameters": parameters_data,
-        }
-
-    def _deserialize_param_class_info(self, data: dict[str, Any]) -> ParameterizedInfo | None:
-        """Deserialize dictionary format back to ParameterizedInfo."""
-        # Handle new dataclass format
-        if "class_name" in data and "parameters" in data and isinstance(data["parameters"], dict):
-            class_name = data["class_name"]
-            parameters_data = data["parameters"]
-
-            param_class_info = ParameterizedInfo(name=class_name)
-
-            for param_data in parameters_data.values():
-                # Handle backward compatibility - old cache may have "param_type" instead of "cls"
-                cls_value = param_data.get("cls") or param_data.get("param_type", "Unknown")
-                allow_None_value = param_data.get("allow_None")
-                if allow_None_value is None:
-                    allow_None_value = param_data.get("allow_none", False)
-
-                param_info = ParameterInfo(
-                    name=param_data["name"],
-                    cls=cls_value,
-                    bounds=param_data.get("bounds"),
-                    doc=param_data.get("doc"),
-                    allow_None=allow_None_value,
-                    default=param_data.get("default"),
-                    location=param_data.get("location"),
-                    objects=param_data.get("objects"),
-                    item_type=param_data.get("item_type"),
-                    length=param_data.get("length"),
-                )
-                param_class_info.add_parameter(param_info)
-
-            return param_class_info
+        return tuple(metadata.cache_version) == CACHE_VERSION
 
     def clear(self, library_name: str | None = None, version: str | None = None) -> None:
         """Clear cache for a specific library or all libraries."""
@@ -471,7 +407,7 @@ class ExternalLibraryCache:
 
             # Clear all cache files for the current cache version only
             cache_version_str = string_version(CACHE_VERSION, "_")
-            pattern = f"*-{cache_version_str}.json"
+            pattern = f"*-{cache_version_str}.msgpack"
             for cache_file in self.cache_dir.glob(pattern):
                 cache_file.unlink()
 
