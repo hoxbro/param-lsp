@@ -27,6 +27,7 @@ dependencies = [
     "platformdirs",
     "tree-sitter>=0.25.0",
     "tree-sitter-python>=0.25.0",
+    "msgspec",
 ]
 
 [project.urls]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import time
@@ -10,6 +9,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+import msgspec
 import platformdirs
 
 from ._logging import get_logger
@@ -17,8 +17,8 @@ from .models import ParameterInfo, ParameterizedInfo
 
 logger = get_logger(__name__, "cache")
 
-# Current cache version
-CACHE_VERSION = (1, 1, 1)
+# Current cache version (bumped to 1.2.0 for msgpack format change)
+CACHE_VERSION = (1, 2, 0)
 _re_no = re.compile(r"\d+")
 
 
@@ -51,7 +51,7 @@ class ExternalLibraryCache:
         parsed_version = parse_version(version)
         version_str = string_version(parsed_version, "_")
         cache_str = string_version(CACHE_VERSION, "_")
-        filename = f"{library_name}-{version_str}-{cache_str}.json"
+        filename = f"{library_name}-{version_str}-{cache_str}.msgpack"
         return self.cache_dir / filename
 
     def has_library_cache(self, library_name: str, version: str) -> bool:
@@ -74,8 +74,8 @@ class ExternalLibraryCache:
             return False
 
         try:
-            with cache_path.open("r", encoding="utf-8") as f:
-                cache_data = json.load(f)
+            with cache_path.open("rb") as f:
+                cache_data = msgspec.msgpack.decode(f.read())
 
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
@@ -87,7 +87,7 @@ class ExternalLibraryCache:
             # Check if cache has any classes
             classes_data = cache_data.get("classes", {})
             return len(classes_data) > 0
-        except (json.JSONDecodeError, OSError):
+        except (msgspec.DecodeError, OSError):
             return False
 
     def get(self, library_name: str, class_path: str, version: str) -> ParameterizedInfo | None:
@@ -126,8 +126,8 @@ class ExternalLibraryCache:
             return None
 
         try:
-            with cache_path.open("r", encoding="utf-8") as f:
-                cache_data = json.load(f)
+            with cache_path.open("rb") as f:
+                cache_data = msgspec.msgpack.decode(f.read())
 
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
@@ -155,7 +155,7 @@ class ExternalLibraryCache:
                     return self._deserialize_param_class_info(class_data)
 
             return None
-        except (json.JSONDecodeError, OSError) as e:
+        except (msgspec.DecodeError, OSError) as e:
             logger.debug(f"Failed to read cache for {library_name}: {e}")
             return None
 
@@ -185,13 +185,13 @@ class ExternalLibraryCache:
             cache_data = self._create_cache_structure(library_name, version)
             if cache_path.exists():
                 try:
-                    with cache_path.open("r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
+                    with cache_path.open("rb") as f:
+                        existing_data = msgspec.msgpack.decode(f.read())
                     # Validate and migrate existing cache if needed
                     if self._is_cache_valid(existing_data, library_name, version):
                         cache_data = existing_data
                     # If invalid, cache_data keeps the new structure
-                except (json.JSONDecodeError, OSError):
+                except (msgspec.DecodeError, OSError):
                     # If we can't read existing cache, start fresh
                     pass
 
@@ -231,11 +231,11 @@ class ExternalLibraryCache:
             cache_data = self._create_cache_structure(library_name, version)
             if cache_path.exists():
                 try:
-                    with cache_path.open("r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
+                    with cache_path.open("rb") as f:
+                        existing_data = msgspec.msgpack.decode(f.read())
                     if self._is_cache_valid(existing_data, library_name, version):
                         cache_data = existing_data
-                except (json.JSONDecodeError, OSError):
+                except (msgspec.DecodeError, OSError):
                     pass
 
             # Ensure aliases dict exists
@@ -272,11 +272,11 @@ class ExternalLibraryCache:
             cache_data = self._create_cache_structure(library_name, version)
             if cache_path.exists():
                 try:
-                    with cache_path.open("r", encoding="utf-8") as f:
-                        existing_data = json.load(f)
+                    with cache_path.open("rb") as f:
+                        existing_data = msgspec.msgpack.decode(f.read())
                     if self._is_cache_valid(existing_data, library_name, version):
                         cache_data = existing_data
-                except (json.JSONDecodeError, OSError):
+                except (msgspec.DecodeError, OSError):
                     pass
 
             self._pending_cache[cache_key] = cache_data
@@ -312,8 +312,8 @@ class ExternalLibraryCache:
             return set()
 
         try:
-            with cache_path.open("r", encoding="utf-8") as f:
-                cache_data = json.load(f)
+            with cache_path.open("rb") as f:
+                cache_data = msgspec.msgpack.decode(f.read())
 
             # Validate cache format and version compatibility
             if not self._is_cache_valid(cache_data, library_name, version):
@@ -324,7 +324,7 @@ class ExternalLibraryCache:
 
             param_types = cache_data.get("parameter_types", [])
             return set(param_types)
-        except (json.JSONDecodeError, OSError):
+        except (msgspec.DecodeError, OSError):
             return set()
 
     def flush(self, library_name: str, version: str) -> None:
@@ -348,8 +348,8 @@ class ExternalLibraryCache:
         cache_data = self._pending_cache[cache_key]
 
         try:
-            with cache_path.open("w", encoding="utf-8") as f:
-                json.dump(cache_data, f, indent=2)
+            with cache_path.open("wb") as f:
+                f.write(msgspec.msgpack.encode(cache_data))
             logger.debug(f"Flushed cache for {library_name} to {cache_path}")
         except OSError as e:
             logger.debug(f"Failed to write cache for {library_name}: {e}")
@@ -471,7 +471,7 @@ class ExternalLibraryCache:
 
             # Clear all cache files for the current cache version only
             cache_version_str = string_version(CACHE_VERSION, "_")
-            pattern = f"*-{cache_version_str}.json"
+            pattern = f"*-{cache_version_str}.msgpack"
             for cache_file in self.cache_dir.glob(pattern):
                 cache_file.unlink()
 
