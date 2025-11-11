@@ -296,3 +296,54 @@ def test_boolean():
         # Line 9 is in test_number, line 17 is in test_boolean
         assert 9 in error_lines or 8 in error_lines  # "invalid" assignment in test_number
         assert 17 in error_lines or 16 in error_lines  # "invalid" assignment in test_boolean
+
+    def test_non_param_objects_with_matching_attribute_names(self, analyzer):
+        """Test that assignments to non-Param objects with matching attribute names are ignored.
+
+        This is a regression test for false positives where pandas DataFrames,
+        Jupyter config objects, or other non-Param objects have attributes with the
+        same names as Param parameters (e.g., 'name', 'port', 'value').
+        """
+        code_py = """\
+import param
+
+class Widget(param.Parameterized):
+    name = param.String(default="widget")
+    port = param.Integer(default=8080)
+
+# Simulate a pandas-like object with index.name attribute
+class MockIndex:
+    name = None
+
+class MockDataFrame:
+    def __init__(self):
+        self.index = MockIndex()
+
+# Simulate a Jupyter-like config object
+class MockServerApp:
+    port = 0
+
+class MockConfig:
+    ServerApp = MockServerApp()
+
+# These should NOT generate errors (not Param objects)
+df = MockDataFrame()
+df.index.name = None  # NOT a Param parameter assignment
+
+c = MockConfig()
+c.ServerApp.port = 8888  # NOT a Param parameter assignment
+
+# This SHOULD generate an error (is a Param object)
+widget = Widget()
+widget.name = 123  # Error: wrong type
+"""
+
+        result = analyzer.analyze_file(code_py)
+
+        runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
+        # Should only have 1 error (widget.name = 123), not the pandas/config ones
+        assert len(runtime_errors) == 1
+        assert (
+            "widget" not in runtime_errors[0]["message"].lower()
+            or "name" in runtime_errors[0]["message"]
+        )

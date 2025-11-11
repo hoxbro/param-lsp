@@ -574,16 +574,27 @@ class ParameterValidator:
                 instance_class = self._get_instance_class(call_node)
         else:
             # Case: instance_var.param = value
-            # Find the class in the same scope and use line number for unique identification
-            class_in_scope = self._find_class_in_scope(node, param_name)
-            if class_in_scope:
-                instance_class = class_in_scope
-            else:
-                # Fallback: check external param classes
-                for class_name, class_info in self.external_param_classes.items():
-                    if class_info and param_name in class_info.parameters:
-                        instance_class = class_name
-                        break
+            # Only try to resolve the class if this is a simple identifier (e.g., widget.name)
+            # not a nested attribute (e.g., df.index.name), to avoid false positives
+            obj_node = target.child_by_field_name("object")
+            if obj_node and obj_node.type == "identifier":
+                # Simple case: variable.param = value
+                # First, try to find the class in the same scope (for local Parameterized classes)
+                class_in_scope = self._find_class_in_scope(node, param_name)
+                if class_in_scope:
+                    instance_class = class_in_scope
+                else:
+                    # Fallback: check external param classes only for simple identifiers
+                    # This allows checking external libraries (e.g., panel.widgets.IntSlider)
+                    # while avoiding false positives from nested attributes (e.g., df.index.name)
+                    for class_name, class_info in self.external_param_classes.items():
+                        if class_info and param_name in class_info.parameters:
+                            instance_class = class_name
+                            break
+            # Note: We intentionally do NOT check nested attributes (e.g., obj.attr.param)
+            # against external param classes, as this causes false positives for non-Param
+            # objects (e.g., pandas DataFrames, Jupyter config) that happen to have attributes
+            # with the same names as Param parameters (e.g., 'name', 'port', 'value')
 
         if not instance_class:
             return
