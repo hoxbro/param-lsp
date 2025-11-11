@@ -7,15 +7,12 @@ import re
 import time
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import msgspec
 import platformdirs
 
 from ._logging import get_logger
-
-if TYPE_CHECKING:
-    from .models import ParameterizedInfo
+from .models import ParameterizedInfo  # noqa: TC001
 
 logger = get_logger(__name__, "cache")
 
