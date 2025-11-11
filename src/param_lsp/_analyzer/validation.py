@@ -578,19 +578,27 @@ class ParameterValidator:
             # not a nested attribute (e.g., df.index.name), to avoid false positives
             obj_node = target.child_by_field_name("object")
             if obj_node and obj_node.type == "identifier":
-                # Simple case: variable.param = value
-                # First, try to find the class in the same scope (for local Parameterized classes)
-                class_in_scope = self._find_class_in_scope(node, param_name)
-                if class_in_scope:
-                    instance_class = class_in_scope
+                # Special case: self.param = value inside a class method
+                # Find the containing class instead of searching for any class with that parameter
+                identifier_name = get_value(obj_node)
+                if identifier_name == "self":
+                    containing_class = self._find_containing_class(node)
+                    if containing_class:
+                        instance_class = containing_class
                 else:
-                    # Fallback: check external param classes only for simple identifiers
-                    # This allows checking external libraries (e.g., panel.widgets.IntSlider)
-                    # while avoiding false positives from nested attributes (e.g., df.index.name)
-                    for class_name, class_info in self.external_param_classes.items():
-                        if class_info and param_name in class_info.parameters:
-                            instance_class = class_name
-                            break
+                    # Simple case: variable.param = value
+                    # First, try to find the class in the same scope (for local Parameterized classes)
+                    class_in_scope = self._find_class_in_scope(node, param_name)
+                    if class_in_scope:
+                        instance_class = class_in_scope
+                    else:
+                        # Fallback: check external param classes only for simple identifiers
+                        # This allows checking external libraries (e.g., panel.widgets.IntSlider)
+                        # while avoiding false positives from nested attributes (e.g., df.index.name)
+                        for class_name, class_info in self.external_param_classes.items():
+                            if class_info and param_name in class_info.parameters:
+                                instance_class = class_name
+                                break
             # Note: We intentionally do NOT check nested attributes (e.g., obj.attr.param)
             # against external param classes, as this causes false positives for non-Param
             # objects (e.g., pandas DataFrames, Jupyter config) that happen to have attributes
@@ -1227,6 +1235,42 @@ class ParameterValidator:
                     self._create_type_error(
                         param_node, message, "invalid-depends-parameter", "error"
                     )
+
+    def _find_containing_class(self, node: Node) -> str | None:
+        """Find the Parameterized class containing the given node.
+
+        Walks up the AST to find the containing class definition and returns
+        its unique key if it's a Parameterized class.
+
+        Args:
+            node: The AST node to start searching from
+
+        Returns:
+            Unique class key "ClassName:line" if found, None otherwise
+        """
+        # Walk up the tree to find the class definition
+        current = node.parent
+        while current:
+            if current.type == "class_definition":
+                class_name = get_class_name(current)
+                if not class_name:
+                    current = current.parent
+                    continue
+
+                # Create unique key with line number
+                line_number = current.start_point[0]
+                unique_key = f"{class_name}:{line_number}"
+
+                # Check if this is a Parameterized class we know about
+                if unique_key in self.param_classes:
+                    return unique_key
+
+                # Also check external param classes (though less common for 'self')
+                if class_name in self.external_param_classes:
+                    return class_name
+
+            current = current.parent
+        return None
 
     def _find_containing_class_for_decorator(
         self, decorator_node: Node
