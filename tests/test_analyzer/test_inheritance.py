@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
+from tests.util import get_class
 
 
 class TestParameterInheritance:
@@ -31,10 +25,10 @@ S().b = "a"
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        p_class = get_class(param_classes, "P")
-        assert p_class is not None
-        s_class = get_class(param_classes, "S")
-        assert s_class is not None
+        p_class = get_class(param_classes, "P", raise_if_none=True)
+
+        s_class = get_class(param_classes, "S", raise_if_none=True)
+
         assert len(p_class.parameters) == 0
         assert list(s_class.parameters.keys()) == ["b"]
         assert s_class.parameters["b"].cls == "Boolean"
@@ -68,12 +62,11 @@ T().name = 123
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        p_class = get_class(param_classes, "P")
-        assert p_class is not None
-        s_class = get_class(param_classes, "S")
-        assert s_class is not None
-        t_class = get_class(param_classes, "T")
-        assert t_class is not None
+        p_class = get_class(param_classes, "P", raise_if_none=True)
+
+        s_class = get_class(param_classes, "S", raise_if_none=True)
+
+        t_class = get_class(param_classes, "T", raise_if_none=True)
 
         # Check parameter inheritance
         assert list(p_class.parameters.keys()) == ["x"]
@@ -108,10 +101,9 @@ S().value = 123  # Should error - expecting string now
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        p_class = get_class(param_classes, "P")
-        assert p_class is not None
-        s_class = get_class(param_classes, "S")
-        assert s_class is not None
+        p_class = get_class(param_classes, "P", raise_if_none=True)
+
+        s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Child class should override parent parameter type
         assert p_class.parameters["value"].cls == "Integer"
@@ -141,10 +133,9 @@ S().y = 10  # Should violate local bounds
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        p_class = get_class(param_classes, "P")
-        assert p_class is not None
-        s_class = get_class(param_classes, "S")
-        assert s_class is not None
+        get_class(param_classes, "P", raise_if_none=True)
+
+        s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Check bounds inheritance
         assert s_class.parameters["x"].bounds is not None
@@ -169,10 +160,9 @@ class S(P):
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        p_class = get_class(param_classes, "P")
-        assert p_class is not None
-        s_class = get_class(param_classes, "S")
-        assert s_class is not None
+        get_class(param_classes, "P", raise_if_none=True)
+
+        s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Check doc inheritance
         assert s_class.parameters["x"].doc == "Parent parameter"
@@ -240,10 +230,9 @@ S().x = "not_int"  # Should detect error for inherited parameter
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        p_class = get_class(param_classes, "P")
-        assert p_class is not None
-        s_class = get_class(param_classes, "S")
-        assert s_class is not None
+        get_class(param_classes, "P", raise_if_none=True)
+
+        s_class = get_class(param_classes, "S", raise_if_none=True)
 
         # Child should inherit parent's parameter
         assert "x" in s_class.parameters

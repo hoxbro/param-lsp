@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
+from tests.util import get_class
 
 
 class TestBoundsValidation:
@@ -27,8 +21,8 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
-        test_class = get_class(result["param_classes"], "TestClass")
-        assert test_class is not None
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
+
         assert "int_param" in test_class.parameters
         assert "number_param" in test_class.parameters
         assert test_class.parameters["int_param"].bounds is not None
@@ -141,8 +135,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = get_class(result["param_classes"], "TestClass")
-        assert test_class is not None
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         # Check simple bounds
         assert "simple_bounds" in test_class.parameters
@@ -172,8 +165,8 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         assert len(result["type_errors"]) == 0
-        test_class = get_class(result["param_classes"], "TestClass")
-        assert test_class is not None
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
+
         negative_bounds = test_class.parameters["negative_bounds"].bounds
         assert negative_bounds[0] == -5
         assert negative_bounds[1] == 0

@@ -3,14 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
-
-
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
+from tests.util import get_class
 
 
 class TestConstructorComplexScenarios:
@@ -159,8 +152,8 @@ Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer val
         errors = result.get("type_errors", [])
 
         # Verify the analyzer chose one consistent type for 'shared'
-        combined_class = get_class(result["param_classes"], "Combined")
-        assert combined_class is not None
+        combined_class = get_class(result["param_classes"], "Combined", raise_if_none=True)
+
         assert "shared" in combined_class.parameters
 
         # Currently uses "last wins" - MixinB's Integer type should win
@@ -189,8 +182,10 @@ ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        #
         errors = result.get("type_errors", [])
 
         # Verify bounds are correctly extracted including None bounds
-        complex_bounds_class = get_class(result["param_classes"], "ComplexBounds")
-        assert complex_bounds_class is not None
+        complex_bounds_class = get_class(
+            result["param_classes"], "ComplexBounds", raise_if_none=True
+        )
+
         p = complex_bounds_class.parameters
         assert p["percentage"].bounds == (0, 100, False, True)  # (0, 100]
         assert p["angle"].bounds == (-180, 180, True, False)  # [-180, 180)
@@ -315,14 +310,12 @@ Outer.Inner(inner_param="bad")                # Should error
 
         # Verify both nested and outer classes are recognized
         param_classes = result["param_classes"]
-        assert get_class(param_classes, "Outer") is not None
-        assert get_class(param_classes, "Inner") is not None
 
         # Verify parameters are correctly identified
-        outer_class = get_class(param_classes, "Outer")
-        assert outer_class is not None
-        inner_class = get_class(param_classes, "Inner")
-        assert inner_class is not None
+        outer_class = get_class(param_classes, "Outer", raise_if_none=True)
+
+        inner_class = get_class(param_classes, "Inner", raise_if_none=True)
+
         assert list(outer_class.parameters.keys()) == ["outer_param"]
         assert list(inner_class.parameters.keys()) == ["inner_param"]
 

@@ -11,14 +11,6 @@ import pytest
 from param_lsp._analyzer.static_external_analyzer import ExternalClassInspector
 
 
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
-
-
 class TestExternalClassInspector:
     """Test the static external analyzer against runtime introspection."""
 

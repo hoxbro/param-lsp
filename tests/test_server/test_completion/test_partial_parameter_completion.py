@@ -7,14 +7,6 @@ from lsprotocol.types import Position, TextEdit
 from param_lsp.server import ParamLanguageServer
 
 
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
-
-
 class TestPartialParameterCompletion:
     """Test partial parameter completion features."""
 
@@ -25,10 +17,8 @@ class TestPartialParameterCompletion:
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100, bounds=(1, 1000))
-
 
 instance = MyClass(w="""
 
@@ -77,10 +67,8 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer()  # No default value
-
 
 instance = MyClass(w="""
 
@@ -114,11 +102,9 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100)
     weight = param.Number(default=50.0)
-
 
 instance = MyClass(w="""
 
@@ -150,10 +136,8 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     height = param.Integer(default=100)
-
 
 instance = MyClass(w="""
 
@@ -185,10 +169,8 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100)
-
 
 instance = MyClass(w ="""
 

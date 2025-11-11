@@ -5,14 +5,7 @@ from __future__ import annotations
 import pytest
 
 from param_lsp.analyzer import ParamAnalyzer
-
-
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
+from tests.util import get_class
 
 
 class TestContainerValidation:
@@ -127,8 +120,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code, "test_file.py")
         param_classes = result.get("param_classes", {})
 
-        test_class = get_class(param_classes, "TestClass")
-        assert test_class is not None
+        test_class = get_class(param_classes, "TestClass", raise_if_none=True)
 
         # Check tags parameter
         tags_param = test_class.get_parameter("tags")

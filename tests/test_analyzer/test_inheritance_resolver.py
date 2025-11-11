@@ -9,14 +9,6 @@ from src.param_lsp._treesitter import get_class_bases, parser, walk_tree
 from src.param_lsp.models import ParameterInfo, ParameterizedInfo
 
 
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
-
-
 class TestInheritanceResolver:
     """Test the InheritanceResolver modular component."""
 

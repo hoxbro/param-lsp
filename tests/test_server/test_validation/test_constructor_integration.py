@@ -3,14 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
-
-
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
+from tests.util import get_class
 
 
 class TestConstructorIntegration:
@@ -144,9 +137,7 @@ DocumentedClass(x="bad", y=123, z="false")
 
         # Verify documentation is still extracted properly
         param_classes = result.get("param_classes", {})
-        assert get_class(param_classes, "DocumentedClass") is not None
-        documented_class = get_class(param_classes, "DocumentedClass")
-        assert documented_class is not None
+        documented_class = get_class(param_classes, "DocumentedClass", raise_if_none=True)
         assert documented_class.parameters["x"].doc == "An integer parameter"
         assert documented_class.parameters["y"].doc == "A string parameter with documentation"
         assert documented_class.parameters["z"].doc == "Boolean flag"

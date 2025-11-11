@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-
-def get_class(param_classes, base_name):
-    """Get class by base name from param_classes dict with unique keys."""
-    for key in param_classes:
-        if key.startswith(f"{base_name}:"):
-            return param_classes[key]
-    return None
+from tests.util import get_class
 
 
 class TestIntegration:
@@ -18,6 +12,8 @@ class TestIntegration:
         """Test complete analysis workflow with all features."""
         code_py = """
 from __future__ import annotations
+
+from tests.util import get_class
 import param
 
 class CompleteExample(param.Parameterized):
@@ -68,10 +64,7 @@ example.ratio = 0               # Exclusive bounds violation
         result = analyzer.analyze_file(code_py)
 
         # Verify class detection
-        assert get_class(result["param_classes"], "CompleteExample") is not None
-        complete_class = get_class(result["param_classes"], "CompleteExample")
-        assert complete_class is not None
-
+        complete_class = get_class(result["param_classes"], "CompleteExample", raise_if_none=True)
         # Verify parameter extraction
         params = list(complete_class.parameters.keys())
         expected_params = [
@@ -182,10 +175,9 @@ processor.use_gpu = 1              # Boolean type error
         result = analyzer.analyze_file(code_py)
 
         # Verify comprehensive analysis
-        assert get_class(result["param_classes"], "DataProcessor") is not None
-        data_processor_class = get_class(result["param_classes"], "DataProcessor")
-        assert data_processor_class is not None
-
+        data_processor_class = get_class(
+            result["param_classes"], "DataProcessor", raise_if_none=True
+        )
         # Check all parameter types are detected
         expected_types = {
             "input_file": "Filename",
@@ -255,10 +247,7 @@ edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
         result = analyzer.analyze_file(code_py)
 
         # Verify all edge cases are handled
-        assert get_class(result["param_classes"], "EdgeCases") is not None
-        edge_cases_class = get_class(result["param_classes"], "EdgeCases")
-        assert edge_cases_class is not None
-
+        edge_cases_class = get_class(result["param_classes"], "EdgeCases", raise_if_none=True)
         # Check documentation extraction handles long text and special characters
         long_doc_param = edge_cases_class.parameters["long_doc"]
         assert long_doc_param.doc is not None
@@ -290,7 +279,5 @@ class ValidClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         # Should still extract the valid parts
-        assert get_class(result["param_classes"], "ValidClass") is not None
-        valid_class = get_class(result["param_classes"], "ValidClass")
-        assert valid_class is not None
+        valid_class = get_class(result["param_classes"], "ValidClass", raise_if_none=True)
         assert valid_class.parameters["valid_param"].cls == "String"
