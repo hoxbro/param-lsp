@@ -347,3 +347,101 @@ widget.name = 123  # Error: wrong type
             "widget" not in runtime_errors[0]["message"].lower()
             or "name" in runtime_errors[0]["message"]
         )
+
+    def test_self_assignment_to_non_parameter_attribute(self, analyzer):
+        """Test that self.attribute assignments to non-parameters don't generate false positives.
+
+        This is a regression test for the bug where `self.style = None` inside a class's
+        __init__ method was incorrectly flagged as a parameter type error, even though
+        the class doesn't have a `style` parameter. The code was incorrectly matching
+        against unrelated external classes that happen to have a parameter with the same name.
+        """
+        code_py = """\
+import param
+
+class ClassWithStyleParam(param.Parameterized):
+    style = param.Dict(default={})
+
+class ClassWithoutStyleParam(param.Parameterized):
+    name = param.String(default="test")
+    value = param.Integer(default=0)
+
+    def __init__(self, **params):
+        # These should NOT be flagged as errors
+        # because style and _widgets are not parameters of this class
+        self.style = None  # Just a regular instance attribute
+        self._widgets = []  # Just a regular instance attribute
+        self._computed_styler = {}  # Just a regular instance attribute
+        super().__init__(**params)
+
+        # This SHOULD generate an error (is a parameter)
+        self.name = 123  # Error: wrong type for parameter
+
+# This SHOULD also generate an error (is a parameter on ClassWithStyleParam)
+instance = ClassWithStyleParam()
+instance.style = "wrong"  # Error: wrong type for parameter
+"""
+
+        result = analyzer.analyze_file(code_py)
+
+        runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
+        # Should have 2 errors:
+        # 1. self.name = 123 (wrong type for parameter)
+        # 2. instance.style = "wrong" (wrong type for parameter)
+        # Should NOT have errors for self.style, self._widgets, or self._computed_styler
+        assert len(runtime_errors) == 2
+
+        # Verify the errors are for the right lines
+        error_lines = {e["line"] for e in runtime_errors}
+        assert 18 in error_lines  # self.name = 123
+        assert 22 in error_lines  # instance.style = "wrong"
+
+        # Verify no errors for the non-parameter attributes
+        for error in runtime_errors:
+            assert "style = None" not in error["message"]
+            assert "_widgets" not in error["message"]
+            assert "_computed_styler" not in error["message"]
+
+    def test_variable_assignment_ambiguous_parameter_names(self, analyzer):
+        """Test that variable assignments with ambiguous parameter names don't cause false positives.
+
+        This is a regression test for the bug where `slider.value = 10` from
+        `slider = obj.select(FloatSlider)[0]` was incorrectly flagged as a type error
+        because we couldn't determine the type of `slider` and the code would match
+        against ANY external class with a `value` parameter (taking the first match).
+
+        The fix: Only check external classes when there's exactly ONE class with that
+        parameter name, or when multiple classes have the parameter but all with the
+        SAME type.
+
+        This test demonstrates that with the fix, we avoid false positives by not
+        checking assignments when the parameter name is ambiguous across different types.
+        """
+        # Test with Panel and HoloViews external classes
+        code_py = """\
+import panel as pn
+import holoviews as hv
+
+# Simulate scenarios where we can't determine the variable type
+# (e.g., from method calls like obj.layout.select(FloatSlider)[0])
+
+# This should NOT cause errors because we can't determine the type
+# and many widgets have 'value' with different types (String, Number, List, etc.)
+unknown_widget = None  # Type unknown
+if unknown_widget:
+    unknown_widget.value = 10  # Could be FloatSlider (valid) or TextInput (invalid)
+"""
+
+        result = analyzer.analyze_file(code_py)
+
+        runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
+        # Should have NO errors because:
+        # 1. We can't determine the type of unknown_widget
+        # 2. Many external classes have 'value' with DIFFERENT types
+        # 3. So we conservatively skip checking to avoid false positives
+        assert len(runtime_errors) == 0
+
+        # Note: The complementary case (where multiple classes have the SAME type)
+        # is already tested in test_holoviews_element_support in
+        # test_external_parameterized_classes.py, which verifies that we DO check
+        # when all matching classes have the same parameter type (e.g., label: String).
