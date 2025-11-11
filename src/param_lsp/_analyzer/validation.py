@@ -1187,6 +1187,12 @@ class ParameterValidator:
         This method validates that all parameter names referenced in @param.depends
         decorators actually exist as parameters in the containing class.
 
+        Supports several dependency patterns:
+        - Simple parameter: "param_name"
+        - Method dependency: "method_name"
+        - Nested parameter: "param.nested_param" or "param.param"
+        - Parameter metadata: "param:metadata_name"
+
         Args:
             tree: The root tree-sitter AST node to validate
         """
@@ -1206,13 +1212,18 @@ class ParameterValidator:
             if not valid_params:
                 continue
 
+            # Get all method names for this class
+            valid_methods = self._get_class_methods_from_node(class_node)
+
             # Extract parameter names from the decorator arguments
             depends_params = self._extract_depends_parameters(decorator_node)
 
             # Check each parameter name
-            for param_name, param_node in depends_params:
-                if param_name not in valid_params:
-                    message = f"Parameter '{param_name}' does not exist in class '{class_name}'"
+            for depend_string, param_node in depends_params:
+                if not self._is_valid_depends_reference(
+                    depend_string, valid_params, valid_methods, class_name
+                ):
+                    message = f"Parameter '{depend_string}' does not exist in class '{class_name}'"
                     self._create_type_error(
                         param_node, message, "invalid-depends-parameter", "error"
                     )
@@ -1302,6 +1313,84 @@ class ParameterValidator:
                 params.update(class_info.get_parameter_names())
 
         return params
+
+    def _get_class_methods_from_node(self, class_node: Node) -> set[str]:
+        """Get all method names from a class node.
+
+        Args:
+            class_node: The tree-sitter AST node for the class
+
+        Returns:
+            Set of method names
+        """
+        methods = set()
+
+        # Find all function definitions within the class body
+        for child in get_children(class_node):
+            if child.type == "block":  # The class body
+                for item in get_children(child):
+                    func_node = None
+                    if item.type == "function_definition":
+                        func_node = item
+                    elif item.type == "decorated_definition":
+                        # For decorated functions, find the function_definition child
+                        for subitem in get_children(item):
+                            if subitem.type == "function_definition":
+                                func_node = subitem
+                                break
+
+                    if func_node:
+                        # Get the function name
+                        name_node = func_node.child_by_field_name("name")
+                        if name_node:
+                            method_name = get_value(name_node)
+                            if method_name:
+                                methods.add(method_name)
+
+        return methods
+
+    def _is_valid_depends_reference(
+        self, depend_string: str, valid_params: set[str], valid_methods: set[str], class_name: str
+    ) -> bool:
+        """Check if a @param.depends reference string is valid.
+
+        Supports several dependency patterns:
+        - Simple parameter: "param_name" -> check if param_name is in valid_params
+        - Method dependency: "method_name" -> check if method_name is in valid_methods
+        - Nested parameter: "param.nested" -> check if param can hold Parameterized objects
+        - Parameter metadata: "param:metadata" -> check if param is in valid_params
+
+        Args:
+            depend_string: The dependency string from @param.depends
+            valid_params: Set of valid parameter names
+            valid_methods: Set of valid method names
+            class_name: Name of the containing class (for debugging)
+
+        Returns:
+            True if the reference is valid, False otherwise
+        """
+        # Handle parameter metadata dependencies (e.g., "param:constant")
+        if ":" in depend_string:
+            base_param = depend_string.split(":")[0]
+            return base_param in valid_params
+
+        # Handle nested dependencies (e.g., "param.nested" or "param.param")
+        # Valid for parameter types that can hold Parameterized objects:
+        # - Parameter (base type, can hold anything)
+        # - ClassSelector (holds instances of specific classes)
+        # - ObjectSelector (selects from list of objects)
+        # - Selector (selects from list of objects)
+        if "." in depend_string:
+            base_param = depend_string.split(".")[0]
+            if base_param not in valid_params:
+                return False
+            # Check if the base parameter type supports nested references
+            param_type = self._get_parameter_type_from_class(class_name, base_param)
+            # Allow nested references for parameter types that can hold Parameterized objects
+            return param_type in {"Parameter", "ClassSelector", "ObjectSelector", "Selector"}
+
+        # Simple case: check if it's a parameter or method name
+        return depend_string in valid_params or depend_string in valid_methods
 
     def _extract_depends_parameters(self, decorator_node: Node) -> list[tuple[str, Node]]:
         """Extract parameter names from a @param.depends decorator.
