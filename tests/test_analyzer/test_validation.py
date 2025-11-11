@@ -51,6 +51,30 @@ class TestParameterValidator:
                 doc="Parameter that can hold Parameterized objects",
             )
         )
+        test_class.add_parameter(
+            ParameterInfo(
+                name="class_sel",
+                cls="ClassSelector",
+                default=None,
+                doc="ClassSelector parameter for holding class instances",
+            )
+        )
+        test_class.add_parameter(
+            ParameterInfo(
+                name="obj_sel",
+                cls="ObjectSelector",
+                default=None,
+                doc="ObjectSelector parameter",
+            )
+        )
+        test_class.add_parameter(
+            ParameterInfo(
+                name="selector",
+                cls="Selector",
+                default=None,
+                doc="Selector parameter",
+            )
+        )
 
         # Use unique key format with line number
         # Add entries for both line 1 and line 3 since different tests have TestClass at different lines
@@ -797,6 +821,69 @@ class TestClass(param.Parameterized):
         depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
         assert len(depends_errors) == 1, f"Expected 1 depends error, got: {depends_errors}"
         assert "test_param.a" in depends_errors[0]["message"]
+
+    def test_check_param_depends_class_selector_nested(self, validator):
+        """Test @param.depends with nested reference on ClassSelector parameter."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+    class_sel = param.ClassSelector(default=None)
+
+    @param.depends("class_sel.value", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors - ClassSelector supports nested references
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
+
+    def test_check_param_depends_object_selector_nested(self, validator):
+        """Test @param.depends with nested reference on ObjectSelector parameter."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+    obj_sel = param.ObjectSelector(default=None)
+
+    @param.depends("obj_sel.param", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors - ObjectSelector supports nested references
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
+
+    def test_check_param_depends_selector_nested(self, validator):
+        """Test @param.depends with nested reference on Selector parameter."""
+        code = """
+import param
+
+class TestClass(param.Parameterized):
+    test_param = param.String(default="test")
+    numeric_param = param.Number(default=42.0, bounds=(0, 100))
+    selector = param.Selector(default=None)
+
+    @param.depends("selector.attribute", watch=True)
+    def compute(self):
+        pass
+"""
+        tree = parser.parse(code)
+
+        # Should not create any errors - Selector supports nested references
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no depends errors, got: {depends_errors}"
 
     def test_check_param_depends_parameter_metadata(self, validator):
         """Test @param.depends with parameter metadata dependency."""

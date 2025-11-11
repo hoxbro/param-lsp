@@ -1357,7 +1357,7 @@ class ParameterValidator:
         Supports several dependency patterns:
         - Simple parameter: "param_name" -> check if param_name is in valid_params
         - Method dependency: "method_name" -> check if method_name is in valid_methods
-        - Nested parameter: "param.nested" -> check if param is Parameter type ONLY
+        - Nested parameter: "param.nested" -> check if param can hold Parameterized objects
         - Parameter metadata: "param:metadata" -> check if param is in valid_params
 
         Args:
@@ -1375,14 +1375,19 @@ class ParameterValidator:
             return base_param in valid_params
 
         # Handle nested dependencies (e.g., "param.nested" or "param.param")
-        # ONLY valid for Parameter type parameters
+        # Valid for parameter types that can hold Parameterized objects:
+        # - Parameter (base type, can hold anything)
+        # - ClassSelector (holds instances of specific classes)
+        # - ObjectSelector (selects from list of objects)
+        # - Selector (selects from list of objects)
         if "." in depend_string:
             base_param = depend_string.split(".")[0]
             if base_param not in valid_params:
                 return False
-            # Check if the base parameter is of type Parameter
+            # Check if the base parameter type supports nested references
             param_type = self._get_parameter_type_from_class(class_name, base_param)
-            return param_type == "Parameter"
+            # Allow nested references for parameter types that can hold Parameterized objects
+            return param_type in {"Parameter", "ClassSelector", "ObjectSelector", "Selector"}
 
         # Simple case: check if it's a parameter or method name
         return depend_string in valid_params or depend_string in valid_methods
