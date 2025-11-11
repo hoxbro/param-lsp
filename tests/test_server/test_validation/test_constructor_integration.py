@@ -246,8 +246,8 @@ extended.priority = 10  # Runtime bounds error on new parameter
 
         # Verify parameter analysis still works
         param_classes = result.get("param_classes", {})
-        assert get_class(param_classes, "CompleteExample") is not None
-        assert get_class(param_classes, "ExtendedExample") is not None
+        get_class(param_classes, "CompleteExample", raise_if_none=True)
+        get_class(param_classes, "ExtendedExample", raise_if_none=True)
 
         # Check documentation for CompleteExample
         complete_example_class = param_classes.get("CompleteExample")

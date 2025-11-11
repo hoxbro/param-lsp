@@ -25,7 +25,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        assert get_class(result["param_classes"], "TestClass") is not None
+        get_class(result["param_classes"], "TestClass", raise_if_none=True)
         assert len(result["type_errors"]) == 0
 
     def test_string_type_mismatch(self, analyzer):
@@ -148,7 +148,7 @@ class TestClass(p.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        assert get_class(result["param_classes"], "TestClass") is not None
+        get_class(result["param_classes"], "TestClass", raise_if_none=True)
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
         assert len(type_errors) == 2  # param1 and param3 should error
 
