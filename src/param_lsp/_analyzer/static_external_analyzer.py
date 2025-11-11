@@ -15,7 +15,7 @@ from param_lsp import _treesitter
 from param_lsp._logging import get_logger
 from param_lsp._treesitter.queries import find_classes, find_imports
 from param_lsp.cache import external_library_cache
-from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES
+from param_lsp.constants import ALLOWED_EXTERNAL_LIBRARIES, EXCLUDED_DIRS
 from param_lsp.models import ParameterInfo, ParameterizedInfo
 
 from .ast_navigator import ImportHandler, ParameterDetector
@@ -1691,6 +1691,9 @@ class ExternalClassInspector:
 
             # Skip if already analyzed
             if file_path in self.analyzed_files:
+                continue
+
+            if any(f for f in file_path.parts if f in EXCLUDED_DIRS):
                 continue
 
             try:

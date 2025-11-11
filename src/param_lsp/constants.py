@@ -21,6 +21,7 @@ EXCLUDED_DIRS = {
     "node_modules",
     ".ipynb_checkpoints",
     "__pycache__",
+    "site-packages",
 }
 
 # Parameter type mapping for type checking and validation
