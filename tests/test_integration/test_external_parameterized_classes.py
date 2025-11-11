@@ -230,8 +230,6 @@ w.value = 123  # should error - expects str
         code_py = """
 from __future__ import annotations
 
-from tests.util import get_class
-
 import holoviews as hv
 import panel as pn
 

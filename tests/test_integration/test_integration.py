@@ -13,7 +13,6 @@ class TestIntegration:
         code_py = """
 from __future__ import annotations
 
-from tests.util import get_class
 import param
 
 class CompleteExample(param.Parameterized):
