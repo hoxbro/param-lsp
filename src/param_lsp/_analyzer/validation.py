@@ -141,7 +141,14 @@ class ParameterValidator:
     def _check_class_parameter_defaults(self, class_node: Node, lines: list[str]) -> None:
         """Check parameter default types within a class definition."""
         class_name = get_class_name(class_node)
-        if not class_name or class_name not in self.param_classes:
+        if not class_name:
+            return
+
+        # Create unique key with line number
+        line_number = class_node.start_point[0]
+        unique_key = f"{class_name}:{line_number}"
+
+        if unique_key not in self.param_classes:
             return
 
         for assignment_node, target_name in find_all_parameter_assignments(
@@ -149,9 +156,15 @@ class ParameterValidator:
         ):
             self._check_parameter_default_type(assignment_node, target_name, lines)
 
+    def _has_class_with_base_name(self, base_name: str) -> bool:
+        """Check if any class with the given base name exists (ignoring line numbers)."""
+        return any(key.startswith(f"{base_name}:") for key in self.param_classes)
+
     def _check_constructor_parameter_types(self, node: Node, lines: list[str]) -> None:
         """Check for type errors in constructor parameter calls like MyClass(x="A") (tree-sitter version)."""
         # Get the class name from the call
+        # This will be either a unique key like "ClassName:line" for local classes
+        # or a full path like "panel.widgets.IntSlider" for external classes
         class_name = self._get_instance_class(node)
         if not class_name:
             return
@@ -204,7 +217,11 @@ class ParameterValidator:
                 ):
                     # Extract simple type name from qualified string for error message
                     inferred_type_name = inferred_type.split(".")[-1]
-                    message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} in {class_name}() constructor (expects {self._format_expected_types(expected_types)})"
+                    # Extract base class name for error message (remove line number if present)
+                    display_class_name = (
+                        class_name.split(":")[0] if ":" in class_name else class_name
+                    )
+                    message = f"Cannot assign {inferred_type_name} to parameter '{param_name}' of type {cls} in {display_class_name}() constructor (expects {self._format_expected_types(expected_types)})"
                     self._create_type_error(keyword_arg_node, message, "constructor-type-mismatch")
 
             # Check bounds for numeric parameters in constructor calls
@@ -370,7 +387,9 @@ class ParameterValidator:
             bound_description = self._format_bounds_description(
                 min_val, max_val, left_inclusive, right_inclusive
             )
-            message = f"Value {assigned_numeric} for parameter '{param_name}' in {class_name}() constructor is outside bounds {bound_description}"
+            # Extract base class name for error message (remove line number if present)
+            display_class_name = class_name.split(":")[0] if ":" in class_name else class_name
+            message = f"Value {assigned_numeric} for parameter '{param_name}' in {display_class_name}() constructor is outside bounds {bound_description}"
             self._create_type_error(node, message, "constructor-bounds-violation")
 
     def _check_constructor_container_constraints(
@@ -555,14 +574,12 @@ class ParameterValidator:
                 instance_class = self._get_instance_class(call_node)
         else:
             # Case: instance_var.param = value
-            # Try to find which param class has this parameter
-            for class_name, class_info in self.param_classes.items():
-                if param_name in class_info.parameters:
-                    instance_class = class_name
-                    break
-
-            # If not found in local classes, check external param classes
-            if not instance_class:
+            # Find the class in the same scope and use line number for unique identification
+            class_in_scope = self._find_class_in_scope(node, param_name)
+            if class_in_scope:
+                instance_class = class_in_scope
+            else:
+                # Fallback: check external param classes
                 for class_name, class_info in self.external_param_classes.items():
                     if class_info and param_name in class_info.parameters:
                         instance_class = class_name
@@ -572,6 +589,9 @@ class ParameterValidator:
             return
 
         # Check if this is a valid param class
+        # instance_class is now always:
+        # - A unique key like "ClassName:line_number" for local classes
+        # - A full path like "panel.widgets.IntSlider" for external classes
         is_valid_param_class = instance_class in self.param_classes or (
             instance_class in self.external_param_classes
             and self.external_param_classes[instance_class]
@@ -662,11 +682,24 @@ class ParameterValidator:
             self._create_type_error(node, message, "bounds-violation")
 
     def _get_parameter_bounds(self, class_name: str, param_name: str) -> tuple | None:
-        """Get parameter bounds from a class definition."""
-        # Check local classes first
-        if class_name in self.param_classes:
+        """Get parameter bounds from a class definition.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.bounds if param_info else None
+            if param_info:
+                return param_info.bounds
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.bounds
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -677,7 +710,12 @@ class ParameterValidator:
         return None
 
     def _get_instance_class(self, call_node) -> str | None:
-        """Get the class name from an instance creation call."""
+        """Get the class name from an instance creation call.
+
+        Returns:
+            For local classes: unique key like "ClassName:line_number"
+            For external classes: full path like "panel.widgets.IntSlider" or base name
+        """
         # For tree-sitter call nodes like TestClass(...) or pn.widgets.IntSlider(...)
         if call_node.type == "call":
             # Get the function/class being called (first child, before argument_list)
@@ -689,10 +727,25 @@ class ParameterValidator:
 
             # Simple case: TestClass(...)
             if function_node.type == "identifier":
-                return get_value(function_node)
+                class_name = get_value(function_node)
+                # Try to find this class in param_classes with unique key
+                for key in self.param_classes:
+                    if key.startswith(f"{class_name}:"):
+                        return key
+                # If not found locally, return the base name (might be external)
+                return class_name
 
-            # Attribute case: module.Class(...) or pn.widgets.IntSlider(...)
+            # Attribute case: module.Class(...) or pn.widgets.IntSlider(...) or Outer.Inner(...)
             elif function_node.type == "attribute":
+                # Get the final class name from the attribute
+                attr_node = function_node.child_by_field_name("attribute")
+                if attr_node:
+                    class_name = get_value(attr_node)
+                    # Try to find this class in param_classes with unique key (e.g., Outer.Inner)
+                    for key in self.param_classes:
+                        if key.startswith(f"{class_name}:"):
+                            return key
+
                 # Try to resolve the full path for external classes
                 full_class_path = self._resolve_full_class_path_from_attribute(function_node)
                 # Check if this is an external Parameterized class
@@ -702,7 +755,6 @@ class ParameterValidator:
                     return full_class_path
 
                 # Otherwise return just the final attribute name
-                attr_node = function_node.child_by_field_name("attribute")
                 if attr_node:
                     return get_value(attr_node)
         return None
@@ -776,11 +828,24 @@ class ParameterValidator:
         return None
 
     def _get_parameter_type_from_class(self, class_name: str, param_name: str) -> str | None:
-        """Get the parameter type from a class definition."""
-        # Check local classes first
-        if class_name in self.param_classes:
+        """Get the parameter type from a class definition.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.cls if param_info else None
+            if param_info:
+                return param_info.cls
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.cls
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -791,11 +856,24 @@ class ParameterValidator:
         return None
 
     def _get_parameter_allow_None(self, class_name: str, param_name: str) -> bool:
-        """Get the allow_None setting for a parameter from a class definition."""
-        # Check local classes first
-        if class_name in self.param_classes:
+        """Get the allow_None setting for a parameter from a class definition.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.allow_None if param_info else False
+            if param_info:
+                return param_info.allow_None
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.allow_None
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -943,13 +1021,25 @@ class ParameterValidator:
     def _get_parameter_item_type(self, class_name: str, param_name: str) -> str | None:
         """Get the item_type constraint for a List parameter.
 
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+
         Returns:
             Qualified type name string (e.g., "builtins.str") or None
         """
-        # Check local classes first
-        if class_name in self.param_classes:
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.item_type if param_info else None
+            if param_info:
+                return param_info.item_type
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.item_type
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -960,11 +1050,24 @@ class ParameterValidator:
         return None
 
     def _get_parameter_length(self, class_name: str, param_name: str) -> int | None:
-        """Get the length constraint for a Tuple parameter."""
-        # Check local classes first
-        if class_name in self.param_classes:
+        """Get the length constraint for a Tuple parameter.
+
+        Args:
+            class_name: Either a base name like "TestClass" or a unique key like "TestClass:2"
+            param_name: The parameter name to look up
+        """
+        # Check if class_name is already a unique key (contains ":")
+        if ":" in class_name and class_name in self.param_classes:
             param_info = self.param_classes[class_name].get_parameter(param_name)
-            return param_info.length if param_info else None
+            if param_info:
+                return param_info.length
+        else:
+            # Try to find by base name (searches all unique keys)
+            for key in self.param_classes:
+                if key.startswith(f"{class_name}:"):
+                    param_info = self.param_classes[key].get_parameter(param_name)
+                    if param_info:
+                        return param_info.length
 
         # Check external classes
         class_info = self.external_param_classes.get(class_name)
@@ -995,6 +1098,54 @@ class ParameterValidator:
         items = [child for child in get_children(node) if child.type not in ("(", ")", ",")]
 
         return items if items else None
+
+    def _find_class_in_scope(self, assignment_node: Node, param_name: str) -> str | None:
+        """Find a Parameterized class in the same scope that has the given parameter.
+
+        Walks up the AST to find the containing function or module, then searches for class
+        definitions within that scope that have the specified parameter.
+
+        Args:
+            assignment_node: The assignment AST node
+            param_name: The parameter name to search for
+
+        Returns:
+            Unique class key "ClassName:line" if found, None otherwise
+        """
+        # Walk up to find the containing function or use module (root)
+        current = assignment_node.parent
+        scope_node = None
+        while current:
+            if current.type == "function_definition":
+                scope_node = current
+                break
+            if current.type == "module":
+                scope_node = current
+                break
+            current = current.parent
+
+        if not scope_node:
+            return None
+
+        # Find all class definitions in this scope
+        from param_lsp._treesitter.queries import find_classes
+
+        for class_node, _ in find_classes(scope_node):
+            class_name = get_class_name(class_node)
+            if not class_name:
+                continue
+
+            # Create unique key with line number
+            line_number = class_node.start_point[0]
+            unique_key = f"{class_name}:{line_number}"
+
+            # Check if this class has the parameter
+            if unique_key in self.param_classes:
+                class_info = self.param_classes[unique_key]
+                if param_name in class_info.parameters:
+                    return unique_key
+
+        return None
 
     def _is_type_compatible(self, inferred_type: str, expected_type: str) -> bool:
         """Check if inferred type is compatible with expected type.
@@ -1033,12 +1184,14 @@ class ParameterValidator:
 
         for decorator_node, _captures in decorators:
             # Find the containing class for this decorator
-            containing_class = self._find_containing_class_for_decorator(decorator_node)
-            if not containing_class:
+            class_info = self._find_containing_class_for_decorator(decorator_node)
+            if not class_info:
                 continue
 
+            class_name, class_node = class_info
+
             # Get all valid parameter names for this class
-            valid_params = self._get_class_parameters(containing_class)
+            valid_params = self._get_class_parameters_from_node(class_name, class_node)
             if not valid_params:
                 continue
 
@@ -1048,21 +1201,21 @@ class ParameterValidator:
             # Check each parameter name
             for param_name, param_node in depends_params:
                 if param_name not in valid_params:
-                    message = (
-                        f"Parameter '{param_name}' does not exist in class '{containing_class}'"
-                    )
+                    message = f"Parameter '{param_name}' does not exist in class '{class_name}'"
                     self._create_type_error(
                         param_node, message, "invalid-depends-parameter", "error"
                     )
 
-    def _find_containing_class_for_decorator(self, decorator_node: Node) -> str | None:
+    def _find_containing_class_for_decorator(
+        self, decorator_node: Node
+    ) -> tuple[str, Node] | None:
         """Find the class containing a decorator.
 
         Args:
             decorator_node: A tree-sitter decorator node
 
         Returns:
-            The name of the containing class, or None if not found
+            A tuple of (class_name, class_node), or None if not found
         """
         # Walk up the tree to find the class definition
         current = decorator_node.parent
@@ -1070,12 +1223,46 @@ class ParameterValidator:
             if current.type == "class_definition":
                 class_name = get_class_name(current)
                 # Only return if this is a Parameterized class we know about
+                # Check by base name since param_classes uses unique keys "ClassName:line_number"
                 if class_name and (
-                    class_name in self.param_classes or class_name in self.external_param_classes
+                    self._has_class_with_base_name(class_name)
+                    or class_name in self.external_param_classes
                 ):
-                    return class_name
+                    return (class_name, current)
             current = current.parent
         return None
+
+    def _get_class_parameters_from_node(self, class_name: str, class_node: Node) -> set[str]:
+        """Get all valid parameter names for a class using its AST node.
+
+        This method uses the class node's position to uniquely identify the class,
+        which is necessary when there are multiple classes with the same name.
+
+        Args:
+            class_name: The name of the class
+            class_node: The tree-sitter AST node for the class
+
+        Returns:
+            Set of parameter names
+        """
+        params = set()
+
+        # Check if this is an external class (no node position needed)
+        if class_name in self.external_param_classes:
+            class_info = self.external_param_classes[class_name]
+            if class_info:
+                params.update(class_info.get_parameter_names())
+                return params
+
+        # For local classes, use the unique key with line number
+        line_number = class_node.start_point[0]
+        unique_key = f"{class_name}:{line_number}"
+
+        if unique_key in self.param_classes:
+            class_info = self.param_classes[unique_key]
+            params.update(class_info.get_parameter_names())
+
+        return params
 
     def _get_class_parameters(self, class_name: str) -> set[str]:
         """Get all valid parameter names for a class (including inherited).
@@ -1088,14 +1275,18 @@ class ParameterValidator:
         """
         params = set()
 
-        # Check local classes
-        if class_name in self.param_classes:
-            class_info = self.param_classes[class_name]
-            params.update(class_info.get_parameter_names())
+        # Check local classes - search by base name
+        found_local = False
+        for key in self.param_classes:
+            if key.startswith(f"{class_name}:"):
+                class_info = self.param_classes[key]
+                params.update(class_info.get_parameter_names())
+                found_local = True
+                break  # Use first match
 
-        # Check external classes
-        elif class_name in self.external_param_classes:
-            class_info = self.external_param_classes[class_name]
+        # Check external classes if not found locally
+        if not found_local:
+            class_info = self.external_param_classes.get(class_name)
             if class_info:
                 params.update(class_info.get_parameter_names())
 

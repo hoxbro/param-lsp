@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
+from tests.util import get_class
 
 
 class TestConstructorComplexScenarios:
@@ -151,7 +152,8 @@ Combined(shared=123, a_only=42, b_only=True, own_param=3.14)       # Integer val
         errors = result.get("type_errors", [])
 
         # Verify the analyzer chose one consistent type for 'shared'
-        combined_class = result["param_classes"]["Combined"]
+        combined_class = get_class(result["param_classes"], "Combined", raise_if_none=True)
+
         assert "shared" in combined_class.parameters
 
         # Currently uses "last wins" - MixinB's Integer type should win
@@ -180,7 +182,10 @@ ComplexBounds(percentage=0, angle=180, probability=1.1, positive_int=0)        #
         errors = result.get("type_errors", [])
 
         # Verify bounds are correctly extracted including None bounds
-        complex_bounds_class = result["param_classes"]["ComplexBounds"]
+        complex_bounds_class = get_class(
+            result["param_classes"], "ComplexBounds", raise_if_none=True
+        )
+
         p = complex_bounds_class.parameters
         assert p["percentage"].bounds == (0, 100, False, True)  # (0, 100]
         assert p["angle"].bounds == (-180, 180, True, False)  # [-180, 180)
@@ -305,12 +310,11 @@ Outer.Inner(inner_param="bad")                # Should error
 
         # Verify both nested and outer classes are recognized
         param_classes = result["param_classes"]
-        assert "Outer" in param_classes
-        assert "Inner" in param_classes
 
         # Verify parameters are correctly identified
-        outer_class = param_classes["Outer"]
-        inner_class = param_classes["Inner"]
+        outer_class = get_class(param_classes, "Outer", raise_if_none=True)
+        inner_class = get_class(param_classes, "Inner", raise_if_none=True)
+
         assert list(outer_class.parameters.keys()) == ["outer_param"]
         assert list(inner_class.parameters.keys()) == ["inner_param"]
 

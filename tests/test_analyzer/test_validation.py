@@ -44,7 +44,9 @@ class TestParameterValidator:
             )
         )
 
-        return {"TestClass": test_class}
+        # Use unique key format with line number
+        # Add entries for both line 1 and line 3 since different tests have TestClass at different lines
+        return {"TestClass:1": test_class, "TestClass:3": test_class}
 
     @pytest.fixture
     def sample_external_classes(self):
@@ -610,6 +612,38 @@ def test2():
         tree = parser.parse(code)
 
         # Should not create errors - each function scope has its own Test class
+        errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
+        depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
+        assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"
+
+    def test_check_param_depends_many_duplicate_class_names(self, validator):
+        """Test @param.depends with many duplicate class names (reproduces Panel bug)."""
+        code = """
+import param
+
+def test1():
+    class Test(param.Parameterized):
+        a = param.String()
+
+def test2():
+    class Test(param.Parameterized):
+        b = param.String()
+
+        @param.depends('b')
+        def method(self):
+            return self.b
+
+def test3():
+    class Test(param.Parameterized):
+        s = param.String(default='A')
+
+        @param.depends('s')
+        def ref(self):
+            return [self.s] + ['B']
+"""
+        tree = parser.parse(code)
+
+        # Should not create errors - each class is unique by position
         errors = validator.check_parameter_types(tree.root_node, code.split("\n"))
         depends_errors = [e for e in errors if "invalid-depends-parameter" in e.get("code", "")]
         assert len(depends_errors) == 0, f"Expected no errors, got: {depends_errors}"

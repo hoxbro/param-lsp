@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from param_lsp.analyzer import ParamAnalyzer
+from tests.util import get_class
 
 
 class TestPanelWidgetInheritance:
@@ -28,9 +29,7 @@ class T(pn.widgets.IntSlider):
         result = analyzer.analyze_file(code_py)
 
         # Verify class is detected as Parameterized
-        assert "T" in result["param_classes"]
-        t_class = result["param_classes"]["T"]
-
+        t_class = get_class(result["param_classes"], "T", raise_if_none=True)
         # Verify T inherits Panel IntSlider parameters
         t_params = list(t_class.parameters.keys())
         assert len(t_params) > 10  # Panel IntSlider has many parameters
@@ -64,11 +63,12 @@ class MyWidget(CustomSlider):
         result = analyzer.analyze_file(code_py)
 
         # Both classes should be detected
-        assert "CustomSlider" in result["param_classes"]
-        assert "MyWidget" in result["param_classes"]
 
-        custom_slider_class = result["param_classes"]["CustomSlider"]
-        my_widget_class = result["param_classes"]["MyWidget"]
+        custom_slider_class = get_class(
+            result["param_classes"], "CustomSlider", raise_if_none=True
+        )
+
+        my_widget_class = get_class(result["param_classes"], "MyWidget", raise_if_none=True)
 
         # CustomSlider should have Panel IntSlider params + custom_param
         custom_params = list(custom_slider_class.parameters.keys())

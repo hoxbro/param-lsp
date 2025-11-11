@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
+from tests.util import get_class
 
 
 class TestConstructorIntegration:
@@ -136,8 +137,7 @@ DocumentedClass(x="bad", y=123, z="false")
 
         # Verify documentation is still extracted properly
         param_classes = result.get("param_classes", {})
-        assert "DocumentedClass" in param_classes
-        documented_class = param_classes["DocumentedClass"]
+        documented_class = get_class(param_classes, "DocumentedClass", raise_if_none=True)
         assert documented_class.parameters["x"].doc == "An integer parameter"
         assert documented_class.parameters["y"].doc == "A string parameter with documentation"
         assert documented_class.parameters["z"].doc == "Boolean flag"
@@ -246,8 +246,8 @@ extended.priority = 10  # Runtime bounds error on new parameter
 
         # Verify parameter analysis still works
         param_classes = result.get("param_classes", {})
-        assert "CompleteExample" in param_classes
-        assert "ExtendedExample" in param_classes
+        get_class(param_classes, "CompleteExample", raise_if_none=True)
+        get_class(param_classes, "ExtendedExample", raise_if_none=True)
 
         # Check documentation for CompleteExample
         complete_example_class = param_classes.get("CompleteExample")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from param_lsp.analyzer import ParamAnalyzer
+from tests.util import get_class
 
 
 class TestContainerValidation:
@@ -119,8 +120,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code, "test_file.py")
         param_classes = result.get("param_classes", {})
 
-        assert "TestClass" in param_classes
-        test_class = param_classes["TestClass"]
+        test_class = get_class(param_classes, "TestClass", raise_if_none=True)
 
         # Check tags parameter
         tags_param = test_class.get_parameter("tags")

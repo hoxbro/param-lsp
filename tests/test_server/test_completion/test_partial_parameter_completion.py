@@ -17,10 +17,8 @@ class TestPartialParameterCompletion:
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100, bounds=(1, 1000))
-
 
 instance = MyClass(w="""
 
@@ -69,10 +67,8 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer()  # No default value
-
 
 instance = MyClass(w="""
 
@@ -106,11 +102,9 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100)
     weight = param.Number(default=50.0)
-
 
 instance = MyClass(w="""
 
@@ -142,10 +136,8 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     height = param.Integer(default=100)
-
 
 instance = MyClass(w="""
 
@@ -177,10 +169,8 @@ instance = MyClass(w="""
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100)
-
 
 instance = MyClass(w ="""
 

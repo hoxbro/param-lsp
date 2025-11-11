@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.util import get_class
+
 
 class TestParameterTypeChecking:
     """Test parameter type checking in class definitions."""
@@ -23,7 +25,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        assert "TestClass" in result["param_classes"]
+        get_class(result["param_classes"], "TestClass", raise_if_none=True)
         assert len(result["type_errors"]) == 0
 
     def test_string_type_mismatch(self, analyzer):
@@ -146,7 +148,7 @@ class TestClass(p.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        assert "TestClass" in result["param_classes"]
+        get_class(result["param_classes"], "TestClass", raise_if_none=True)
         type_errors = [e for e in result["type_errors"] if e["code"] == "type-mismatch"]
         assert len(type_errors) == 2  # param1 and param3 should error
 
@@ -164,6 +166,9 @@ class ParamClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        assert set(result["param_classes"]) == {"ParamClass"}
-        assert "RegularClass" not in result["param_classes"]
+        # All keys are now unique (name:line), extract base names
+        class_base_names = {name.split(":")[0] for name in result["param_classes"]}
+        assert class_base_names == {"ParamClass"}
+        # RegularClass should not be in the base names
+        assert "RegularClass" not in class_base_names
         assert len(result["type_errors"]) == 0

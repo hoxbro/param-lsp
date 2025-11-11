@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from param_lsp.analyzer import ParamAnalyzer
+from tests.util import get_class
 
 
 class TestCrossFileInheritance:
@@ -44,8 +45,7 @@ S().name = 123         # Should error - inherited String
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "S" in result["param_classes"]
-        s_class = result["param_classes"]["S"]
+        s_class = get_class(result["param_classes"], "S", raise_if_none=True)
         assert set(s_class.parameters.keys()) == {"x", "name", "b"}
         assert s_class.parameters["x"].cls == "Integer"
         assert s_class.parameters["name"].cls == "String"
@@ -102,8 +102,7 @@ obj.final_bool = "invalid"  # Error - Boolean
 
         result = analyzer.analyze_file(content, str(final_file))
 
-        assert "Final" in result["param_classes"]
-        final_class = result["param_classes"]["Final"]
+        final_class = get_class(result["param_classes"], "Final", raise_if_none=True)
         assert set(final_class.parameters.keys()) == {
             "base_value",
             "intermediate_num",
@@ -151,8 +150,7 @@ Child().value = 123  # Should error - expecting string now
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "Child" in result["param_classes"]
-        child_class = result["param_classes"]["Child"]
+        child_class = get_class(result["param_classes"], "Child", raise_if_none=True)
         # Child should override parent parameter type
         assert child_class.parameters["value"].cls == "String"
 
@@ -191,9 +189,7 @@ Child().y = 10  # Should violate local bounds
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "Child" in result["param_classes"]
-        child_class = result["param_classes"]["Child"]
-
+        child_class = get_class(result["param_classes"], "Child", raise_if_none=True)
         # Check bounds inheritance
         assert child_class.parameters["x"].bounds is not None
         assert child_class.parameters["y"].bounds is not None
@@ -230,9 +226,7 @@ class Child(Parent):
 
         result = analyzer.analyze_file(content, str(child_file))
 
-        assert "Child" in result["param_classes"]
-        child_class = result["param_classes"]["Child"]
-
+        child_class = get_class(result["param_classes"], "Child", raise_if_none=True)
         # Check doc inheritance
         assert child_class.parameters["x"].doc == "Parent parameter documentation"
         assert child_class.parameters["y"].doc == "Child parameter documentation"

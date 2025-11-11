@@ -262,3 +262,37 @@ instance.number_param = -5          # Error: bounds violation
             if e["code"].startswith("runtime") or e["code"] == "bounds-violation"
         ]
         assert len(runtime_errors) == 3
+
+    def test_runtime_assignment_with_duplicate_class_names(self, analyzer):
+        """Test runtime assignments with duplicate class names (like Panel tests)."""
+        code_py = """\
+import param
+
+def test_number():
+    class Test(param.Parameterized):
+        a = param.Number(default=1.0)
+
+    test = Test()
+    test.a = 5.0  # Valid
+    test.a = "invalid"  # Error: wrong type
+
+def test_boolean():
+    class Test(param.Parameterized):
+        a = param.Boolean(default=False)
+
+    test = Test()
+    test.a = True  # Valid
+    test.a = "invalid"  # Error: wrong type
+"""
+
+        result = analyzer.analyze_file(code_py)
+
+        # Should detect 2 type errors (one in each function)
+        runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
+        assert len(runtime_errors) == 2
+
+        # Verify errors are in the correct functions
+        error_lines = [e["line"] for e in runtime_errors]
+        # Line 9 is in test_number, line 17 is in test_boolean
+        assert 9 in error_lines or 8 in error_lines  # "invalid" assignment in test_number
+        assert 17 in error_lines or 16 in error_lines  # "invalid" assignment in test_boolean

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.util import get_class
+
 
 class TestDocExtraction:
     """Test parameter documentation extraction and storage."""
@@ -28,8 +30,7 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         param_classes = result["param_classes"]
-        assert "TestClass" in param_classes
-        test_class = param_classes["TestClass"]
+        test_class = get_class(param_classes, "TestClass", raise_if_none=True)
 
         assert "documented_param" in test_class.parameters
         assert (
@@ -59,7 +60,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         assert test_class.parameters["single_quotes"].doc == "Single quoted documentation"
         assert test_class.parameters["double_quotes"].doc == "Double quoted documentation"
@@ -84,7 +85,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         assert "special_chars" in test_class.parameters
         assert "!@#$%^&*()_+-=" in test_class.parameters["special_chars"].doc
@@ -118,7 +119,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         assert test_class.parameters["doc_first"].doc == "Documentation comes first"
         assert test_class.parameters["doc_middle"].doc == "Documentation in the middle"
@@ -143,7 +144,8 @@ class TestClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         # Check that doc is extracted
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
+
         assert "comprehensive_param" in test_class.parameters
         assert (
             test_class.parameters["comprehensive_param"].doc
@@ -167,7 +169,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         # Empty string doc should still be recorded
         assert "empty_doc" in test_class.parameters
@@ -191,7 +193,7 @@ class TestClass(p.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         assert "param_alias" in test_class.parameters
         assert test_class.parameters["param_alias"].doc == "Using param alias"
@@ -221,14 +223,17 @@ class ClassC(param.Parameterized):
 
         param_classes = result["param_classes"]
 
-        assert "ClassA" in param_classes
-        assert param_classes["ClassA"].parameters["param_a"].doc == "Documentation for class A"
+        class_a = get_class(param_classes, "ClassA", raise_if_none=True)
 
-        assert "ClassB" in param_classes
-        assert param_classes["ClassB"].parameters["param_b"].doc == "Documentation for class B"
+        assert class_a.parameters["param_a"].doc == "Documentation for class A"
 
-        assert "ClassC" in param_classes
-        class_c_docs = [p for p in param_classes["ClassC"].parameters.values() if p.doc]
+        class_b = get_class(param_classes, "ClassB", raise_if_none=True)
+
+        assert class_b.parameters["param_b"].doc == "Documentation for class B"
+
+        class_c = get_class(param_classes, "ClassC", raise_if_none=True)
+
+        class_c_docs = [p for p in class_c.parameters.values() if p.doc]
         assert len(class_c_docs) == 0  # No documented parameters
 
     def test_doc_parameter_with_complex_expressions(self, analyzer):
@@ -249,7 +254,7 @@ class TestClass(param.Parameterized):
 
         result = analyzer.analyze_file(code_py)
 
-        test_class = result["param_classes"]["TestClass"]
+        test_class = get_class(result["param_classes"], "TestClass", raise_if_none=True)
 
         # Only simple string literal should be extracted
         assert "simple_doc" in test_class.parameters
@@ -281,8 +286,7 @@ class TestClass(param.Parameterized):
         # Check structure: class_name -> ParameterizedInfo with parameters
         param_classes = result["param_classes"]
         assert isinstance(param_classes, dict)
-        assert "TestClass" in param_classes
-        test_class = param_classes["TestClass"]
+        test_class = get_class(param_classes, "TestClass", raise_if_none=True)
 
         # Check that we have 2 documented parameters
         documented_params = [p for p in test_class.parameters.values() if p.doc]

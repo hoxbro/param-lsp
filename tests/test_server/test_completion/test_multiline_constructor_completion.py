@@ -207,10 +207,8 @@ result = ComplexClass(
         code_py = """\
 import param
 
-
 class MyClass(param.Parameterized):
     width = param.Integer(default=100, bounds=(1, 1000))
-
 
 instance = MyClass(
 

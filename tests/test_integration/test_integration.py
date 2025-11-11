@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.util import get_class
+
 
 class TestIntegration:
     """Integration tests covering complete workflows."""
@@ -10,6 +12,7 @@ class TestIntegration:
         """Test complete analysis workflow with all features."""
         code_py = """
 from __future__ import annotations
+
 import param
 
 class CompleteExample(param.Parameterized):
@@ -60,9 +63,7 @@ example.ratio = 0               # Exclusive bounds violation
         result = analyzer.analyze_file(code_py)
 
         # Verify class detection
-        assert "CompleteExample" in result["param_classes"]
-        complete_class = result["param_classes"]["CompleteExample"]
-
+        complete_class = get_class(result["param_classes"], "CompleteExample", raise_if_none=True)
         # Verify parameter extraction
         params = list(complete_class.parameters.keys())
         expected_params = [
@@ -173,9 +174,9 @@ processor.use_gpu = 1              # Boolean type error
         result = analyzer.analyze_file(code_py)
 
         # Verify comprehensive analysis
-        assert "DataProcessor" in result["param_classes"]
-        data_processor_class = result["param_classes"]["DataProcessor"]
-
+        data_processor_class = get_class(
+            result["param_classes"], "DataProcessor", raise_if_none=True
+        )
         # Check all parameter types are detected
         expected_types = {
             "input_file": "Filename",
@@ -245,9 +246,7 @@ edge.precise_bounds = 3.14161 # Invalid (outside precise bounds)
         result = analyzer.analyze_file(code_py)
 
         # Verify all edge cases are handled
-        assert "EdgeCases" in result["param_classes"]
-        edge_cases_class = result["param_classes"]["EdgeCases"]
-
+        edge_cases_class = get_class(result["param_classes"], "EdgeCases", raise_if_none=True)
         # Check documentation extraction handles long text and special characters
         long_doc_param = edge_cases_class.parameters["long_doc"]
         assert long_doc_param.doc is not None
@@ -279,6 +278,5 @@ class ValidClass(param.Parameterized):
         result = analyzer.analyze_file(code_py)
 
         # Should still extract the valid parts
-        assert "ValidClass" in result["param_classes"]
-        valid_class = result["param_classes"]["ValidClass"]
+        valid_class = get_class(result["param_classes"], "ValidClass", raise_if_none=True)
         assert valid_class.parameters["valid_param"].cls == "String"

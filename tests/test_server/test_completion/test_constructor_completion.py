@@ -315,7 +315,6 @@ hv.Curve("""
         code_py = """\
 import param
 
-
 class P(param.Parameterized):
     x = param.Integer(default=1, allow_None=True)
     y = param.Integer(default=21)

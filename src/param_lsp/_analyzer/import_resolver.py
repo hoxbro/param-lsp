@@ -301,11 +301,15 @@ class ImportResolver:
             return None
 
         # Check if the class exists in the imported module
+        # param_classes_dict now uses unique keys like "ClassName:line_number"
         param_classes_dict = module_analysis.get("param_classes", {})
-        if isinstance(param_classes_dict, dict) and imported_class_name in param_classes_dict:
-            class_info = param_classes_dict[imported_class_name]
-            # If it's a ParameterizedInfo object, return it
-            if hasattr(class_info, "parameters"):
-                return class_info
+        if isinstance(param_classes_dict, dict):
+            # Search by base name since keys are "ClassName:line_number"
+            for key in param_classes_dict:
+                if key.startswith(f"{imported_class_name}:"):
+                    class_info = param_classes_dict[key]
+                    # If it's a ParameterizedInfo object, return it
+                    if hasattr(class_info, "parameters"):
+                        return class_info
 
         return None
