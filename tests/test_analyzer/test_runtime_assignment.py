@@ -347,3 +347,57 @@ widget.name = 123  # Error: wrong type
             "widget" not in runtime_errors[0]["message"].lower()
             or "name" in runtime_errors[0]["message"]
         )
+
+    def test_self_assignment_to_non_parameter_attribute(self, analyzer):
+        """Test that self.attribute assignments to non-parameters don't generate false positives.
+
+        This is a regression test for the bug where `self.style = None` inside a class's
+        __init__ method was incorrectly flagged as a parameter type error, even though
+        the class doesn't have a `style` parameter. The code was incorrectly matching
+        against unrelated external classes that happen to have a parameter with the same name.
+        """
+        code_py = """\
+import param
+
+class ClassWithStyleParam(param.Parameterized):
+    style = param.Dict(default={})
+
+class ClassWithoutStyleParam(param.Parameterized):
+    name = param.String(default="test")
+    value = param.Integer(default=0)
+
+    def __init__(self, **params):
+        # These should NOT be flagged as errors
+        # because style and _widgets are not parameters of this class
+        self.style = None  # Just a regular instance attribute
+        self._widgets = []  # Just a regular instance attribute
+        self._computed_styler = {}  # Just a regular instance attribute
+        super().__init__(**params)
+
+        # This SHOULD generate an error (is a parameter)
+        self.name = 123  # Error: wrong type for parameter
+
+# This SHOULD also generate an error (is a parameter on ClassWithStyleParam)
+instance = ClassWithStyleParam()
+instance.style = "wrong"  # Error: wrong type for parameter
+"""
+
+        result = analyzer.analyze_file(code_py)
+
+        runtime_errors = [e for e in result["type_errors"] if e["code"] == "runtime-type-mismatch"]
+        # Should have 2 errors:
+        # 1. self.name = 123 (wrong type for parameter)
+        # 2. instance.style = "wrong" (wrong type for parameter)
+        # Should NOT have errors for self.style, self._widgets, or self._computed_styler
+        assert len(runtime_errors) == 2
+
+        # Verify the errors are for the right lines
+        error_lines = {e["line"] for e in runtime_errors}
+        assert 18 in error_lines  # self.name = 123
+        assert 22 in error_lines  # instance.style = "wrong"
+
+        # Verify no errors for the non-parameter attributes
+        for error in runtime_errors:
+            assert "style = None" not in error["message"]
+            assert "_widgets" not in error["message"]
+            assert "_computed_styler" not in error["message"]
