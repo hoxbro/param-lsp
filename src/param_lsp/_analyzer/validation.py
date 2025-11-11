@@ -587,18 +587,29 @@ class ParameterValidator:
                         instance_class = containing_class
                 else:
                     # Simple case: variable.param = value
-                    # First, try to find the class in the same scope (for local Parameterized classes)
+                    # Try to find the class in the same scope (for local Parameterized classes)
                     class_in_scope = self._find_class_in_scope(node, param_name)
                     if class_in_scope:
                         instance_class = class_in_scope
                     else:
-                        # Fallback: check external param classes only for simple identifiers
-                        # This allows checking external libraries (e.g., panel.widgets.IntSlider)
-                        # while avoiding false positives from nested attributes (e.g., df.index.name)
-                        for class_name, class_info in self.external_param_classes.items():
-                            if class_info and param_name in class_info.parameters:
-                                instance_class = class_name
-                                break
+                        # Fallback: check external param classes, but be conservative to avoid
+                        # false positives. We'll check if:
+                        # 1. Only ONE class has this parameter, OR
+                        # 2. Multiple classes have it BUT they all have the SAME parameter type
+                        #
+                        # This allows catching errors while avoiding false positives from ambiguous
+                        # parameter names. For example, holoviews.Curve and holoviews.Scatter both
+                        # have a 'label' parameter of type String, so we can safely check either.
+                        matching_classes = [
+                            (class_name, class_info.parameters[param_name].cls)
+                            for class_name, class_info in self.external_param_classes.items()
+                            if class_info and param_name in class_info.parameters
+                        ]
+                        if matching_classes:
+                            param_types = {param_cls for _, param_cls in matching_classes}
+                            # Only check if there's a single parameter type across all matches
+                            if len(param_types) == 1:
+                                instance_class = matching_classes[0][0]
             # Note: We intentionally do NOT check nested attributes (e.g., obj.attr.param)
             # against external param classes, as this causes false positives for non-Param
             # objects (e.g., pandas DataFrames, Jupyter config) that happen to have attributes
